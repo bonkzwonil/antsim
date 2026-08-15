@@ -69,27 +69,40 @@ initial condition rather than merely a convenient one."
          (b (world-bodies w))
          (i (ants-alloc a)))
     (when i
-      (let ((bi (bodies-alloc b (colony-nest-x c) (colony-nest-y c)
-                              *ant-radius* +body-ant+)))
+      ;; Scattered across the nest disc rather than all on its centre.
+      ;; Spawning every worker at one point leaves the collision solver
+      ;; with a pile of exactly concentric discs — a degenerate case it
+      ;; can only resolve by tie-break, and one that a colony hits on
+      ;; every single birth.  SQRT of the radial draw keeps the scatter
+      ;; uniform over the disc rather than bunched at the middle.
+      (let* ((id (colony-next-id c))
+             (seed (world-seed w))
+             (ang (* 6.2831855f0 (rnd01 id 0 92 seed)))
+             (rad (* (colony-nest-r c) (sqrt (rnd01 id 0 93 seed))))
+             (sx (+ (colony-nest-x c) (* rad (cos ang))))
+             (sy (+ (colony-nest-y c) (* rad (sin ang))))
+             (bi (bodies-alloc b sx sy *ant-radius* +body-ant+)))
         (cond
           ((null bi) (ants-free! a i) nil)
           (t
-           (setf (aref (ants-id a) i) (colony-next-id c)
+           (setf (aref (ants-id a) i) id
                  (aref (ants-body a) i) bi
                  (aref (ants-colony a) i) (colony-id c)
                  (aref (ants-state a) i) +ant-in-nest+
                  (aref (ants-heading a) i)
-                 (* 6.2831855f0 (rnd01 (colony-next-id c) 0 91 (world-seed w)))
+                 (* 6.2831855f0 (rnd01 id 0 91 seed))
                  (aref (ants-crop a) i) 0.0f0
                  (aref (ants-load-quality a) i) 0.0f0
                  (aref (ants-energy a) i) 1.0f0
                  (aref (ants-age a) i) 0
-                 (aref (ants-hvx a) i) 0.0f0
-                 (aref (ants-hvy a) i) 0.0f0
                  ;; must match the body, or the first path-integration
                  ;; pass reads a displacement from the origin
-                 (aref (ants-px a) i) (colony-nest-x c)
-                 (aref (ants-py a) i) (colony-nest-y c))
+                 (aref (ants-px a) i) sx
+                 (aref (ants-py a) i) sy
+                 ;; and the home vector is the way back from where it
+                 ;; actually is, which is not quite the nest centre
+                 (aref (ants-hvx a) i) (- (colony-nest-x c) sx)
+                 (aref (ants-hvy a) i) (- (colony-nest-y c) sy))
            (incf (colony-next-id c))
            (incf (colony-population c))
            (incf (colony-born c))
@@ -167,9 +180,17 @@ switch into and no switching logic to get wrong (§3.5)."
          (total (+ wl wc wr))
          (u (* (rnd01 id tick +stream-choice+ (world-seed w)) total)))
     (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u))
-    (cond ((< u wl) -1.0f0)
-          ((< u (+ wl wc)) 0.0f0)
-          (t 1.0f0))))
+    ;; Second value: how strongly this ant can smell a trail at all,
+    ;; as C/(k+C) of the best sensor — 0 in clean ground, approaching 1
+    ;; on a saturated road.  The caller uses it to decide how *hard* to
+    ;; turn, which is a separate question from which way (see
+    ;; *trail-turn-gain*).
+    (let ((best (max cl (max cc cr))))
+      (declare (type f32 best))
+      (values (cond ((< u wl) -1.0f0)
+                    ((< u (+ wl wc)) 0.0f0)
+                    (t 1.0f0))
+              (/ best (+ k best))))))
 
 ;;; --------------------------------------------------------------------
 ;;; The tick
@@ -296,11 +317,19 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; The choice function runs in *both* directions.  A
                     ;; returning ant is not blind to the trail — it is
                     ;; pulled home as well, and the two combine.
-                    (turn (* *turn-rate*
-                             (choose-turn w (colony-id c) id tick x y heading)))
-                    (noise (* *turn-sigma*
-                              (rnd-normal id tick +stream-turn+ seed))))
-               (declare (type f32 heading hvx hvy turn noise))
+                    (dir 0.0f0) (smell 0.0f0) (turn 0.0f0) (noise 0.0f0))
+               (declare (type f32 heading hvx hvy dir smell turn noise))
+               (multiple-value-setq (dir smell)
+                 (choose-turn w (colony-id c) id tick x y heading))
+               ;; Which way from the choice function; how hard from how
+               ;; much pheromone is actually there.  Off a trail both
+               ;; terms reduce to the plain correlated random walk.
+               (setf turn (* *turn-rate*
+                             (+ 1.0f0 (* *trail-turn-gain* smell))
+                             dir)
+                     noise (* *turn-sigma*
+                              (- 1.0f0 (* *trail-noise-suppression* smell))
+                              (rnd-normal id tick +stream-turn+ seed)))
                (setf heading (wrap-angle (+ heading turn noise)))
                ;; homing urge: total for a returning ant, and growing as
                ;; energy falls for an outbound one (§3.5)

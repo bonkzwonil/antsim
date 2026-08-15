@@ -1,15 +1,14 @@
 ;;;; antsim.asd
 ;;;;
-;;;; Four systems, and the split is the one from README §4.1: the numeric
+;;;; Four systems, and the split is the one from docs/concept.md §4.1: the numeric
 ;;;; core has no dependencies at all, so the simulation can be built and
 ;;;; tested on a machine with no GPU and no graphics stack.  Only
 ;;;; antsim/render knows that OpenGL exists.
 
 (defsystem "antsim"
   :description "A 2D ant colony simulation on real behavioural science — numeric core."
-  :author "Bonk"
-  :version "0.0.1"
-  :license "MIT"
+  :author "Mathias Menzel-Nielsen"
+  :version "0.2.0"        ; milestone M2
   :depends-on ()                        ; core stays dependency-free (sb-thread only)
   :serial t
   :pathname "src"
@@ -49,7 +48,8 @@
                (:file "view")
                (:file "shaders")
                (:file "renderer")
-               (:file "hud"))
+               (:file "hud")
+               (:file "gallery"))
   :in-order-to ((test-op (test-op "antsim/render-test"))))
 
 (defsystem "antsim/live"
