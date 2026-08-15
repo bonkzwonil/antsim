@@ -19,11 +19,18 @@
    (:file "rng")
    (:file "pool")
    (:file "params")
-   (:module "world"
-    :serial t
-    :components ((:file "geom")
-                 (:file "grid")
-                 (:file "bodies"))))
+   ;; Deliberately a flat, explicit order rather than two modules.  The
+   ;; ant *table* has no knowledge of the world and must be built before
+   ;; MAKE-WORLD can allocate one; the ant *tick* needs colonies, bodies
+   ;; and fields and therefore comes last.  Splitting them across the
+   ;; world files is what keeps the dependency acyclic without a single
+   ;; forward declaration.
+   (:file "ant/state")
+   (:file "world/geom")
+   (:file "world/grid")
+   (:file "world/bodies")
+   (:file "world/scene")
+   (:file "ant/step"))
   :in-order-to ((test-op (test-op "antsim/test"))))
 
 (defsystem "antsim/render"
@@ -48,7 +55,8 @@
   :pathname "tests"
   :components ((:file "suite")
                (:file "world")
-               (:file "bodies"))
+               (:file "bodies")
+               (:file "ant"))
   :perform (test-op (o c)
              (symbol-call :fiveam :run!
                           (find-symbol (string :antsim) :antsim/test))))

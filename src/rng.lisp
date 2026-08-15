@@ -102,3 +102,31 @@ way to inherit whatever structure the mixer failed to destroy."
            (optimize (speed 3) (safety 0)))
   (* (float (ash (rnd-u32 id tick stream seed) -8) 1.0f0)
      5.9604645f-8))                     ; 2^-24
+
+(defconstant +normal-stream-offset+ 1000003
+  "Offset to the second stream a normal deviate consumes.  A prime, and
+far larger than any stream number the simulation uses, so that
+RND-NORMAL on stream s can never collide with a plain RND01 on some other
+stream.")
+
+(declaim (inline rnd-normal))
+
+(defun rnd-normal (id tick &optional (stream 0) (seed +default-seed+))
+  "Standard normal deviate, keyed on (ID, TICK, STREAM, SEED).
+
+Box-Muller, keeping one of the two values it produces.  Discarding the
+other costs a cosine and buys the property the whole RNG exists for:
+the result stays a pure function of its coordinates.  Caching the spare
+— the textbook optimisation — would introduce exactly the hidden state
+that makes threaded runs irreproducible (§4.4).
+
+§3.9 uses this for the correlated random walk's turn angle in place of
+§3.2's wrapped Cauchy: the same locally-straight, globally-diffusive
+path, with the tail shape left as a later refinement."
+  (declare (type (unsigned-byte 32) id tick stream seed)
+           (optimize (speed 3) (safety 0)))
+  (let ((u1 (max 1.0f-7 (rnd01 id tick stream seed)))
+        (u2 (rnd01 id tick (+ stream +normal-stream-offset+) seed)))
+    (declare (type f32 u1 u2))
+    (* (sqrt (* -2.0f0 (log u1)))
+       (cos (* 6.2831855f0 u2)))))
