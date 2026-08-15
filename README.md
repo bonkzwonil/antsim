@@ -9,6 +9,12 @@ agent with its own state — energy, crop load, age, a home vector, a set of
 task thresholds — and every behaviour it runs is a mechanism that has been
 measured in real ants and is cited here as such.
 
+Colonies grow from a starting population and can starve to nothing; ants
+that die stay where they fell; trails are only ever laid by ants that
+walked. **§3.9 is the section to read second** — it is the explicit cut
+between the model described here and the much smaller thing M1 actually
+builds, because a design this deep ships nothing without one.
+
 ## 1. What this is, and what it is not
 
 **It is a toy that tells the truth.** The point is that you can watch it,
@@ -59,6 +65,12 @@ raymarcher, the soil/weather model. Different problem.
 5. **Legibility is a design goal.** An observer should be able to tell what
    an ant is doing by looking at it. State tinting, carried payloads, trail
    intensity and antennal sweep are all in service of that.
+6. **Simple first, refined later — and the simplification must still be
+   science.** The model below is deep enough to never ship. So M1 takes the
+   *smallest* set of mechanisms that can still produce the §3.8 phenomena,
+   and every one of them is a sound abstraction of something measured rather
+   than a placeholder to be thrown away. §3.9 draws that line explicitly.
+   Nothing deferred is deleted; it is scheduled.
 
 ## 3. The science model
 
@@ -125,7 +137,14 @@ path is locally straight and globally diffusive.
 Pheromones are **scalar fields on a grid**, one field per chemical, each
 with its own decay constant and deposition rule.
 
-**Fields, in the order they should be built:**
+> **Trails are never authored.** A scenario configures a field's τ,
+> diffusion and ceiling — it never contains a trail. Every field starts at
+> zero and every milligram of pheromone in a run was deposited by an ant
+> that walked there. There is no path data in the scenario format and no
+> way to add any; a trail that appears is a claim the model is making, and
+> seeding one would make every result meaningless.
+
+**Fields, in the order they should be built** (M1 builds only the first):
 
 1. **Trail (recruitment) pheromone** — attractive, deposited mainly on the
    *return* trip by an ant carrying food. This is the core positive
@@ -228,30 +247,34 @@ Per-ant state, all of it in struct-of-arrays:
 | `gait` | f32 | stride phase, for rendering (§5.2) |
 | `id` | u32 | RNG key, stable for life |
 
-**Behavioural modes**, as a state machine:
+**Behavioural modes**, as a state machine — four live states and `DEAD`:
 
 ```
-        ┌──────────────────────────────────────────────┐
-        │                                              │
-   IN-NEST ──(task threshold exceeded)──► EXPLORING ───┤
-        ▲                                    │         │
-        │                          (trail found)       │
-        │                                    ▼         │
-        │                            TRAIL-FOLLOWING   │
-        │                                    │         │
-        │                             (food reached)   │
-        │                                    ▼         │
-        │                                 AT-FOOD      │
-        │                          (crop full / poor)  │
-        │                                    ▼         │
-        └──(unload, trophallaxis)──── RETURNING ◄──────┘
-                                            │
-                                   (home vector fails)
-                                            ▼
-                                        SEARCHING ──► (re-find or die)
+   IN-NEST ──(leaves)──► OUTBOUND ──(food reached)──► AT-FOOD
+      ▲                     │                            │
+      │                (energy low)                 (crop full /
+      │                     │                        food poor)
+      │                     ▼                            │
+      └───(unload)──── RETURNING ◄───────────────────────┘
+
+   any state ──(energy → 0, or age)──► DEAD
 ```
 
-Plus `DEAD`. Transitions are driven by continuous quantities, not timers:
+**There is deliberately no separate `TRAIL-FOLLOWING` state**, and that is
+a simplification that makes the model *more* correct rather than less. An
+outbound ant always runs the same rule: sample three headings, weight them
+by the choice function, pick. Where there is no pheromone, every weight is
+`k^n` and the rule degenerates *exactly* into the correlated random walk of
+§3.2. Exploring and trail-following are therefore not two behaviours an ant
+switches between — they are the same behaviour in two environments, which
+is what the Deneubourg formulation actually says. One state, one rule, no
+switching logic to get wrong.
+
+`SEARCHING` — the failed-homing spiral — is a fifth state that M1 does not
+need (§3.9); until then a returning ant simply keeps its home vector and
+its noise, and finds the nest or does not.
+
+Transitions are driven by continuous quantities, not timers:
 
 - **Energy** drains per tick, faster while walking. As it falls, the return
   urge rises — modelled as a weight on the home-vector direction that grows
@@ -304,10 +327,19 @@ than hide it: a nest with visibly idle ants is more correct, not less.
 - optional **renewal rate** — aphid honeydew regenerates; a seed pile does
   not. One parameter covers both.
 
-**Obstacles** are convex polygons, kept in two representations: the polygon
-for rendering, and a rasterized blocked-cell bitmask for collision and for
-masking pheromone diffusion. Ants collide, slide along, and preferentially
-follow edges (§3.2 thigmotaxis).
+**Obstacles are polygons.** They are static, authored, and often want to be
+straight, long or awkwardly shaped — a wall, a leaf, the rim of a dish —
+and a polygon says all of that exactly, where a chain of discs only
+approximates it and costs more to test. They are kept in three
+representations: the polygon for rendering, its edge list for collision
+(§3.11), and a rasterized blocked-cell mask for masking pheromone
+diffusion and for cheap broad-phase rejection.
+
+Food is worth one note here: **a food source is a blocking body, not a
+marker you walk through.** Ants must physically reach its edge, which means
+they crowd and queue at a rich source. Crowding is a real constraint on
+foraging rate, and getting it for free from the collision rule is better
+than modelling it.
 
 ### 3.8 What must emerge — the acceptance list
 
@@ -323,8 +355,228 @@ These are not features. They are consequences, and each one is a test:
 | **Trail death** | deplete the source | trail decays to background on the evaporation timescale, colony re-explores |
 | **Task reallocation** | remove 50% of foragers | forager count recovers from the nurse pool, without any global controller |
 | **Homing without trail** | single ant, virgin arena | path integration returns it to the nest within its error radius |
+| **Colony extinction** | nest placed out of foraging range | stock falls, births stop, population decays to zero — starvation is a legitimate run outcome, not a bug (§3.10) |
+| **Bodies never interpenetrate** | dense crowd at one small source | no two blocking bodies overlap after the relaxation pass, at any density (§3.11) |
+| **Competition** *(post-M1)* | two colonies, one contested source | the nearer colony wins the source; raising ε visibly degrades both colonies' trail fidelity (§3.12) |
 
 That table is the project's definition of "working".
+
+### 3.9 The M1 cut — what actually gets built first
+
+Sections 3.1–3.8 describe the model. **They do not describe M1.** Left
+unchecked the science above is a multi-year project, so M1 takes the
+smallest subset that can still produce §3.8, and each item in that subset
+is a defensible abstraction rather than a stub.
+
+The test of a good cut is that nothing removed is *load-bearing for the
+acceptance list*. Everything below passes that test.
+
+| mechanism | M1 | the simplification, and why it is still science |
+|---|---|---|
+| Correlated random walk | **in** | Gaussian turn instead of wrapped Cauchy. Same locally-straight, globally-diffusive path; the tail shape is a refinement, not a mechanism. |
+| Trail pheromone field | **in** | One field. Decay + deposit + ceiling. No diffusion — real trail pheromone barely diffuses on the timescale that matters. |
+| Deneubourg choice function | **in** | Unchanged. This is the one thing that must be exactly right, because §3.8 is a test *of* it. |
+| Path integration | **in** | Home vector with proportional noise. The mechanism that seeds the first trail; without it nothing else happens. |
+| Foraging state machine | **in** | Four states (§3.5). No `TRAIL-FOLLOWING`, no `SEARCHING`. |
+| Energy + crop | **in** | Two scalars, linear drain and fill. Return urge as a weight on the home vector. |
+| Food amount + quality | **in** | Depletion and quality-modulated deposition — both are load-bearing for two acceptance rows. |
+| Obstacles | **in** | Polygons, with a rasterized mask for broad-phase and pheromone blocking (§3.7). |
+| Disc bodies + non-overlap | **in** | §3.11. One rule, Jacobi resolution. Cheaper than the alternatives *and* the thing that makes crowding emerge. |
+| Colony growth and death | **in** | §3.10 — a birth rate, not a brood model. Extinction falls out of the same line. |
+| Corpses as bodies | **in** | Dying leaves a blocking disc. Passive — it costs one body kind and nothing else, and it makes the missing behaviour visible. |
+| Per-colony trail fields + ε | **in** | §3.12. M1 runs one colony, so ε never fires — but the indirection is free now and unaddable later. |
+| — | — | — |
+| No-entry, alarm, nest-marking fields | *later* | Three of the four fields. None is needed for §3.8; each is a self-contained addition to an existing field abstraction. |
+| Response thresholds, age polyethism | *later* | M1 has one task. Age still accumulates and still kills — it just does not yet steer behaviour. |
+| Trophallaxis between ants | *later* | M1 unloads the crop straight into nest stock. The ant–ant transfer is the only mechanism in the model needing pairwise coupling, and skipping it keeps the M1 tick embarrassingly parallel. |
+| Landmark / route memory | *later* | The *Formica* mode; irrelevant to a mass recruiter. |
+| U-turns, search spirals, thigmotaxis | *later* | Real, measured, and all three make trails *more* stable — so M1 passing without them is the stronger result. |
+| Necrophoresis | *later* | Corpses accumulate in M1 and nothing clears them. A behaviour, not a mechanism — it needs only a new task and a midden. |
+| Multiple colonies | *later* | The data model supports them from day one (§3.12); M1 runs one, because nothing in §3.8's core rows needs two. |
+
+The rule for adding anything back: **it must be addable without changing
+the tick's shape.** Every deferred item above is either a new field on an
+existing grid, a new scalar on an existing ant, or a new state on an
+existing machine. None requires rewriting M1.
+
+### 3.10 Colony growth — a population, not a headcount
+
+A run **starts with a configured population and grows from there.** The
+starting count is a free parameter — a couple of founders, or a mature
+colony of a few thousand, whichever the scenario wants. What changes is
+that it is a *starting* count rather than *the* count: births and deaths
+run from tick one, so the population is a state variable, not a setting.
+
+That coupling is the interesting part — the trail network thickens because
+there are more ants, and there are more ants because the trail network
+works. Seeding a colony at its mature size just means starting near
+equilibrium instead of climbing to it; both are legitimate, and which one
+a scenario wants depends on whether the growth curve is the subject.
+
+- **Capacity** is a configured upper bound on the ant table — a memory
+  budget, not a target. The SoA table is allocated once at capacity (§4.2)
+  and a liveness mask says which slots are alive, so growth is free: birth
+  claims a slot from the free list, death returns it. This is exactly why
+  the table was fixed-capacity to begin with.
+- **Birth rate** is a function of nest food stock: the colony converts
+  stored food into new workers at a rate proportional to what it has,
+  scaled by a configured brood efficiency, and clamped at capacity. A
+  colony that forages well grows; a colony that cannot feed itself
+  shrinks. That coupling is the whole point and it is one line of arithmetic.
+- **Death** comes from energy reaching zero and from age, with a per-tick
+  hazard that rises with age. Foragers die away from home; that is what
+  foragers do.
+- **No brood stages** in M1 — no eggs, larvae, pupae, no development time,
+  no nurses. A single `stock → workers` rate is the sound simple
+  abstraction; brood stages are a refinement that adds a lag, and the lag
+  is the only thing they add until nursing exists to interact with it.
+
+The visible consequence is that "400 ants" becomes where a scenario
+*starts*, never where it stays. How many ants a run ends with is a result.
+
+**A colony can also shrink to nothing.** If stock runs out, births stop
+while deaths do not, and the nest depopulates and dies. This needs no
+special case — it is the growth rule run with the sign reversed — but it
+does need to be *stated*, because it is the first genuinely unforgiving
+outcome in the model and it changes what a scenario means. A nest placed
+too far from food does not forage inefficiently; it starves. Extinction is
+a legitimate result of a run, and §3.8 tests for it.
+
+### 3.11 Bodies — a disc for every ant, and one non-overlap rule
+
+**An ant is a disc.** Not for rendering — §5.2 draws the full articulated
+vector model — but for physics. A real ant is a head, a mesosoma, a gaster
+and six splayed legs, and colliding that shape against a few thousand
+copies of itself every tick is a problem with no payoff: at the scale
+anything is decided, an ant is a blob that takes up room. One position, one
+radius, done. **The visual model and the collision model are deliberately
+different, and only the cheap one runs in the tick loop.**
+
+The same disc serves corpses, food sources and any other movable or
+roundish body. Obstacles stay polygons (§3.7), because static terrain wants
+to be exact and only has to be tested against, never resolved between.
+
+A box would work too, and is the obvious alternative — but a disc earns its
+place for one technical reason and one aesthetic one. **Technically, an ant
+is always turning**, and a disc is the only shape whose collision test does
+not care: an axis-aligned box has to be re-fitted every time the heading
+changes (and is badly wrong at 45°), and an oriented box needs a separating-axis
+test and a contact normal that flips between edges and corners. A disc's
+overlap is a subtraction and its normal is the centre difference, at any
+heading, for free. **Aesthetically**, discs also simply look better in
+motion: contacts resolve along the line of centres, so crowded ants jostle
+and slide past each other smoothly, where boxes catch on their corners and
+produce a visible grid-lock jitter that reads as broken.
+
+The rule is simply:
+
+> **No two blocking bodies may overlap** — disc against disc, and no disc
+> inside a polygon.
+
+That single constraint is doing a surprising amount of work. It gives ants
+collision with each other, collision with terrain, crowding and queueing at
+food, physical congestion on a busy trail, and corpses that genuinely get
+in the way — all from one mechanism with one code path, rather than four
+subsystems that interact badly at the seams.
+
+Two tests, both trivial:
+
+- **disc vs disc** — compare centre distance against the radius sum; the
+  overlap and its direction fall straight out.
+- **disc vs polygon** — closest point on the polygon's edges, then push out
+  along the normal. Cheap, exact, and no different in spirit from the first.
+
+**Resolution must be Jacobi, not Gauss-Seidel.** The obvious
+implementation — walk the pairs and push each apart as you find it —
+is order-dependent, which would break determinism (§4.4) and make threaded
+runs differ from single-threaded ones. So overlaps instead accumulate a
+correction *vector per body* into a preallocated buffer, and the buffer is
+applied after the sweep. Every body sees the same world, corrections
+commute, and two or three relaxation iterations per tick settle a dense
+crowd. This is the same trick as the pheromone deposit buffer (§4.2), for
+the same reason, and it is not a coincidence: **anything an ant does to
+shared state gets written to a buffer and folded in, never applied in
+place.**
+
+Pair candidates come from the spatial hash (§4.2), so the sweep is linear
+in bodies rather than quadratic.
+
+**A contact is a channel — much later.** The relaxation pass already knows,
+every tick, exactly which ants are touching which. That list is the natural
+substrate for everything ants do to each other *by touch*: trophallaxis,
+antennation, tactile recruitment signals, nestmate recognition, alarm
+transmitted by contact rather than by air. All of it is real, all of it is
+contact-mediated in the literature, and none of it needs new spatial
+machinery — it needs a rule applied to a list the physics is computing
+anyway.
+
+This is a **long way out — after M6**, and it is noted here only because it
+argues for keeping the contact list rather than discarding it once
+positions are corrected. Cheap to retain, expensive to reconstruct later.
+
+**What blocks what**
+
+| body | shape | moves | blocks | note |
+|---|---|---|---|---|
+| ant | disc | yes | yes | radius ≈ half a body length |
+| corpse | disc | pushable | yes | inert; clutters, and can occlude a trail |
+| food source | disc | no | yes | ants reach its edge and queue — crowding for free |
+| obstacle | **polygon** | no | yes | static, exact, authored |
+| nest entrance | disc | no | **no** | a trigger, not a wall — ants must get in |
+
+The nest entrance is the deliberate exception. Making it blocking would
+seal the colony in; making it a narrow gap between two blocking discs is a
+tempting refinement — real nest entrances create measurable traffic jams —
+but that is a later scenario, not an M1 mechanism.
+
+**Corpses stay.** An ant that dies becomes a corpse body at the spot it
+died, and it stays there. Nothing removes it, because removal is a
+*behaviour* the colony does not have yet — real ants perform necrophoresis,
+carrying corpses to refuse middens, and it is one of the best-documented
+stereotyped behaviours there is (Wilson's oleic-acid experiment: daub a
+live ant with the corpse cue and its nestmates carry it out anyway, while
+it struggles). Until that behaviour exists, corpses accumulate, clutter the
+approaches to a busy nest, and physically deform trail routes. That is not
+a bug to hide — it is a visible, honest statement of what the colony cannot
+yet do, and it makes adding necrophoresis later a change with a visible
+payoff rather than invisible bookkeeping.
+
+### 3.12 More than one colony — competition and trail corruption
+
+The ant record already carries a colony id (§3.5), so multiple colonies
+cost the model almost nothing structurally — but one decision has to be
+made now, because it is not retrofittable.
+
+**Trail fields are per colony, not global.** Each colony deposits into its
+own field. An ant weights its own colony's field fully and every foreign
+field by an **eavesdropping coefficient** ε ∈ [0,1]:
+
+```
+C_effective(cell) = C_own(cell) + ε · Σ C_foreign(cell)
+```
+
+- ε = 0 — colonies are blind to each other and merely compete for food.
+- ε small — the realistic setting. Interspecific and intercolony trail
+  eavesdropping is documented; ants do read foreign trails, imperfectly.
+- ε = 1 — one shared field, and the colonies' trails genuinely corrupt one
+  another: a strong foreign trail pulls your foragers toward a source
+  someone else is already draining.
+
+A single coefficient spans the whole range from independence to mutual
+interference, which is the cheapest possible way to make competition
+interesting. Memory is one field per colony — 640 kB at 400², so a handful
+of colonies is nothing.
+
+Competition then has three channels, none of them special-cased: the food
+itself depletes and is shared; the trail fields interfere through ε; and
+the bodies physically block each other at a contested source (§3.11).
+Fighting is *not* in the model and will not be until there is a reason for
+it beyond spectacle.
+
+**M1 runs one colony.** All of the above is a design constraint on the data
+model, not M1 scope — the point of settling it now is that per-colony
+fields and a colony id cost nothing on day one and cannot be added later
+without touching every line that reads a pheromone.
 
 ## 4. Architecture
 
@@ -382,16 +634,31 @@ scenarios/*.json        the scenes, including the bridge experiments
 
 **Struct-of-arrays throughout, allocated once.** Ants are a fixed-capacity
 table with a free list; birth and death flip a liveness bitmask rather than
-resizing anything. Pheromones are `(simple-array single-float (*))` per
-field, indexed `y*w + x`. No consing in the tick loop, ever.
+resizing anything (§3.10 — this is precisely why the table is
+fixed-capacity). Pheromones are `(simple-array single-float (*))` per field
+*per colony*, indexed `y*w + x`. No consing in the tick loop, ever.
 
-Deposits are accumulated into a **separate deposit buffer** per field and
-folded in on the pheromone clock. This is what makes the ant loop
-order-independent — two ants depositing in the same cell in the same tick
-commute — which is what makes threading bit-exact.
+**Bodies** are a second SoA table — `x`, `y`, `r`, `kind`, `flags` — that
+ants index into rather than duplicate, so collision (§3.11) sweeps one
+contiguous array covering ants, corpses and food alike. A corpse is a body
+whose ant slot has been freed.
 
-**Spatial hash** over a coarse grid (say 5 cm cells) for ant–ant and
-ant–food proximity queries. Rebuilt each tick by counting sort into
+**Every write to shared state goes through a buffer.** There are two, and
+they exist for the same reason:
+
+| buffer | written by | folded in on |
+|---|---|---|
+| pheromone deposit, per field | any ant laying trail | the pheromone clock |
+| position correction, per body | any overlapping pair | the end of each relaxation iteration |
+
+Both make the ant loop **order-independent** — two ants depositing in the
+same cell, or two pairs correcting the same body, commute — and
+order-independence is exactly what makes threaded runs bit-exact (§4.4).
+Applying either in place would be faster and would silently destroy
+determinism.
+
+**Spatial hash** over a coarse grid (say 5 cm cells) serves both proximity
+queries and collision broad-phase. Rebuilt each tick by counting sort into
 preallocated arrays.
 
 ### 4.3 Multi-rate clocks
@@ -552,20 +819,45 @@ CI has no GPU, so GL tests must *skip*, not fail — and a green CI run
 therefore does not mean the renderer was verified. Only `make test-render`
 on this machine does.
 
-### 5.5 Live window
+### 5.5 The live window, and why the camera comes early
 
 Headless covers tests and image output but not "watch it run", which is
-most of the point of a playful sim. Options:
+most of the point of a playful sim. **`antsim/live` therefore lands with
+the renderer at M2, not at the end** — because a free camera is what keeps
+every question about scale open.
 
-- **cl-glfw3** — minimal, well-suited to a single GL window, easy input.
-  Recommended.
-- **sdl2** — heavier, more capable, more moving parts.
-- **frame sequence → ffmpeg** — no new dependency at all, good enough for
-  sharing results, useless for interaction.
+That is the real argument for it. Without pan and zoom, the arena size,
+the ant count and the render scale are all locked together, and every one
+of them has to be guessed correctly up front. With them, the same run is
+legible at any scale: zoom in and a single ant is a vector model with a
+gait; zoom out and the same colony is a trail network. Nothing about the
+world has to be decided in advance to see it.
 
-Recommendation: build M1–M4 headless-only, then add `antsim/live` on GLFW.
-Keeping the renderer surface-agnostic from the start costs nothing and
-makes this a small addition later.
+**Controls**
+
+| input | action |
+|---|---|
+| mouse wheel | zoom, anchored at the cursor — the world point under the pointer stays under it |
+| right-drag | pan |
+| `space` / `+` / `-` | pause, and time compression up/down |
+| left-click an ant | inspect: state, energy, crop, age, home vector |
+| `home` | frame the whole world |
+
+Cursor-anchored zoom is worth calling out because the obvious
+implementation — scale about the screen centre — feels wrong immediately
+and is the same two lines of arithmetic to do properly.
+
+**Backend: cl-glfw3** — minimal, suited to one GL window, and its input
+model is a direct fit for the above. Alternatives considered: `sdl2`
+(heavier, more capable, more moving parts) and a frame sequence piped to
+`ffmpeg` (no new dependency, fine for sharing results, useless for
+interaction).
+
+The renderer stays surface-agnostic regardless: the camera is an ortho
+transform and a viewport, and the headless path is the same renderer with
+an FBO instead of a window. The live window is a second consumer of the
+frame, never a fork of it — which is what keeps the tested path and the
+watched path the same path.
 
 ## 6. The scenario file
 
@@ -585,11 +877,18 @@ dependency) into plain structs, so the core never sees a parser.
     "alarm":   { "tau_s": 30,   "diffusion": 0.02, "max": 20.0  }
   },
 
-  "choice": { "n": 2.0, "k": 20.0 },
+  "choice": { "n": 2.0, "k": 20.0, "eavesdrop": 0.0 },
 
-  "nests": [
-    { "id": "home", "x": 0.10, "y": 0.40, "r": 0.03,
-      "population": 400, "stock": 0.5 }
+  "bodies": { "ant_radius": 0.0025, "relax_iterations": 3 },
+
+  "colonies": [
+    { "id": "home",
+      "nest":     { "x": 0.10, "y": 0.40, "r": 0.03 },
+      "capacity": 4000,
+      "start":    400,
+      "stock":    0.5,
+      "brood_per_stock": 0.8,
+      "max_age_s":       86400 }
   ],
 
   "food": [
@@ -606,6 +905,13 @@ dependency) into plain structs, so the core never sees a parser.
   "duration_s": 3600
 }
 ```
+
+Note what is **not** in there, and cannot be: **no ant positions and no
+pheromone.** `start` seeds a count at the nest, not a layout, and there is
+no key anywhere that puts trail on the grid (§3.3). `capacity` is a memory
+bound; `start` is an initial condition; the population between them is a
+result. Colonies are a list from the outset even though M1 runs one, so
+that competition (§3.12) is a scenario change rather than a format change.
 
 Everything a scenario does not specify falls back to the species parameter
 set, and everything the species set does not specify falls back to a
@@ -626,33 +932,49 @@ carried over, FiveAM wired, Makefile with the guix GPU targets. A headless
 context comes up and writes a non-black PNG. *Proves the toolchain before
 any design is committed to it.*
 
-**M1 — the core simulation, no renderer.** Ant table, CRW movement,
-collision, pheromone fields with decay and deposit fold-in, the choice
-function, path integration, the foraging state machine, food depletion.
-*Ends when the §3.8 acceptance tests pass* — symmetry breaking and
-shortest-path selection, verified numerically with no picture involved.
-This is the milestone that decides whether the science is right, and it
-deliberately does not depend on a single line of GL.
+**M1 — the core simulation, no renderer.** Exactly the §3.9 cut and nothing
+past it: the ant and body tables, CRW movement, disc collision with Jacobi
+relaxation, one trail field per colony with decay and deposit fold-in, the
+choice function, path integration, the four-state machine, food depletion,
+colony growth and death. *Ends when the §3.8 acceptance tests pass* —
+symmetry breaking and shortest-path selection, verified numerically with no
+picture involved. This is the milestone that decides whether the science is
+right, and it deliberately does not depend on a single line of GL.
 
-**M2 — the renderer, simple ants.** Ortho camera, pheromone field texture,
-obstacles, food, nests, ants as simple bodies. Headless PNG gallery of the
-M1 scenarios. *First time you can see a trail form.*
+**M2 — the renderer, and the window.** Ortho camera, pheromone field
+texture, obstacle polygons, food, nests, ants as simple discs. Headless PNG
+gallery of the M1 scenarios *and* `antsim/live` on GLFW with
+cursor-anchored wheel zoom, right-drag pan, pause and time compression
+(§5.5). The window comes in here rather than at the end because it is what
+keeps arena size, ant count and render scale from having to be guessed
+correctly up front. *First time you can watch a trail form, at whatever
+scale you like.*
 
 **M3 — the ant model.** The vector ant, the tripod gait rig, VS
 articulation, LOD, antennae, payload, state tint. The one genuinely novel
 piece of engineering in the project, and it gets its own milestone because
-it deserves the room to be got right.
+it deserves the room to be got right. Note the collision model does not
+change: the disc stays, the drawing gets legs (§3.11).
 
-**M4 — scenarios and behaviour depth.** JSON loading, richer scenes,
-response thresholds, age polyethism, trophallaxis, no-entry pheromone,
-alarm. Multiple nests.
+**M4 — scenarios and behaviour depth.** JSON loading, richer scenes, and
+then the deferred half of §3.9 in dependency order: response thresholds and
+age polyethism, trophallaxis, the no-entry and alarm fields, necrophoresis
+and middens, U-turns and search spirals. Multiple colonies and the ε
+competition scenario.
 
-**M5 — live and interactive.** GLFW window, camera pan/zoom, run/pause/
-speed, click an ant to inspect its state, drop food, place obstacles, poke
-the nest and watch the alarm field.
+**M5 — interaction.** Click an ant to inspect its state, drop food, place
+obstacles, poke the nest and watch the alarm field propagate. The window
+already exists from M2; this is what you can *do* to a running world.
 
 **M6 — polish.** Colour, time-lapse capture, the *Formica* parameter set as
 a contrasting species, a gallery document like `docs/M2-renderer.md`.
+
+**Beyond M6 — the contact layer.** Ant-to-ant touch as a communication
+channel: trophallaxis between individuals, antennation, tactile
+recruitment, nestmate recognition, contact-borne alarm. The collision pass
+already produces the contact list this needs (§3.11), which is the only
+reason it is worth naming this far out — the groundwork is a decision made
+in M1, the work itself is not scheduled.
 
 ## 8. Risks
 
@@ -663,27 +985,46 @@ a contrasting species, a gallery document like `docs/M2-renderer.md`.
 | Trail dynamics tuned into a regime that looks right but is not | medium | the n=1 control test — if it still selects a path, the selection is coming from something other than the choice function |
 | Multi-rate clocks introduce order dependence | medium | deposit buffers + previous-tick reads make the ant step commutative; the determinism test catches regressions |
 | Performance | low | 5 k ants × 160 k cells at 20 Hz is small; waldameisen already instanced 3 k |
-| Scope — the science is deep enough to never ship | **high** | M1's acceptance table is the definition of done; everything past it is optional |
+| Scope — the science is deep enough to never ship | **high** | The §3.9 cut is the answer: M1 builds a named subset, §3.8's table is the definition of done, and everything else is explicitly scheduled rather than argued about again |
+| Non-overlap relaxation does not converge in a dense crowd | medium | Jacobi with a fixed 2–3 iterations is a *soft* constraint — residual overlap is bounded, not zero. If a queue at a rich source jitters or squeezes, raise iterations before changing the scheme; the acceptance row in §3.8 measures it rather than assuming it |
+| Corpses accumulate until they choke a nest | low | Intended, and visible. It is the argument for necrophoresis at M4, not a defect — but a scenario running for simulated weeks needs the midden behaviour before its results mean anything |
 
 ## 9. Open decisions
 
-These change the work materially, so they are called out rather than
-silently assumed. Current assumption is marked **→**.
+### Settled
 
-1. **Reference species.** → *Lasius niger* (best trail literature, true mass
-   recruiter). Alternative: *Formica polyctena* for waldameisen continuity,
-   at the cost of pheromone trails being the wrong lens for the species.
-2. **Live window.** → headless-only through M4, GLFW at M5. Alternative:
-   bring the window forward to M2 if watching it run matters more than
-   testing it early.
-3. **Colony scale.** → hundreds of ants in a 1–2 m arena, individually
-   visible and legible. Alternative: thousands, which is more spectacular
-   and less playful.
-4. **JSON dependency.** → `com.inuoe.jzon`, confined to `antsim/scenario`
-   so the core stays dependency-free. Alternative: hand-rolled reader to
+1. **Reference species — *Lasius niger*.** Best trail literature, a true
+   mass recruiter. *Formica polyctena* becomes a contrasting parameter set
+   at M6.
+2. **Complexity is capped at the §3.9 cut.** M1 builds that subset and
+   nothing past it. Everything deferred is scheduled, not deleted, and each
+   deferred item is addable without changing the tick's shape.
+3. **Trails are never authored** (§3.3). The scenario format has no way to
+   place pheromone, by construction.
+4. **The live window lands at M2, with cursor-anchored wheel zoom and
+   right-drag pan** (§5.5) — so arena size, ant count and render scale stay
+   open questions instead of up-front guesses.
+5. **Population is dynamic on top of a configured start** (§3.10).
+   `capacity` bounds memory, `start` is an initial condition, and the
+   running count is a result — including zero, when a colony starves.
+6. **Ants are discs; obstacles are polygons** (§3.11). One non-overlap rule,
+   Jacobi resolution so determinism survives.
+7. **Trail fields are per colony with an eavesdropping coefficient ε**
+   (§3.12). M1 runs one colony; the indirection is free now and
+   unaddable later.
+8. **Repository** — initialised, pushed to `bonk/antsim`, branch `concept`.
+
+### Still open
+
+1. **Colony scale.** → hundreds of ants in a 1–2 m arena for the M1
+   acceptance scenarios, since those reproduce lab experiments at lab
+   scale. With pan and zoom in from M2 this is much less of a commitment
+   than it was; `capacity` and arena size are per-scenario anyway.
+2. **JSON dependency.** → `com.inuoe.jzon`, confined to `antsim/scenario`
+   so the core stays dependency-free. Alternative: a hand-rolled reader, to
    keep the whole project dependency-free.
-5. **Repository.** → antsim as its own git repo, mirroring waldameisen's
-   layout and CI. Not yet initialized.
+3. **Default branch.** `concept` is currently the only branch on the
+   remote; nothing has been set as default yet.
 
 ## 10. Sources, and what still needs checking
 
