@@ -180,23 +180,9 @@ returners read warm, which is what makes a working trail legible as
                 (* 0.72f0 (colony-nest-r c) (sqrt frac))
                 (cffi:mem-aref ptr :float (+ o 3)) 5.0f0)
           (incf count))))
-    ;; How much is left in each source, drawn inside its disc.  The
-    ;; collision radius deliberately does *not* shrink: a source is a
-    ;; blocking body an ant has to reach the edge of (§3.7), and changing
-    ;; that as it depletes would quietly change the crowding behaviour
-    ;; while pretending to be a display decision.
-    (dolist (f (world-foods w))
-      (when (< count (renderer-body-capacity r))
-        (let ((o (* count 4))
-              (frac (if (plusp (food-initial f))
-                        (clampf (/ (food-amount f) (food-initial f))
-                                0.0f0 1.0f0)
-                        0.0f0)))
-          (setf (cffi:mem-aref ptr :float (+ o 0)) (food-x f)
-                (cffi:mem-aref ptr :float (+ o 1)) (food-y f)
-                (cffi:mem-aref ptr :float (+ o 2)) (* (food-r f) (sqrt frac))
-                (cffi:mem-aref ptr :float (+ o 3)) 6.0f0)
-          (incf count))))
+    ;; Sources need no gauge instance: the body itself shrinks as it is
+    ;; eaten (FOOD-CURRENT-RADIUS), so the disc on screen *is* the amount
+    ;; left, and it is the same circle the ants are queueing against.
     count))
 
 ;;; --------------------------------------------------------------------

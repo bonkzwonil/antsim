@@ -29,6 +29,23 @@
   (declare (type food f))
   (<= (food-amount f) 0.0f0))
 
+(defun food-current-radius (f)
+  "The source's *present* radius, shrinking with what is left of it.
+
+By the square root, so the disc's **area** tracks the amount — a pile
+half eaten is half the area, not half the width.
+
+This is the collision radius, not just the drawn one, and that is the
+point: a smaller pile has a shorter edge, so fewer ants can reach it at
+once and the queue behind it grows as it empties.  Feeding rate falling
+as a source runs down is a real constraint on foraging, and it comes out
+of the geometry for free rather than needing a rule of its own."
+  (declare (type food f))
+  (if (plusp (food-initial f))
+      (* (food-r f)
+         (sqrt (clampf (/ (food-amount f) (food-initial f)) 0.0f0 1.0f0)))
+      0.0f0))
+
 ;;; --------------------------------------------------------------------
 ;;; Colony (§3.10, §3.12)
 ;;; --------------------------------------------------------------------
@@ -153,6 +170,9 @@ scene with hundreds would want the spatial hash."
   (dolist (f (world-foods w))
     (unless (food-empty-p f)
       (let ((dx (- x (food-x f))) (dy (- y (food-y f))))
+        ;; the *current* radius, so an ant has to reach the shrinking pile
+        ;; rather than the space it used to occupy
         (when (<= (+ (* dx dx) (* dy dy))
-                  (let ((rr (+ (food-r f) *ant-radius* 0.001f0))) (* rr rr)))
+                  (let ((rr (+ (food-current-radius f) *ant-radius* 0.001f0)))
+                    (* rr rr)))
           (return f))))))

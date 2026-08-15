@@ -171,13 +171,11 @@ vec3 kind_color(float k) {
     int base = int(floor(k + 0.01));
     float frac = k - float(base);
     if (base == 1) return vec3(0.32, 0.30, 0.30);          // corpse: grey
-    // A source is drawn as a *container*: this dark ring is its extent,
-    // which never changes because it is the blocking body ants queue
-    // against, and the bright disc inside it (kind 6) is what is left.
-    // Colouring the extent itself green made an exhausted source look
-    // identical to a full one — the colony starved on screen next to what
-    // still read as a meal.
-    if (base == 2) return vec3(0.16, 0.26, 0.16);          // food: empty
+    // The source needs no separate gauge: its body shrinks as it is
+    // eaten, so this disc *is* what is left of the pile — and it is the
+    // same circle the ants are queueing against, which is why a source
+    // running down also gets harder to feed from.
+    if (base == 2) return vec3(0.42, 0.80, 0.34);          // food: green
     if (base == 3) return vec3(0.36, 0.25, 0.15);          // nest: brown
     if (base == 4) return vec3(0.62, 0.46, 0.30);          // arrival halo
     if (base == 5) return vec3(0.95, 0.78, 0.36);          // stock in nest

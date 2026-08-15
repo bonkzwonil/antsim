@@ -519,6 +519,12 @@ stops producing brood, and decays."
   "One motion tick, plus whichever slower clocks fall due (§4.3)."
   (declare (type world w))
   (ant-motion-step! w)
+  ;; A source is a blocking body, so as it is eaten its body has to shrink
+  ;; with it — before the collision pass, not after, or ants spend a tick
+  ;; queueing against a pile that is no longer there.
+  (let ((b (world-bodies w)))
+    (dolist (f (world-foods w))
+      (setf (aref (bodies-r b) (food-body f)) (food-current-radius f))))
   (bodies-resolve! (world-bodies w) (world-obstacles w))
   (path-integration-step! w)
   (incf (world-tick w))
