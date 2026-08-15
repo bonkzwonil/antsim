@@ -180,9 +180,17 @@ switch into and no switching logic to get wrong (§3.5)."
          (total (+ wl wc wr))
          (u (* (rnd01 id tick +stream-choice+ (world-seed w)) total)))
     (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u))
-    (cond ((< u wl) -1.0f0)
-          ((< u (+ wl wc)) 0.0f0)
-          (t 1.0f0))))
+    ;; Second value: how strongly this ant can smell a trail at all,
+    ;; as C/(k+C) of the best sensor — 0 in clean ground, approaching 1
+    ;; on a saturated road.  The caller uses it to decide how *hard* to
+    ;; turn, which is a separate question from which way (see
+    ;; *trail-turn-gain*).
+    (let ((best (max cl (max cc cr))))
+      (declare (type f32 best))
+      (values (cond ((< u wl) -1.0f0)
+                    ((< u (+ wl wc)) 0.0f0)
+                    (t 1.0f0))
+              (/ best (+ k best))))))
 
 ;;; --------------------------------------------------------------------
 ;;; The tick
@@ -309,11 +317,19 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; The choice function runs in *both* directions.  A
                     ;; returning ant is not blind to the trail — it is
                     ;; pulled home as well, and the two combine.
-                    (turn (* *turn-rate*
-                             (choose-turn w (colony-id c) id tick x y heading)))
-                    (noise (* *turn-sigma*
-                              (rnd-normal id tick +stream-turn+ seed))))
-               (declare (type f32 heading hvx hvy turn noise))
+                    (dir 0.0f0) (smell 0.0f0) (turn 0.0f0) (noise 0.0f0))
+               (declare (type f32 heading hvx hvy dir smell turn noise))
+               (multiple-value-setq (dir smell)
+                 (choose-turn w (colony-id c) id tick x y heading))
+               ;; Which way from the choice function; how hard from how
+               ;; much pheromone is actually there.  Off a trail both
+               ;; terms reduce to the plain correlated random walk.
+               (setf turn (* *turn-rate*
+                             (+ 1.0f0 (* *trail-turn-gain* smell))
+                             dir)
+                     noise (* *turn-sigma*
+                              (- 1.0f0 (* *trail-noise-suppression* smell))
+                              (rnd-normal id tick +stream-turn+ seed)))
                (setf heading (wrap-angle (+ heading turn noise)))
                ;; homing urge: total for a returning ant, and growing as
                ;; energy falls for an outbound one (§3.5)

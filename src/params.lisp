@@ -71,6 +71,32 @@ colony burned its stock on fruitless trips, and the run died out.  That
 looked like a broken foraging model and was in fact a walk with the
 wrong correlation length.")
 
+(defparameter *trail-turn-gain* 3.0f0
+  "How much more sharply an ant turns when it is actually on a trail.
+[cal]
+
+The choice function decides *which way*; this decides *how hard*.  With a
+saturated trail under its antennae an ant picks the right direction about
+95% of the time, but at the bare *turn-rate* it turns only a little more
+per tick than its own heading noise — so it drifts off the road it just
+chose, rediscovers it, drifts off again, and the result looks like a
+colony that has found the food and is still wandering.
+
+Making the turn sharper in proportion to the concentration it can smell
+is the fix, and it is not a fudge: a real ant following a strong trail
+makes tighter, more corrective turns than one casting about in clean
+ground.  Off the trail the term vanishes and the walk is exactly the
+correlated random walk of §3.2, so search behaviour is untouched.
+
+Deliberately *not* implemented by lowering k or raising n.  Both would
+have moved trail-following in the same direction while changing the
+choice function itself, which §3.8 is a test of.")
+
+(defparameter *trail-noise-suppression* 0.6f0
+  "How much of the heading noise a strong trail removes.  [cal] Same
+argument as *trail-turn-gain*, from the other side: a committed
+trail-follower is not just turning harder, it is wandering less.")
+
 (defparameter *turn-rate* 0.08f0
   "Heading change per tick toward the antennal sample the choice function
 picked, radians.  [cal]
@@ -303,6 +329,7 @@ relaxation from chasing floating-point noise forever.")
                *cell-size* *motion-dt* *pheromone-dt* *colony-dt*
                *ant-radius* *walk-speed* *walk-speed-laden* *turn-sigma*
                *sensor-offset* *sensor-spread* *turn-rate*
+               *trail-turn-gain* *trail-noise-suppression*
                *choice-n* *choice-k* *choice-eavesdrop*
                *trail-tau* *trail-cap* *trail-deposit*
                *trail-quality-threshold*
