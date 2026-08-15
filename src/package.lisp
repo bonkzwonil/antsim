@@ -39,6 +39,13 @@
    #:field-index #:field-at #:field-blocked-p #:field-deposit! #:field-step!
    #:field-total #:field-max #:field-rasterize-polygon!
    #:field-cell-x #:field-cell-y #:field-tau #:field-cap
+   ;; world/bodies — the one non-overlap rule (§3.11)
+   #:bodies #:make-bodies #:bodies-alloc #:bodies-free! #:bodies-resolve!
+   #:bodies-become-corpse! #:bodies-rebuild-hash!
+   #:bodies-n #:bodies-capacity #:bodies-x #:bodies-y #:bodies-r
+   #:bodies-kind #:bodies-hash #:bodies-nfree
+   #:body-kind-blocking-p #:body-kind-movable-p
+   #:+body-ant+ #:+body-corpse+ #:+body-food+ #:+body-nest+ #:+body-free+
    ;; render/png (antsim/render)
    #:write-png #:crc32 #:adler32
    ;; render/egl

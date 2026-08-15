@@ -22,7 +22,8 @@
    (:module "world"
     :serial t
     :components ((:file "geom")
-                 (:file "grid"))))
+                 (:file "grid")
+                 (:file "bodies"))))
   :in-order-to ((test-op (test-op "antsim/test"))))
 
 (defsystem "antsim/render"
@@ -46,7 +47,8 @@
   :serial t
   :pathname "tests"
   :components ((:file "suite")
-               (:file "world"))
+               (:file "world")
+               (:file "bodies"))
   :perform (test-op (o c)
              (symbol-call :fiveam :run!
                           (find-symbol (string :antsim) :antsim/test))))
