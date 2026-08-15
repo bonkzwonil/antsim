@@ -32,7 +32,7 @@ SMOKE_PNG ?= out/m0-smoke.png
 export CL_SOURCE_REGISTRY := $(CURDIR):
 
 .PHONY: all test test-render test-render-mesa test-render-ci test-render-bare \
-        smoke smoke-mesa live repl page clean
+        smoke smoke-mesa live gallery repl page clean
 
 all: test
 
@@ -78,11 +78,19 @@ smoke:
 
 ## live — the interactive window (§5.5).
 ##   wheel zoom (cursor-anchored) · right-drag pan · left-click inspect
-##   space pause · +/- time compression · home frame all · escape quit
+##   space pause · +/- time compression · home frame all · q or escape quit
 live:
 	$(WIN) sh -c 'LD_LIBRARY_PATH=$$GUIX_ENVIRONMENT/lib exec $(SBCL) \
 	  --eval "(ql:quickload :antsim/live :silent t)" \
 	  --eval "(ant:live-demo)" --quit'
+
+## gallery — regenerate the README's images from a known scenario.  Every
+## picture in the documentation comes from here rather than a screenshot,
+## so it cannot drift away from what the simulation actually does.
+gallery:
+	$(GPU) $(SBCL) --non-interactive \
+	  --eval '(ql:quickload :antsim/render :silent t)' \
+	  --eval '(ant:render-gallery)'
 
 ## smoke-mesa — the same frame in software, for comparing the two stacks.
 smoke-mesa:

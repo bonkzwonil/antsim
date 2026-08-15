@@ -49,7 +49,8 @@
                (:file "view")
                (:file "shaders")
                (:file "renderer")
-               (:file "hud"))
+               (:file "hud")
+               (:file "gallery"))
   :in-order-to ((test-op (test-op "antsim/render-test"))))
 
 (defsystem "antsim/live"

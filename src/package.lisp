@@ -93,6 +93,8 @@
    ;; render/hud — screen-space overlay (§5.1)
    #:hud #:make-hud #:destroy-hud #:hud-reset #:hud-quad #:hud-text
    #:hud-bar #:hud-draw #:build-font #:*font-3x5*
+   ;; render/gallery — the README images (§7, M2)
+   #:render-gallery #:gallery-world #:gallery-shot #:*gallery-directory*
    ;; live/window — the interactive view (§5.5), system antsim/live
    #:run-live #:live-demo #:live-inspect
    #:*live-speed* #:*live-paused*))

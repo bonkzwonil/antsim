@@ -68,6 +68,11 @@ otherwise silently swap the readout for a different individual.")
     (case ch
       ((#\+ #\=) (live-faster))
       ((#\- #\_) (live-slower))
+      ;; q quits, which is the Unix convention and worth honouring even
+      ;; though escape already does.  It is layout-independent for free
+      ;; here, because this callback reports characters rather than key
+      ;; positions.
+      ((#\q #\Q) (glfw:set-window-should-close))
       (t nil))))
 
 (glfw:def-key-callback live-key (window key scancode action mods)
@@ -254,7 +259,7 @@ Controls:
   space        pause
   + / -        time compression, halving and doubling
   home         frame the whole world
-  escape       quit
+  q / escape   quit
 
 Returns the world, so a session can keep poking at it afterwards."
   (declare (type world w))
@@ -341,7 +346,7 @@ carry traffic."
   (let* ((w (make-world :width 0.6f0 :height 0.6f0 :capacity 8000))
          (c (add-colony w :name "home" :nest-x 0.30f0 :nest-y 0.08f0
                           :nest-r 0.02f0 :capacity 3000 :stock 500.0f0)))
-    (add-food w 0.34f0 0.43f0 0.03f0 500000.0f0 :quality 1.0f0)
+    (add-food w 0.34f0 0.43f0 0.03f0 25000.0f0 :quality 1.0f0)
     (add-obstacle w '(0.12 0.20 0.30 0.20 0.30 0.235 0.12 0.235))
     (world-seed-population! w c 150)
     (run-live w :width width :height height)))
