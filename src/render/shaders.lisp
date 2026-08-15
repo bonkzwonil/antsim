@@ -52,12 +52,23 @@ vec3 ground(vec2 w, float mpp) {
     return base + vec3(0.020, 0.022, 0.026) * smoothstep(0.06, 0.0, line) * fade;
 }
 
-// Diverging about k: cool and dim below, warm and bright above.
+// Diverging about k, in blue.
+//
+// The field is the brightest thing on screen and the ants sit on top of
+// it, so the two have to be separable at a glance.  The first version
+// ramped to warm yellow, which put orange laden returners on a yellow
+// road and made the traffic — the thing worth watching — nearly
+// invisible.  Blue is the complement of the ant palette, so a laden ant
+// reads against a strong trail as clearly as an unladen one does.
+//
+// The turn is still at k, per 5.3: below it the ants barely discriminate
+// and above it they commit, so the colour change marks the concentration
+// at which a smear becomes a road.
 vec3 trail_color(float c) {
     float t = c / u_k;                       // 1.0 at the threshold
-    vec3 below = mix(vec3(0.10, 0.13, 0.17), vec3(0.35, 0.33, 0.20),
+    vec3 below = mix(vec3(0.09, 0.13, 0.18), vec3(0.13, 0.30, 0.42),
                      clamp(t, 0.0, 1.0));
-    vec3 above = mix(vec3(0.35, 0.33, 0.20), vec3(1.00, 0.86, 0.42),
+    vec3 above = mix(vec3(0.13, 0.30, 0.42), vec3(0.55, 0.86, 1.00),
                      clamp((t - 1.0) / 3.0, 0.0, 1.0));
     return t < 1.0 ? below : above;
 }
@@ -152,7 +163,7 @@ flat in float v_radius_px;
 out vec4 frag;
 
 // kinds, matching world/bodies.lisp
-// 0 ant  1 corpse  2 food  3 nest
+// 0 ant  1 corpse  2 food  3 nest  4 nest arrival halo (drawing only)
 // ants additionally carry state in the fractional part: .1 outbound,
 // .2 at food, .3 returning laden
 
@@ -162,6 +173,7 @@ vec3 kind_color(float k) {
     if (base == 1) return vec3(0.32, 0.30, 0.30);          // corpse: grey
     if (base == 2) return vec3(0.42, 0.74, 0.34);          // food: green
     if (base == 3) return vec3(0.62, 0.42, 0.24);          // nest: brown
+    if (base == 4) return vec3(0.62, 0.46, 0.30);          // arrival halo
     if (frac > 0.25) return vec3(1.00, 0.72, 0.30);        // returning laden
     if (frac > 0.15) return vec3(0.95, 0.90, 0.70);        // at food
     return vec3(0.86, 0.88, 0.92);                         // outbound / in nest
@@ -170,10 +182,24 @@ vec3 kind_color(float k) {
 void main() {
     float d = length(v_local);
     if (d > 1.0) discard;
+    vec3 c = kind_color(v_kind);
+
+    // The nest's arrival radius, drawn as a ring.  It is much larger than
+    // the nest disc — an arriving cohort has to fit *around* the entrance,
+    // not reach its centre — and leaving it invisible put a boundary in
+    // the world that ants plainly reacted to and nothing on screen
+    // explained.  Drawing it is the honest fix: the picture should show
+    // where the model's edges are.
+    if (v_kind > 3.5) {
+        float ring = smoothstep(0.86, 0.99, d) * (1.0 - smoothstep(0.99, 1.0, d));
+        if (ring < 0.02) discard;
+        frag = vec4(c, ring * 0.5);
+        return;
+    }
+
     // antialias by one pixel of the disc's own radius
     float aa = clamp(1.0 / max(v_radius_px, 1.0), 0.02, 0.9);
     float edge = smoothstep(1.0, 1.0 - aa, d);
-    vec3 c = kind_color(v_kind);
     // a slight rim keeps a dense crowd from reading as one blob
     c *= mix(0.72, 1.0, smoothstep(1.0, 0.55, d));
     frag = vec4(c, edge);

@@ -218,6 +218,30 @@ switch into and no switching logic to get wrong (§3.5)."
           (cond
             ;; --- IN-NEST -------------------------------------------
             ((= state +ant-in-nest+)
+             ;; A resting ant keeps walking in until it is actually at the
+             ;; nest, slowly.
+             ;;
+             ;; Without this, "in nest" meant "stopped the instant it
+             ;; crossed the arrival radius", so the resting population sat
+             ;; in a shell 6 cm out while the nest disc itself stayed
+             ;; empty — and an ant that then set out was OUTBOUND while
+             ;; still inside the ring, which is exactly how it looked in
+             ;; the window.  Arrival is a threshold for *unloading*; it
+             ;; was never meant to be where the ant stops.
+             ;;
+             ;; The non-overlap rule does the rest: they cannot all reach
+             ;; the centre, so they pack into a cluster around the
+             ;; entrance, which is what a nest should look like.
+             (let* ((ndx (- (colony-nest-x c) x))
+                    (ndy (- (colony-nest-y c) y))
+                    (nd (sqrt (+ (* ndx ndx) (* ndy ndy)))))
+               (declare (type f32 ndx ndy nd))
+               (when (> nd (colony-nest-r c))
+                 (let ((step (min (* 0.5f0 *walk-speed* dt)
+                                  (- nd (colony-nest-r c)))))
+                   (declare (type f32 step))
+                   (setf (aref bxs bi) (+ x (* (/ ndx nd) step))
+                         (aref bys bi) (+ y (* (/ ndy nd) step))))))
              ;; The nest is a resource, not a waypoint (§3.5): a resting
              ;; ant is fed from the colony's stock.
              (let ((want (min (- 1.0f0 energy) *nest-feed-rate*)))
@@ -228,10 +252,23 @@ switch into and no switching logic to get wrong (§3.5)."
                         (< (rnd01 id tick +stream-leave+ seed)
                            *leave-probability*))
                (setf (aref (ants-state a) i) +ant-outbound+
-                     ;; leaving resets the home vector: the ant is
-                     ;; standing on the nest, so the way home is nothing
-                     (aref (ants-hvx a) i) 0.0f0
-                     (aref (ants-hvy a) i) 0.0f0)))
+                     ;; Set the home vector to the *actual* way back, not
+                     ;; to zero.
+                     ;;
+                     ;; Zeroing assumes the ant is standing on the nest,
+                     ;; and it is not: a resting ant is still a blocking
+                     ;; body, the crowd at a busy nest shoves it, and path
+                     ;; integration faithfully records that it has drifted.
+                     ;; Zeroing on departure threw that away, so the ant
+                     ;; adopted wherever it had been pushed to as home.
+                     ;; It would then forage, come back to that false
+                     ;; origin, find its home vector reading zero — and
+                     ;; sit there with a full crop it could not unload,
+                     ;; jiggling, nowhere near the nest.  Reported from
+                     ;; the window, where it is obvious and where no
+                     ;; aggregate statistic showed it.
+                     (aref (ants-hvx a) i) (- (colony-nest-x c) x)
+                     (aref (ants-hvy a) i) (- (colony-nest-y c) y))))
 
             ;; --- AT-FOOD -------------------------------------------
             ((= state +ant-at-food+)
@@ -333,8 +370,12 @@ switch into and no switching logic to get wrong (§3.5)."
                                               (* load *crop-to-energy*)))))
                         (setf (aref (ants-crop a) i) 0.0f0
                               (aref (ants-load-quality a) i) 0.0f0
-                              (aref (ants-hvx a) i) 0.0f0
-                              (aref (ants-hvy a) i) 0.0f0
+                              ;; Re-fix on the nest rather than zeroing:
+                              ;; arrival only means "within the arrival
+                              ;; radius", which is 6 cm, so zero would
+                              ;; bake that whole error into the next trip.
+                              (aref (ants-hvx a) i) (- (colony-nest-x c) x2)
+                              (aref (ants-hvy a) i) (- (colony-nest-y c) y2)
                               (aref (ants-state a) i) +ant-in-nest+))))
                    (t
                     ;; outbound: found food, or run low enough to turn back
