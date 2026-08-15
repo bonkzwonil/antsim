@@ -28,6 +28,41 @@ on the clock rather than a different loop.")
 (defvar *live-last-x* 0.0f0)
 (defvar *live-last-y* 0.0f0)
 
+(defun live-faster ()
+  (setf *live-speed* (min 4096.0f0 (* *live-speed* 2.0f0)))
+  (format t "~&speed ~,1fx~%" *live-speed*))
+
+(defun live-slower ()
+  (setf *live-speed* (max 0.03125f0 (/ *live-speed* 2.0f0)))
+  (format t "~&speed ~,1fx~%" *live-speed*))
+
+;;; Time compression is read from the *character* rather than the key.
+;;;
+;;; GLFW reports keys by their physical position on a US layout, not by
+;;; the symbol printed on the cap.  On a German QWERTZ the `+` key sits
+;;; where US has `]`, so it arrives as :RIGHT-BRACKET and a handler
+;;; written for :EQUAL never fires — which is exactly what happened here.
+;;; The character callback is layout-aware by definition and needs no
+;;; table of national layouts, so `+` and `-` come from it, while the key
+;;; callback keeps only the keys whose position *is* their meaning (space,
+;;; home, escape) plus the keypad, which is unambiguous everywhere.
+;;;
+;;; DEF-CHAR-CALLBACK takes no docstring: a string here would stop being
+;;; documentation and start being the body's first form, which pushes the
+;;; DECLARE out of head position.
+(glfw:def-char-callback live-char (window codepoint)
+  (declare (ignore window))
+  ;; cl-glfw3 hands this callback a CHARACTER, despite the GLFW C API
+  ;; passing a Unicode code point.  Accept either rather than depend on
+  ;; which — CODE-CHAR of a character is a type error, and it happens in
+  ;; a callback, where the backtrace points at the event pump rather than
+  ;; at this line.
+  (let ((ch (if (characterp codepoint) codepoint (code-char codepoint))))
+    (case ch
+      ((#\+ #\=) (live-faster))
+      ((#\- #\_) (live-slower))
+      (t nil))))
+
 (glfw:def-key-callback live-key (window key scancode action mods)
   (declare (ignore window scancode mods))
   (when (or (eq action :press) (eq action :repeat))
@@ -35,12 +70,10 @@ on the clock rather than a different loop.")
       (:escape (glfw:set-window-should-close))
       (:space (setf *live-paused* (not *live-paused*))
               (format t "~&~:[running~;paused~]~%" *live-paused*))
-      ((:equal :kp-add)
-       (setf *live-speed* (min 4096.0f0 (* *live-speed* 2.0f0)))
-       (format t "~&speed ~,1fx~%" *live-speed*))
-      ((:minus :kp-subtract)
-       (setf *live-speed* (max 0.03125f0 (/ *live-speed* 2.0f0)))
-       (format t "~&speed ~,1fx~%" *live-speed*))
+      ;; Only the *keypad* +/- are handled here.  The main-row ones come
+      ;; through LIVE-CHAR instead — see the note there.
+      (:kp-add (live-faster))
+      (:kp-subtract (live-slower))
       (:home (when (and *live-world* *live-view*)
                (let ((v (view-fit *live-world*
                                   :vw (view-vw *live-view*)
@@ -142,6 +175,7 @@ Returns the world, so a session can keep poking at it afterwards."
               Run under: guix shell glfw nvda@580 -- ..."))
     (format t "~&GL ~a | ~a~%" (gl:get-string :version) (gl:get-string :renderer))
     (glfw:set-key-callback 'live-key)
+    (glfw:set-char-callback 'live-char)
     (glfw:set-scroll-callback 'live-scroll)
     (glfw:set-mouse-button-callback 'live-mouse)
     (glfw:set-cursor-position-callback 'live-cursor)
