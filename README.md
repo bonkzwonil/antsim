@@ -40,9 +40,11 @@ entrance.
 *The nest disc, its arrival radius as a faint ring, and the resting cluster the
 collision rule packs around the entrance.*
 
-Early on, before any trail exists, the colony looks completely different — every
-ant searching, the choice function degenerating exactly into a random walk
-because there is no pheromone for it to read:
+Forty seconds in, the same colony looks nothing like this. No trail exists yet,
+so there is nothing for the choice function to read, and it degenerates
+*exactly* into a correlated random walk — every ant searching, the arena bare.
+Look closely and one faint thread runs from the food to the nest: the first ant
+home, laying the first pheromone. Everything above grew from that.
 
 ![Searching, before a trail exists](docs/images/01-searching.png)
 
