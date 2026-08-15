@@ -55,6 +55,7 @@
    #:*leave-probability* #:*nest-feed-rate*
    ;; world/scene — what a scenario names (§6)
    #:food #:food-x #:food-y #:food-r #:food-amount #:food-initial
+   #:food-density #:food-density-for
    #:food-quality #:food-renew #:food-empty-p #:food-body
    #:colony #:colony-id #:colony-name #:colony-field #:colony-stock
    #:colony-population #:colony-capacity #:colony-born #:colony-died

@@ -941,8 +941,20 @@ Top-down orthographic. Layers, back to front:
    such* — a living, breathing gradient that thickens into a road and then
    evaporates.
 3. **Obstacles** — filled polygons with a soft outline.
-4. **Food sources** — radius scales with remaining amount, so depletion is
+4. **Food sources** — radius scales with the amount present, so depletion is
    visible without a number; colour or saturation encodes quality.
+
+   The radius is derived from a **density**, `area = amount / density`, and
+   not from a fraction of the starting amount. That distinction is the
+   difference between a picture that answers *how much is there* and one
+   that answers *how much of it is left*: with a fraction, a source holding
+   500 000 units and one holding 2 500 are drawn identically at full, and
+   two sources in one scene cannot be compared at all. A scenario that gives
+   only a radius gets a density derived from it, so nothing that predates
+   this behaves differently.
+
+   The same radius is the **collision** circle, so a dwindling pile has a
+   shorter edge and physically feeds fewer ants at once (§3.11).
 5. **Nests** — entrance, home-range halo from the marking field.
 6. **Ants** — instanced, §5.2.
 7. **Overlay** — optional: home vectors, trail-choice probabilities, a
@@ -1448,6 +1460,31 @@ caveat, not a footnote: both papers used *Linepithema humile* and this
 model is parameterised for *L. niger*. The mechanism is believed to be
 the same and the model reproduces both results — which is itself a claim,
 and one the acceptance suite is now making on every run.
+
+**Worth checking against, not yet checked:**
+
+- **Dussutour, Fourcassié, Helbing & Deneubourg (2004)**, *Optimal traffic
+  organization in ants under crowded conditions*, Nature 428:70 — crowding
+  reshaping trail traffic in *L. niger*, on branched bridges among others.
+
+  This is the paper the binary bridge's **metastability** should be read
+  against. Watching a long run, a committed arm can lose its commitment
+  and regain it, and it appears to happen only once the population is
+  large enough for the corridors to jam. The mechanism is coherent and is
+  the same one that decides the double bridge: a congested arm takes
+  longer to get round, and round-trip time is the only thing the model
+  responds to — nothing measures a distance. Congestion lengthens an arm
+  exactly as geometry does.
+
+  That is an unscripted, density-dependent prediction falling out of the
+  collision rule and the deposition rule together, which is a good sign.
+  It is **not** a validated result: nobody has compared the switching rate
+  to a real colony's, and `*trail-decay-scale*` compresses τ by 30×, which
+  makes the field forget faster than any dish and switching correspondingly
+  more likely. The rate is not comparable even if the mechanism is.
+
+  The acceptance row is unaffected either way — it measures the *initial*
+  commitment, in a window at 6–12 minutes.
 
 **Needs verification before it becomes a constant:**
 

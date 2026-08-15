@@ -18,6 +18,19 @@
   ;; by evaporation alone, with no special case anywhere (§3.7).
   (amount 0.0f0 :type f32)
   (initial 0.0f0 :type f32)
+  ;; Units of food per square metre of pile (§5.1).
+  ;;
+  ;; This is what makes the drawn disc mean something absolute.  Without
+  ;; it the radius could only be a *fraction* of a starting size, so a
+  ;; source holding 500 000 units and one holding 2 500 looked exactly
+  ;; alike at full — the picture said "how much of it is left" when the
+  ;; question being asked of it was "how much is there".
+  ;;
+  ;; Defaulted from the authored radius and starting amount, which makes
+  ;; a scenario that does not mention density behave exactly as before:
+  ;; density = initial / (pi r^2) gives back r at full and r*sqrt(a/initial)
+  ;; as it empties.
+  (density 0.0f0 :type f32)
   ;; Quality sets crop fill rate *and* trail deposition rate, which is why
   ;; a rich source out-recruits a poor one at equal distance, and why a
   ;; source below *trail-quality-threshold* is eaten but never recruited
@@ -29,11 +42,19 @@
   (declare (type food f))
   (<= (food-amount f) 0.0f0))
 
-(defun food-current-radius (f)
-  "The source's *present* radius, shrinking with what is left of it.
+(defconstant +pi-f+ 3.1415927f0)
 
-By the square root, so the disc's **area** tracks the amount — a pile
-half eaten is half the area, not half the width.
+(defun food-current-radius (f)
+  "The source's *present* radius: the radius of a pile of that much food
+at this source's density.
+
+    area = amount / density,   r = sqrt(amount / (pi * density))
+
+So the disc's **area** is the quantity, and — because density is a
+property of the source rather than of its starting size — the radius is
+absolute.  Two sources drawn side by side can be compared: the bigger
+circle really does hold more food, which was not true when the radius was
+a fraction of whatever the source happened to start with.
 
 This is the collision radius, not just the drawn one, and that is the
 point: a smaller pile has a shorter edge, so fewer ants can reach it at
@@ -41,9 +62,19 @@ once and the queue behind it grows as it empties.  Feeding rate falling
 as a source runs down is a real constraint on foraging, and it comes out
 of the geometry for free rather than needing a rule of its own."
   (declare (type food f))
-  (if (plusp (food-initial f))
-      (* (food-r f)
-         (sqrt (clampf (/ (food-amount f) (food-initial f)) 0.0f0 1.0f0)))
+  (let ((d (food-density f)))
+    (if (plusp d)
+        (sqrt (/ (max 0.0f0 (food-amount f)) (* +pi-f+ d)))
+        0.0f0)))
+
+(defun food-density-for (r amount)
+  "The density that makes a pile of AMOUNT come out at radius R.
+
+The default when a scenario gives a radius but no density, which keeps
+every existing scenario behaving exactly as it did."
+  (declare (type f32 r amount))
+  (if (and (plusp r) (plusp amount))
+      (/ amount (* +pi-f+ r r))
       0.0f0))
 
 ;;; --------------------------------------------------------------------
@@ -171,15 +202,29 @@ which MAKE-COLONY handles by rasterizing what is already there."
       (field-rasterize-polygon! (colony-field c) p))
     p))
 
-(defun add-food (w x y r amount &key (quality 1.0f0) (renew 0.0f0))
+(defun add-food (w x y r amount &key (quality 1.0f0) (renew 0.0f0) density)
+  "Add a food source.
+
+R and DENSITY are two ways of saying the same thing and giving both is a
+contradiction, so R is treated as the radius *at the starting amount* and
+DENSITY, when given, wins.  With neither, a scenario behaves as it always
+has."
   (declare (type world w))
   (let* ((x (float x 1.0f0)) (y (float y 1.0f0)) (r (float r 1.0f0))
-         (body (bodies-alloc (world-bodies w) x y r +body-food+))
-         (f (%make-food :body body :x x :y y :r r
-                        :amount (float amount 1.0f0)
-                        :initial (float amount 1.0f0)
+         (amount (float amount 1.0f0))
+         (d (if density
+                (float density 1.0f0)
+                (food-density-for r amount)))
+         (f (%make-food :body 0 :x x :y y :r r
+                        :amount amount :initial amount
+                        :density d
                         :quality (float quality 1.0f0)
                         :renew (float renew 1.0f0))))
+    ;; allocate the body at the radius the density actually implies, so
+    ;; the very first frame is already honest rather than being corrected
+    ;; on the next tick
+    (setf (food-body f) (bodies-alloc (world-bodies w) x y
+                                      (food-current-radius f) +body-food+))
     (push f (world-foods w))
     f))
 

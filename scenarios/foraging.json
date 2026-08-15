@@ -1,0 +1,30 @@
+{
+  "name": "foraging",
+
+  "_comment": "The scenario the gallery renders, as a file. Unlike the two",
+  "_comment2": "bridge experiments this one is meant to be watched rather",
+  "_comment3": "than measured: the source is finite, so it visibly shrinks",
+  "_comment4": "as it is eaten and the colony eventually starves.",
+
+  "world": { "width": 0.60, "height": 0.60, "capacity": 8000 },
+
+  "obstacles": [
+    { "rect": { "x0": 0.12, "y0": 0.20, "x1": 0.30, "y1": 0.235 } }
+  ],
+
+  "colonies": [
+    { "id": "home",
+      "nest": { "x": 0.30, "y": 0.08, "r": 0.02 },
+      "capacity": 3000,
+      "start": 150,
+      "stock": 500.0 }
+  ],
+
+  "food": [
+    { "x": 0.34, "y": 0.43, "amount": 2500.0, "quality": 1.0,
+      "density": 884000.0 }
+  ],
+
+  "seed": 2166136261,
+  "duration_s": 3600
+}

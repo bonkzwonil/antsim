@@ -93,12 +93,22 @@ answers: a typo is a mistake in the file, and one of these is a mistake
 in my expectations of the program.  Telling them apart is most of what
 makes an error message worth reading.")
 
+(defun comment-key-p (k)
+  "Keys beginning with `_` are comments and are ignored.
+
+JSON has no comment syntax, and a scenario that cannot say *why* it uses
+a number is a scenario whose numbers get changed by someone who does not
+know.  The underscore convention costs nothing here: strictness exists to
+catch typos, and a typo does not begin with an underscore."
+  (and (plusp (length k)) (char= #\_ (char k 0))))
+
 (defun check-keys (obj allowed path)
   "Every key must be one this loader acts on.  §6's rule, and the reason
 for it is that a silently-defaulted typo costs an afternoon."
   (maphash (lambda (k v)
              (declare (ignore v))
-             (unless (member k allowed :test #'string=)
+             (unless (or (comment-key-p k)
+                         (member k allowed :test #'string=))
                (let ((deferred (assoc k *deferred-keys* :test #'string=)))
                  (if deferred
                      (serr (jpath path k)
@@ -331,13 +341,20 @@ and the starting population is placed with it."
 
 (defun load-food (w spec path)
   (let ((o (jobject spec path)))
-    (check-keys o '("x" "y" "r" "amount" "quality" "renew_per_min") path)
+    (check-keys o '("x" "y" "r" "amount" "quality" "renew_per_min" "density")
+                path)
+    ;; `r` and `density` say the same thing two ways: with `density` the
+    ;; radius is derived from the amount and is therefore *absolute*, so
+    ;; two sources can be compared by eye.  With only `r` it is the radius
+    ;; at the starting amount, which is how every scenario behaved before
+    ;; density existed.
     (add-food w (jreq o "x" path #'jnumber)
                 (jreq o "y" path #'jnumber)
                 (jopt o "r" path #'jnumber 0.03f0)
                 (jreq o "amount" path #'jnumber)
                 :quality (jopt o "quality" path #'jnumber 1.0f0)
-                :renew (jopt o "renew_per_min" path #'jnumber 0.0f0))))
+                :renew (jopt o "renew_per_min" path #'jnumber 0.0f0)
+                :density (jopt o "density" path #'jnumber nil))))
 
 (defun load-scenario (path &key seed)
   "Read a scenario file (§6).  Signals SCENARIO-ERROR, naming the key.

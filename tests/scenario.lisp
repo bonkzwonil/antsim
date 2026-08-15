@@ -139,6 +139,58 @@ given a seed, and this only changes which seed is given."
       (is (= 7 (ant:world-seed (ant:scenario-world (scn :seed 7))))
           "the override did not reach the world"))))
 
+(test food-radius-tracks-how-much-food-there-is
+  "The drawn disc has to answer 'how much is there', not 'how much of it
+is left'.
+
+Before density existed the radius was a fraction of whatever the source
+happened to start with, so a pile of 500 000 units and one of 2 500
+looked exactly alike at full — which is the one thing a picture of a food
+source should never do. With a density, area is amount/density and the
+radius is absolute: two sources side by side can be compared by eye."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 100))
+         (big (ant:add-food w 0.2f0 0.5f0 0.03f0 4000.0f0 :density 1.0f6))
+         (small (ant:add-food w 0.8f0 0.5f0 0.03f0 1000.0f0 :density 1.0f6)))
+    (is (> (ant:food-current-radius big) (ant:food-current-radius small))
+        "four times the food did not draw larger at the same density")
+    ;; four times the amount is twice the radius, because area is the
+    ;; quantity
+    (is (< (abs (- (ant:food-current-radius big)
+                   (* 2.0f0 (ant:food-current-radius small))))
+           1.0f-4)
+        "~,4f vs ~,4f — area is not tracking amount"
+        (ant:food-current-radius big) (ant:food-current-radius small))
+    ;; and eating half of it takes the radius to 1/sqrt(2)
+    (let ((r0 (ant:food-current-radius big)))
+      (setf (ant:food-amount big) 2000.0f0)
+      (is (< (abs (- (ant:food-current-radius big) (/ r0 (sqrt 2.0f0))))
+             1.0f-4)
+          "half eaten should be 1/sqrt(2) of the radius"))))
+
+(test a-source-without-a-density-behaves-exactly-as-before
+  "Density is an addition, not a change: a scenario that gives only a
+radius must produce the run it always did."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 100))
+         (f (ant:add-food w 0.5f0 0.5f0 0.03f0 2500.0f0)))
+    (is (< (abs (- (ant:food-current-radius f) 0.03f0)) 1.0f-5)
+        "a full source should be drawn at its authored radius, got ~,5f"
+        (ant:food-current-radius f))
+    (setf (ant:food-amount f) 625.0f0)     ; a quarter left
+    (is (< (abs (- (ant:food-current-radius f) 0.015f0)) 1.0f-5)
+        "a quarter left should be half the radius, got ~,5f"
+        (ant:food-current-radius f))))
+
+(test a-scenario-may-carry-comments
+  "JSON has no comment syntax, and a scenario that cannot say why it uses
+a number is one whose numbers get changed by someone who does not know.
+Underscore keys are ignored; strictness is for typos, and a typo does not
+begin with an underscore."
+  (let ((s (ant:load-scenario-string
+            "{\"_why\":\"because\",
+              \"world\":{\"width\":0.4,\"height\":0.4,\"_note\":\"small\"},
+              \"colonies\":[{\"nest\":{\"x\":0.2,\"y\":0.2}}]}")))
+    (is-true (ant:scenario-world s) "a commented scenario failed to load")))
+
 (test scenario-parameters-are-carried-not-applied
   "A scenario that sets tau and then runs under the default tau would be
 a particularly cruel bug, so the overrides are kept on the scenario and

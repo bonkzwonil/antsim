@@ -46,6 +46,31 @@ changes with the seed. Both halves matter, and the second is the harder one: a
 model that always picked arm A would pass the first and be broken. The result is
 that the colony **makes a choice**, not that it has a preference.
 
+Over a wider sweep of 16 seeds the split is **7 / 9** — no side is favoured, and
+re-centring the arena about the bridge (it is very slightly off-centre) changes
+nothing, which was worth checking rather than assuming.
+
+**This is the one to watch run.** `make live` draws a fresh seed each session,
+so successive runs land on different arms:
+
+```sh
+SCENARIO=scenarios/deneubourg-binary-bridge.json make live
+```
+
+And the commitment is **metastable, not permanent** — watch long enough and a
+run can swap arms and swap back. That is not the seed slipping. Evaporation
+never stops, so a committed trail is only held up by traffic renewing it, and a
+jam at one corridor is enough to break it: a congested arm takes *longer to get
+round*, which is precisely what makes the long arm lose on the double bridge
+below. Nothing measures distance; what matters is how fast the loop closes, and
+congestion lengthens it just as geometry does. The same rule, running backwards.
+
+Two honest caveats. Our τ is compressed 30× so evaporation is watchable, which
+makes the field forget faster than in the real dishes and switching
+correspondingly more likely. And the acceptance test measures the *initial*
+commitment (a window at 6–12 minutes), so it says nothing about long-run
+stability either way.
+
 The arms are equal to the last float, which the test asserts rather than
 assumes. An asymmetric bridge would produce a lopsided split that looks exactly
 like success.
@@ -62,7 +87,9 @@ same corridor width, so the arms differ in length and in nothing else.
 | 3 | **95.5%** | 4.5% | | 7 | **78.2%** | 21.8% |
 | 4 | **75.6%** | 24.4% | | 8 | **81.0%** | 19.0% |
 
-**The short arm wins eight times out of eight.**
+**The short arm wins eight times out of eight** — so unlike the binary bridge,
+this one *should* look the same every time you run it. Watching it pick the same
+arm over and over is the result, not a stuck seed.
 
 Here is why that is worth the trouble: *nothing in the model measures a
 distance.* No ant compares two routes, no code knows an arm exists, and the word
@@ -353,9 +380,14 @@ make gallery           # regenerate the images above
 make test-render       # renderer suite, on the GPU
 make test-render-mesa  # the same suite in software — no GPU needed
 
-SCENARIO=scenarios/deneubourg-binary-bridge.json make live
+SCENARIO=scenarios/foraging.json make live
 SEED=12345 make live   # repeat an exact run
 ```
+
+Three scenarios ship: `foraging` (a source that visibly empties, and a colony
+that starves when it does), `deneubourg-binary-bridge` (equal arms — the winner
+changes between runs), and `goss-double-bridge` (unequal arms — the short one
+wins every time, which is the result, not a stuck seed).
 
 The window draws a **fresh seed each session** and prints it, so no two runs are
 alike and any run worth keeping can be replayed with `SEED=`. That is worth
