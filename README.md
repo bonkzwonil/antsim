@@ -328,12 +328,29 @@ A few entry points:
 
 ## Where it is
 
-M0 (toolchain), the bulk of M1 (the simulation), M2 (the renderer and window)
-and M2.1 (the corrections above) are done. Four of §3.8's acceptance rows pass —
-homing without a trail, colony extinction, and both halves of the nonlinearity
-control. The rows that need bridge scenarios — symmetry breaking, shortest-path
-selection, quality-driven selection, trail death — are the next work, together
-with the calibration pass they imply.
+M0 (the toolchain) is done. M2's renderer and window are built, and M2.1 is the
+round of corrections above. **M1 is not finished**, and M2 is not signed off
+either — it is specified to include a gallery of *the M1 scenarios*, and those
+do not exist yet.
+
+Five of §3.8's ten in-scope acceptance rows pass: no selection without the
+nonlinearity, trail death, homing without a trail, colony extinction, and bodies
+never interpenetrating. Two of those five carry a caveat — the nonlinearity row
+asks for *traffic* to stay near 50/50 on a binary bridge and is currently tested
+at the level of the choice function's probabilities instead, and the
+interpenetration row is tested on a synthetic crowd rather than a dense scrum at
+one small source.
+
+The five that remain are the next work, and four of them need bridge scenarios
+the project does not have yet: **symmetry breaking** and **shortest-path
+selection** — the two M1 is defined to end on — plus **quality-driven
+selection**, **no trail below the quality threshold**, and **task
+reallocation**. They imply a calibration pass with them.
+
+Three smaller things §5.1 asks for and M2 has not built: obstacles are a flat
+fill with no soft outline, food quality is not encoded in colour or saturation,
+and the overlay has no home-vector or trail-choice-probability layer and is not
+toggleable off.
 
 M2.1 also reworked the pheromone model itself: deposition by **packet** laid
 per distance walked rather than a mark per tick, each packet an exponential
