@@ -43,16 +43,26 @@ entrance.
 *The nest disc, its arrival radius as a faint ring, and the resting cluster the
 collision rule packs around the entrance.*
 
-Five seconds in, the same colony and the same seed. The pheromone total is
-exactly zero: the first foragers are only now leaving the nest, none has reached
-the food, and nothing has been laid. With no pheromone to read, the choice
-function degenerates *exactly* into a correlated random walk — there is no
-trail-following mode to switch on, because following and exploring are the same
-rule in two different environments.
+## How it starts
 
-![Five seconds in: no trail exists yet](docs/images/01-searching.png)
+The same colony and the same seed, seconds in.
 
-Everything in the pictures above grew from this, by the ants' own rules.
+At **5 seconds** the pheromone total is *exactly* zero. No ant has reached the
+food, so nothing has been laid, and the choice function is running with nothing
+to read — which makes it, exactly, the correlated random walk. There is no
+trail-following mode to switch on: following and exploring are the same rule in
+two different environments.
+
+![Five seconds: no pheromone at all](docs/images/00-nothing.png)
+
+At **40 seconds** the total is 753 and one faint line runs from the food to the
+nest. That is the first ants home, laying the first pheromone.
+
+![Forty seconds: the first thread](docs/images/01-searching.png)
+
+Everything in the pictures above grew from that thread, by the ants' own rules.
+The colour scale is the same in all five images, so a trail that looks brighter
+really is stronger.
 
 And an hour in, the colony has grown into the trail it built — more ants because
 the trail works, a thicker trail because there are more ants:
