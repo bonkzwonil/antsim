@@ -171,9 +171,17 @@ vec3 kind_color(float k) {
     int base = int(floor(k + 0.01));
     float frac = k - float(base);
     if (base == 1) return vec3(0.32, 0.30, 0.30);          // corpse: grey
-    if (base == 2) return vec3(0.42, 0.74, 0.34);          // food: green
-    if (base == 3) return vec3(0.62, 0.42, 0.24);          // nest: brown
+    // A source is drawn as a *container*: this dark ring is its extent,
+    // which never changes because it is the blocking body ants queue
+    // against, and the bright disc inside it (kind 6) is what is left.
+    // Colouring the extent itself green made an exhausted source look
+    // identical to a full one — the colony starved on screen next to what
+    // still read as a meal.
+    if (base == 2) return vec3(0.16, 0.26, 0.16);          // food: empty
+    if (base == 3) return vec3(0.36, 0.25, 0.15);          // nest: brown
     if (base == 4) return vec3(0.62, 0.46, 0.30);          // arrival halo
+    if (base == 5) return vec3(0.95, 0.78, 0.36);          // stock in nest
+    if (base == 6) return vec3(0.42, 0.84, 0.34);          // food remaining
     if (frac > 0.25) return vec3(1.00, 0.72, 0.30);        // returning laden
     if (frac > 0.15) return vec3(0.95, 0.90, 0.70);        // at food
     return vec3(0.86, 0.88, 0.92);                         // outbound / in nest
@@ -190,6 +198,15 @@ void main() {
     // the world that ants plainly reacted to and nothing on screen
     // explained.  Drawing it is the honest fix: the picture should show
     // where the model's edges are.
+    // Stock gauges: a filled disc whose *area* is the quantity left, so
+    // a source visibly empties instead of staying a full green circle
+    // until the instant it is gone (§5.1).
+    if (v_kind > 4.5) {
+        float aa2 = clamp(1.0 / max(v_radius_px, 1.0), 0.02, 0.9);
+        frag = vec4(c, smoothstep(1.0, 1.0 - aa2, d));
+        return;
+    }
+
     if (v_kind > 3.5) {
         float ring = smoothstep(0.86, 0.99, d) * (1.0 - smoothstep(0.99, 1.0, d));
         if (ring < 0.02) discard;

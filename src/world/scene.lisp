@@ -43,6 +43,10 @@
   ;; unaddable later without touching every line that reads a pheromone.
   (field nil :type (or null field))
   (stock 0.0f0 :type f32)               ; nest food store
+  ;; What the renderer's stock gauge treats as "full".  Display only:
+  ;; stock has no natural ceiling, so the starting value is the only
+  ;; honest reference point there is.
+  (stock-ref 1.0f0 :type f32)
   (capacity 2000 :type fixnum)          ; upper bound on live workers
   (population 0 :type fixnum)
   (born 0 :type fixnum)
@@ -133,7 +137,8 @@ which MAKE-COLONY handles by rasterizing what is already there."
                                                    +body-nest+)
                           :field f
                           :capacity capacity
-                          :stock (float stock 1.0f0))))
+                          :stock (float stock 1.0f0)
+                          :stock-ref (max 1.0f0 (float stock 1.0f0)))))
     ;; obstacles already in the world have to be in this field's mask
     (dolist (p (world-obstacles w))
       (field-rasterize-polygon! f p))

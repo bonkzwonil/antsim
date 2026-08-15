@@ -156,8 +156,9 @@ returners read warm, which is what makes a working trail legible as
                   (+ (float k 1.0f0)
                      (if (= k +body-ant+) (aref state-of i) 0.0f0)))
             (incf count)))))
-    ;; One extra instance per colony for the arrival-radius ring.  Drawing
-    ;; only — it is not in the body table, because it blocks nothing.
+    ;; Drawing-only instances follow: the arrival ring and the two stock
+    ;; gauges.  None of them is in the body table, because none of them
+    ;; blocks anything.
     (dolist (c (world-colonies w))
       (when (< count (renderer-body-capacity r))
         (let ((o (* count 4)))
@@ -165,6 +166,36 @@ returners read warm, which is what makes a working trail legible as
                 (cffi:mem-aref ptr :float (+ o 1)) (colony-nest-y c)
                 (cffi:mem-aref ptr :float (+ o 2)) *nest-arrival-radius*
                 (cffi:mem-aref ptr :float (+ o 3)) 4.0f0)
+          (incf count)))
+      ;; How much food is *in* the nest, as a disc inside the entrance.
+      ;; Area proportional to the amount — hence the square root — because
+      ;; that is what the eye actually compares between two circles.
+      (when (< count (renderer-body-capacity r))
+        (let ((o (* count 4))
+              (frac (clampf (/ (colony-stock c) (colony-stock-ref c))
+                            0.0f0 1.0f0)))
+          (setf (cffi:mem-aref ptr :float (+ o 0)) (colony-nest-x c)
+                (cffi:mem-aref ptr :float (+ o 1)) (colony-nest-y c)
+                (cffi:mem-aref ptr :float (+ o 2))
+                (* 0.72f0 (colony-nest-r c) (sqrt frac))
+                (cffi:mem-aref ptr :float (+ o 3)) 5.0f0)
+          (incf count))))
+    ;; How much is left in each source, drawn inside its disc.  The
+    ;; collision radius deliberately does *not* shrink: a source is a
+    ;; blocking body an ant has to reach the edge of (§3.7), and changing
+    ;; that as it depletes would quietly change the crowding behaviour
+    ;; while pretending to be a display decision.
+    (dolist (f (world-foods w))
+      (when (< count (renderer-body-capacity r))
+        (let ((o (* count 4))
+              (frac (if (plusp (food-initial f))
+                        (clampf (/ (food-amount f) (food-initial f))
+                                0.0f0 1.0f0)
+                        0.0f0)))
+          (setf (cffi:mem-aref ptr :float (+ o 0)) (food-x f)
+                (cffi:mem-aref ptr :float (+ o 1)) (food-y f)
+                (cffi:mem-aref ptr :float (+ o 2)) (* (food-r f) (sqrt frac))
+                (cffi:mem-aref ptr :float (+ o 3)) 6.0f0)
           (incf count))))
     count))
 
