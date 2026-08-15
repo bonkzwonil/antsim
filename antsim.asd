@@ -45,7 +45,10 @@
   :components ((:file "png")
                (:file "egl")
                (:file "offscreen")
-               (:file "smoke"))
+               (:file "smoke")
+               (:file "view")
+               (:file "shaders")
+               (:file "renderer"))
   :in-order-to ((test-op (test-op "antsim/render-test"))))
 
 (defsystem "antsim/test"
@@ -66,7 +69,8 @@
   :depends-on ("antsim/render" "fiveam")
   :serial t
   :pathname "tests"
-  :components ((:file "render"))
+  :components ((:file "render")
+               (:file "view"))
   :perform (test-op (o c)
              (symbol-call :fiveam :run!
                           (find-symbol (string :render) :antsim/render-test))))
