@@ -1,0 +1,6 @@
+*.fasl
+*.abcl
+*.lx64fsl
+*~
+.#*
+/docs/*.tmp
