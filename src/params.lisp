@@ -71,7 +71,7 @@ colony burned its stock on fruitless trips, and the run died out.  That
 looked like a broken foraging model and was in fact a walk with the
 wrong correlation length.")
 
-(defparameter *trail-turn-gain* 3.0f0
+(defparameter *trail-turn-gain* 14.0f0
   "How much more sharply an ant turns when it is actually on a trail.
 [cal]
 
@@ -92,7 +92,7 @@ Deliberately *not* implemented by lowering k or raising n.  Both would
 have moved trail-following in the same direction while changing the
 choice function itself, which §3.8 is a test of.")
 
-(defparameter *trail-noise-suppression* 0.6f0
+(defparameter *trail-noise-suppression* 0.85f0
   "How much of the heading noise a strong trail removes.  [cal] Same
 argument as *trail-turn-gain*, from the other side: a committed
 trail-follower is not just turning harder, it is wandering less.")
@@ -283,7 +283,7 @@ relative to the trail-following choice.  [cal] Applied as a weight that
 grows as energy falls, so a tired ant curves homeward rather than
 flipping a switch (§3.5).")
 
-(defparameter *nest-arrival-radius* 0.06f0
+(defparameter *nest-arrival-radius* 0.035f0
   "How close an ant must get to the nest centre to unload, metres.
 [cal] Must be comfortably larger than the nest disc *and* than the queue
 that forms around it.

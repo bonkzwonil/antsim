@@ -187,10 +187,21 @@ switch into and no switching logic to get wrong (§3.5)."
     ;; *trail-turn-gain*).
     (let ((best (max cl (max cc cr))))
       (declare (type f32 best))
-      (values (cond ((< u wl) -1.0f0)
-                    ((< u (+ wl wc)) 0.0f0)
-                    (t 1.0f0))
-              (/ best (+ k best))))))
+      (values
+       ;; 1. the stochastic choice, which is the model proper
+       (cond ((< u wl) -1.0f0)
+             ((< u (+ wl wc)) 0.0f0)
+             (t 1.0f0))
+       ;; 2. how strongly a trail is present at all, 0..1
+       (/ best (+ k best))
+       ;; 3. the signed left/right imbalance, -1..1 — tropotaxis.  An ant
+       ;; centred on a trail gets ~0 from this and holds its line; one
+       ;; drifting off the edge gets a large correction *proportional to
+       ;; how far off it is*.  That is what a fixed-size turn cannot do,
+       ;; and why turning harder alone made things worse past a point:
+       ;; bang-bang steering oscillates across the very trail it is
+       ;; trying to hold.
+       (/ (- wr wl) total)))))
 
 ;;; --------------------------------------------------------------------
 ;;; The tick
@@ -317,16 +328,24 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; The choice function runs in *both* directions.  A
                     ;; returning ant is not blind to the trail — it is
                     ;; pulled home as well, and the two combine.
-                    (dir 0.0f0) (smell 0.0f0) (turn 0.0f0) (noise 0.0f0))
-               (declare (type f32 heading hvx hvy dir smell turn noise))
-               (multiple-value-setq (dir smell)
+                    (dir 0.0f0) (smell 0.0f0) (bias 0.0f0)
+                    (turn 0.0f0) (noise 0.0f0))
+               (declare (type f32 heading hvx hvy dir smell bias turn noise))
+               (multiple-value-setq (dir smell bias)
                  (choose-turn w (colony-id c) id tick x y heading))
-               ;; Which way from the choice function; how hard from how
-               ;; much pheromone is actually there.  Off a trail both
-               ;; terms reduce to the plain correlated random walk.
+               ;; Two steering terms, blended by how much pheromone is
+               ;; actually there.
+               ;;
+               ;; With none, this is the stochastic choice at a fixed turn
+               ;; rate — exactly the correlated random walk of §3.2, and
+               ;; search is untouched.  With a strong trail it becomes
+               ;; proportional: turn hard when far off the centre line,
+               ;; barely at all when on it.  Bang-bang steering could only
+               ;; be made stronger by turning harder, which oscillated
+               ;; across the trail and got *worse* past a gain of about 3.
                (setf turn (* *turn-rate*
-                             (+ 1.0f0 (* *trail-turn-gain* smell))
-                             dir)
+                             (+ (* (- 1.0f0 smell) dir)
+                                (* *trail-turn-gain* smell bias)))
                      noise (* *turn-sigma*
                               (- 1.0f0 (* *trail-noise-suppression* smell))
                               (rnd-normal id tick +stream-turn+ seed)))

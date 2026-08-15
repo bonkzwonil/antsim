@@ -17,7 +17,7 @@ one obstacle across part of the route."
   (let* ((w (make-world :width 0.6f0 :height 0.6f0 :capacity 8000 :seed seed))
          (c (add-colony w :name "home" :nest-x 0.30f0 :nest-y 0.08f0
                           :nest-r 0.02f0 :capacity 3000 :stock 500.0f0)))
-    (add-food w 0.34f0 0.43f0 0.03f0 25000.0f0 :quality 1.0f0)
+    (add-food w 0.34f0 0.43f0 0.03f0 2500.0f0 :quality 1.0f0)
     (add-obstacle w '(0.12 0.20 0.30 0.20 0.30 0.235 0.12 0.235))
     (world-seed-population! w c 150)
     (values w c)))
@@ -72,9 +72,11 @@ one obstacle across part of the route."
     ;; Detail: mid-route traffic, outbound pale and laden returners warm.
     (gallery-shot w "05-traffic" :width 360 :height 360
                                  :cx 0.33f0 :cy 0.30f0 :span 0.18f0)
-    ;; Thriving: an hour in, with the colony grown into the trail it built.
+    ;; Aftermath: with the source finite, an hour is long enough to exhaust
+    ;; it and starve the colony.  Two §3.8 rows in one frame — trail death
+    ;; and colony extinction — and the honest end of this scenario.
     (world-run! w (* 1200 40))
-    (gallery-shot w "06-thriving")
+    (gallery-shot w "06-aftermath")
     (format t "~&  60 min: pop ~d, trail ~,0f, stock ~,0f~%"
             (colony-population c) (field-total (colony-field c))
             (colony-stock c))

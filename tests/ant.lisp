@@ -234,6 +234,44 @@ aggregate — population, stock, trail total — showed anything wrong."
         (is (> hx 0.0f0) "home vector points away from the nest in x")
         (is (> hy 0.0f0) "home vector points away from the nest in y")))))
 
+(test food-depletes-and-the-trail-dies
+  "§3.8 acceptance row, both halves of it.
+
+*Food depletion*: a source carries an amount, ants take from it, and at
+zero it is gone. There is no special case anywhere — the source simply
+stops filling crops.
+
+*Trail death*: and then the trail to it decays to background on the
+evaporation timescale, with nothing telling it to. That is the whole
+point of evaporation being in the model at all (§3.3): it is the only
+mechanism by which a colony can forget, and without it a trail to an
+exhausted source would persist for ever and the colony would never
+re-explore."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 600))
+         (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.08f0
+                              :capacity 400 :stock 400.0f0))
+         ;; small and close, so it is emptied inside a short run
+         (f (ant:add-food w 0.20f0 0.26f0 0.03f0 260.0f0 :quality 1.0f0)))
+    (ant:world-seed-population! w c 80)
+    ;; forage until the source is gone
+    (let ((peak 0.0d0))
+      (dotimes (i 40)
+        (ant:world-run! w 1200)
+        (setf peak (max peak (ant:field-total (ant:colony-field c))))
+        (when (ant:food-empty-p f) (return)))
+      (is-true (ant:food-empty-p f)
+               "the source still holds ~,1f after 40 minutes"
+               (ant:food-amount f))
+      (is (> peak 1000.0d0)
+          "no real trail was ever built (peak ~,0f), so trail death is ~
+           not being tested" peak)
+      ;; nothing removes the trail; only evaporation can
+      (ant:world-run! w (* 1200 60))
+      (let ((now (ant:field-total (ant:colony-field c))))
+        (is (< now (* 0.4d0 peak))
+            "trail is ~,0f, down from a peak of ~,0f — less decay than one ~
+             hour of evaporation should give" now peak)))))
+
 ;;; ------------------------------------------------------ determinism
 
 (test a-run-is-reproducible
