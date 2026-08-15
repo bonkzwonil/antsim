@@ -18,6 +18,63 @@ None of that is scripted. **There is no way to author a trail** — the scenario
 format cannot express one, and no function exists to paint one. Every trail in
 every picture below was deposited by an ant that walked there.
 
+## It reproduces the published experiments
+
+The point of building on real behavioural science is that the results are
+*checkable*. Two of the founding experiments in the field are laboratory
+apparatus with published outcomes, and both are in the test suite — as
+experiments, run on the model, with the papers' own criteria.
+
+### Deneubourg's binary bridge (1990) — symmetry breaking
+
+Two arms of **equal** length between nest and food. There is no better route,
+so any departure from an even split has to be the colony's own doing.
+
+| seed | arm A | arm B | committed to |
+|---|---|---|---|
+| 1 | 6.1% | **93.9%** | B |
+| 2 | 5.2% | **94.8%** | B |
+| 3 | **93.1%** | 6.9% | **A** |
+| 4 | 4.2% | **95.8%** | B |
+| 5 | 4.9% | **95.1%** | B |
+| 6 | 3.7% | **96.3%** | B |
+| 7 | 6.7% | **93.3%** | B |
+| 8 | **95.2%** | 4.8% | **A** |
+
+Every replicate commits — never below **93%** — and *which* arm it commits to
+changes with the seed. Both halves matter, and the second is the harder one: a
+model that always picked arm A would pass the first and be broken. The result is
+that the colony **makes a choice**, not that it has a preference.
+
+The arms are equal to the last float, which the test asserts rather than
+assumes. An asymmetric bridge would produce a lopsided split that looks exactly
+like success.
+
+### Goss's double bridge (1989) — shortest path
+
+Now one arm is longer: 0.415 m against 0.717 m, a ratio of **1.73**. Same fork,
+same corridor width, so the arms differ in length and in nothing else.
+
+| seed | short arm | long arm | | seed | short arm | long arm |
+|---|---|---|---|---|---|---|
+| 1 | **74.8%** | 25.2% | | 5 | **76.2%** | 23.8% |
+| 2 | **80.6%** | 19.4% | | 6 | **73.4%** | 26.6% |
+| 3 | **95.5%** | 4.5% | | 7 | **78.2%** | 21.8% |
+| 4 | **75.6%** | 24.4% | | 8 | **81.0%** | 19.0% |
+
+**The short arm wins eight times out of eight.**
+
+Here is why that is worth the trouble: *nothing in the model measures a
+distance.* No ant compares two routes, no code knows an arm exists, and the word
+"shortest" appears nowhere in the simulation. Ants on the short arm simply
+complete the round trip sooner, so they lay pheromone on it sooner and more
+often per unit time — and the nonlinear choice function amplifies that head
+start into a commitment. The geometry does the optimisation.
+
+Run them yourself with `make acceptance`. The apparatus is
+[`src/world/bridge.lisp`](src/world/bridge.lisp); the criteria are the papers',
+recorded in [§3.8](docs/concept.md#38-what-must-emerge--the-acceptance-list).
+
 ![An established trail between nest and food](docs/images/03-trail.png)
 
 *Twenty simulated minutes. The nest is the disc at the bottom, the food source
@@ -328,24 +385,28 @@ A few entry points:
 
 ## Where it is
 
-M0 (the toolchain) is done. M2's renderer and window are built, and M2.1 is the
-round of corrections above. **M1 is not finished**, and M2 is not signed off
-either — it is specified to include a gallery of *the M1 scenarios*, and those
-do not exist yet.
+M0 (the toolchain) is done, M2's renderer and window are built, and M2.1 is the
+round of corrections above.
 
-Five of §3.8's ten in-scope acceptance rows pass: no selection without the
-nonlinearity, trail death, homing without a trail, colony extinction, and bodies
-never interpenetrating. Two of those five carry a caveat — the nonlinearity row
-asks for *traffic* to stay near 50/50 on a binary bridge and is currently tested
-at the level of the choice function's probabilities instead, and the
-interpenetration row is tested on a synthetic crowd rather than a dense scrum at
-one small source.
+**M1's two defining rows now pass** — symmetry breaking and shortest-path
+selection, on the bridge apparatus at the top of this page. M1 is defined to end
+when those do, so what remains of it is the rest of §3.8 rather than its
+centrepiece.
 
-The five that remain are the next work, and four of them need bridge scenarios
-the project does not have yet: **symmetry breaking** and **shortest-path
-selection** — the two M1 is defined to end on — plus **quality-driven
-selection**, **no trail below the quality threshold**, and **task
-reallocation**. They imply a calibration pass with them.
+Seven of §3.8's ten in-scope rows pass: symmetry breaking, shortest-path
+selection, no selection without the nonlinearity, trail death, homing without a
+trail, colony extinction, and bodies never interpenetrating. Two carry a caveat
+worth stating — the nonlinearity row is tested at the level of the choice
+function's probabilities rather than as bridge traffic, and interpenetration on
+a synthetic crowd rather than a dense scrum at a source.
+
+Three rows remain: **quality-driven selection**, **no trail below the quality
+threshold**, and **task reallocation**. The first two need a two-source
+apparatus, which is a much smaller job than the bridge was now that the
+apparatus pattern exists.
+
+M2 is still not signed off: it is specified to include a gallery of the M1
+scenarios, and now that those scenarios exist the gallery should render them.
 
 Three smaller things §5.1 asks for and M2 has not built: obstacles are a flat
 fill with no soft outline, food quality is not encoded in colour or saturation,

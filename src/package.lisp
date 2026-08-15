@@ -76,6 +76,13 @@
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+
    #:+ant-dead+
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
+   ;; world/bridge — the §3.8 apparatus
+   #:bridge #:make-bridge-world #:binary-bridge #:double-bridge
+   #:bridge-world #:bridge-colony #:bridge-wall-y #:bridge-gaps
+   #:bridge-counts #:bridge-lengths
+   #:bridge-tally! #:bridge-run! #:bridge-reset-counts!
+   #:bridge-share #:bridge-winner
+   ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
    #:world-step! #:world-run! #:colony-step! #:world-seed-population!
    ;; render/png (antsim/render)

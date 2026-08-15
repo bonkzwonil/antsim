@@ -31,8 +31,8 @@ SMOKE_PNG ?= out/m0-smoke.png
 # append its default configuration, so Quicklisp's own dists still resolve.
 export CL_SOURCE_REGISTRY := $(CURDIR):
 
-.PHONY: all test test-render test-render-mesa test-render-ci test-render-bare \
-        smoke smoke-mesa live gallery repl page clean
+.PHONY: all test acceptance test-render test-render-mesa test-render-ci \
+        test-render-bare smoke smoke-mesa live gallery repl page clean
 
 all: test
 
@@ -41,6 +41,16 @@ test:
 	$(SBCL) --non-interactive \
 	  --eval '(ql:quickload :antsim/test :silent t)' \
 	  --eval '(uiop:quit (if (fiveam:run! (quote antsim/test::antsim)) 0 1))'
+
+## acceptance — the §3.8 rows that are published experiments rather than
+## properties of a function: Deneubourg's binary bridge and Goss's double
+## bridge.  Separate from `test` because each row is several simulated
+## colony-minutes per seed, and the claims are about a distribution over
+## seeds rather than a single run.  No GPU.
+acceptance:
+	$(SBCL) --non-interactive \
+	  --eval '(ql:quickload :antsim/test :silent t)' \
+	  --eval '(uiop:quit (if (fiveam:run! (quote antsim/test::acceptance)) 0 1))'
 
 ## test-render — renderer suite under the GPU shell.  This is the one
 ## that actually verifies rendering.

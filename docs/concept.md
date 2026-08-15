@@ -496,6 +496,24 @@ These are not features. They are consequences, and each one is a test:
 
 That table is the project's definition of "working".
 
+**Status.** Seven of the ten in-scope rows pass. The two that are
+published *experiments* rather than properties — symmetry breaking and
+shortest-path selection — are implemented as such, on the apparatus in
+`src/world/bridge.lisp`, and run by `make acceptance`; measured across
+eight seeds, the binary bridge commits at ≥93% with the winning arm
+varying by seed, and the double bridge picks the short arm 8 times out of
+8 at a length ratio of 1.73. Trail death, homing without a trail, colony
+extinction and non-interpenetration are in the fast suite.
+
+Two of the seven carry a caveat, recorded here rather than quietly
+enjoyed: the `n = 1` control is asserted on the choice function's
+probabilities rather than on bridge traffic, and non-interpenetration on
+a synthetic crowd rather than a scrum at a small source. Both should
+graduate to their apparatus.
+
+Still open: quality-driven selection, no trail below the quality
+threshold, and task reallocation.
+
 ### 3.9 The M1 cut — what actually gets built first
 
 Sections 3.1–3.8 describe the model. **They do not describe M1.** Left
@@ -1332,14 +1350,30 @@ committed to code** — this project inherits waldameisen's rule that nothing
 is silently tuned, and that rule is worth nothing if the "measured" values
 were guessed.
 
-**Load-bearing, confident:**
+**Implemented as runnable experiments.** These two are not background
+reading: they are in the suite, as apparatus, with the papers' own
+criteria. `make acceptance` runs them; the apparatus is
+`src/world/bridge.lisp` and the assertions are `tests/acceptance.lisp`.
+Anything cited here that the code depends on should be reachable by
+someone who wants to check the claim, so each carries a general-audience
+link as well as the citation.
 
 - **Deneubourg, Aron, Goss & Pasteels (1990)**, *The self-organizing
   exploratory pattern of the Argentine ant*, J. Insect Behavior 3:159 — the
   binary bridge, and the nonlinear choice function `(k+C)^n`.
+  Background: [Stigmergy](https://en.wikipedia.org/wiki/Stigmergy),
+  [Self-organization](https://en.wikipedia.org/wiki/Self-organization).
+  → **passes**, ≥93% commitment across 8 seeds, winner varying with seed.
 - **Goss, Aron, Deneubourg & Pasteels (1989)**, *Self-organized shortcuts in
   the Argentine ant*, Naturwissenschaften 76:579 — the double bridge and
   shortest-path selection.
+  Background: [Ant colony optimization
+  algorithms](https://en.wikipedia.org/wiki/Ant_colony_optimization_algorithms),
+  which is the double bridge's direct descendant in computer science, and
+  [Swarm intelligence](https://en.wikipedia.org/wiki/Swarm_intelligence).
+  → **passes**, short arm winning 8 of 8 at a length ratio of 1.73.
+
+**Load-bearing, confident:**
 - **Beckers, Deneubourg & Goss (1992, 1993)** on *Lasius niger* trail laying
   — deposition modulated by food quality, and the quality threshold below
   which no trail is laid.
@@ -1351,10 +1385,27 @@ were guessed.
   recruitment taxonomy; the general reference.
 - **Müller & Wehner** on *Cataglyphis* path integration; and the systematic
   search spiral of a homing ant that arrives at the wrong place.
+  Background: [Path integration](https://en.wikipedia.org/wiki/Path_integration),
+  [*Cataglyphis*](https://en.wikipedia.org/wiki/Cataglyphis).
 - **Charbonneau & Dornhaus** — inactivity as a genuine specialization, not
   sampling noise.
 
+The species is worth a link too, since every parameter in §3.1 is
+supposed to be its: [*Lasius
+niger*](https://en.wikipedia.org/wiki/Lasius_niger), and the
+[Argentine ant](https://en.wikipedia.org/wiki/Argentine_ant) the two
+bridge experiments were actually run on. That difference is a real
+caveat, not a footnote: both papers used *Linepithema humile* and this
+model is parameterised for *L. niger*. The mechanism is believed to be
+the same and the model reproduces both results — which is itself a claim,
+and one the acceptance suite is now making on every run.
+
 **Needs verification before it becomes a constant:**
+
+- **The citations above are from memory and carry no DOIs.** Volume and
+  page numbers especially: they are worth checking against the papers
+  before anyone cites this project's reading of them. The Wikipedia links
+  are orientation for a reader, not sources.
 
 - `n ≈ 2`, `k ≈ 20` — the values I recall from Deneubourg 1990, in units of
   *bridge passages*. The exponent is the robust part; `k` needs both the

@@ -29,7 +29,11 @@
    (:file "world/grid")
    (:file "world/bodies")
    (:file "world/scene")
-   (:file "ant/step"))
+   (:file "ant/step")
+   ;; The §3.8 bridge apparatus.  Last, because it builds worlds and runs
+   ;; ticks and therefore needs everything above it — and because nothing
+   ;; above it may depend on an experiment.
+   (:file "world/bridge"))
   :in-order-to ((test-op (test-op "antsim/test"))))
 
 (defsystem "antsim/render"
@@ -70,7 +74,12 @@
   :components ((:file "suite")
                (:file "world")
                (:file "bodies")
-               (:file "ant"))
+               (:file "ant")
+               ;; Its own FiveAM suite, not part of `antsim`: these are
+               ;; colony runs over several seeds and they are slow, so
+               ;; `make test` stays fast and `make acceptance` is what
+               ;; says the science works.
+               (:file "acceptance"))
   :perform (test-op (o c)
              (symbol-call :fiveam :run!
                           (find-symbol (string :antsim) :antsim/test))))
