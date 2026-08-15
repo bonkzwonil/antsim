@@ -439,7 +439,34 @@ Returns the world, so a session can keep poking at it afterwards."
         (setf *live-world* nil *live-renderer* nil *live-hud* nil))))
   w)
 
-(defun live-scenario (path &key (width 1100) (height 800))
+;;; Determinism is a property of the *model*, not of the window: the same
+;;; seed must give the same run, and §4.2 has a test that says so.  But a
+;;; playground where every session is the identical run is a worse
+;;; playground, and the two are not in tension — a seed is an argument.
+;;;
+;;; So both entry points take one, and the window prints it.  A run worth
+;;; keeping can then be replayed exactly, which is the whole point of
+;;; having the seed be an argument rather than a clock reading.
+
+(defun fresh-seed ()
+  "A seed nobody chose, for a session nobody intends to reproduce.
+
+Taken from the clock rather than from *RANDOM-STATE*, which the model
+bans outright (§4.2) — but note the ban is on the *simulation* having a
+hidden source of randomness, not on a human picking a number.  This runs
+once, before the world exists, and its output is then an ordinary seed
+like any other.  Nothing downstream can tell where it came from, which is
+the property that matters."
+  (logand #xFFFFFFFF
+          (hash32 (logand #xFFFFFFFF
+                          (logxor (get-universal-time)
+                                  (get-internal-real-time))))))
+
+(defun live-seed (seed)
+  "Resolve a requested seed: NIL means a fresh one."
+  (if seed (logand #xFFFFFFFF seed) (fresh-seed)))
+
+(defun live-scenario (path &key (width 1100) (height 800) seed)
   "Open the window on a scenario file (§6).
 
 The playground half of the scenario format.  A format whose only consumer
@@ -448,21 +475,31 @@ watch a file run is how a scenario gets debugged, and it is why the
 bridge apparatus is worth having as a file at all rather than only as a
 Lisp constructor.
 
+SEED overrides the file's own; with none, a fresh one is drawn, so one
+scenario can be watched as many different runs without editing it.  That
+matters most for the bridges, where the whole result is that the outcome
+*varies with the seed* — watching the same arm win every time would teach
+exactly the wrong lesson.
+
 The scenario's parameter overrides are bound around the whole run, not
 just around loading — a file that sets tau and then runs under the
 default tau would be a particularly quiet lie."
-  (let ((s (load-scenario path)))
-    (format t "~&~a: ~,2f x ~,2f m, ~d colon~:@p, ~d source~:p, seed ~d~%"
-            (scenario-name s)
-            (world-width (scenario-world s)) (world-height (scenario-world s))
+  ;; The seed has to be given to LOAD-SCENARIO rather than assigned
+  ;; afterwards: it is fixed when the world is built, and by the time a
+  ;; scenario is loaded WORLD-SEED-POPULATION! has already placed the
+  ;; starting ants with it.
+  (let* ((s (load-scenario path :seed (live-seed seed)))
+         (w (scenario-world s)))
+    (format t "~&~a: ~,2f x ~,2f m, ~d colon~:@p, ~d source~:p~%~
+                 seed ~d   (repeat this run with SEED=~d)~%"
+            (scenario-name s) (world-width w) (world-height w)
             (length (scenario-colonies s)) (length (scenario-foods s))
-            (scenario-seed s))
+            (world-seed w) (world-seed w))
     (with-scenario-params (s)
-      (run-live (scenario-world s) :width width :height height
-                                   :title (format nil "antsim — ~a"
-                                                  (scenario-name s))))))
+      (run-live w :width width :height height
+                  :title (format nil "antsim — ~a" (scenario-name s))))))
 
-(defun live-demo (&key (width 1100) (height 800))
+(defun live-demo (&key (width 1100) (height 800) seed)
   "The scenario the M2 gallery renders, but watchable.  A single colony,
 one food source, one obstacle — enough to see a trail form, thicken and
 carry traffic."
@@ -471,10 +508,12 @@ carry traffic."
   ;; obstacle is a real detour rather than a bump.  Deliberately further
   ;; than the first version: at 18 cm the outbound and returning traffic
   ;; overlapped into one blob and there was nothing to watch.
-  (let* ((w (make-world :width 0.6f0 :height 0.6f0 :capacity 8000))
+  (let* ((s (live-seed seed))
+         (w (make-world :width 0.6f0 :height 0.6f0 :capacity 8000 :seed s))
          (c (add-colony w :name "home" :nest-x 0.30f0 :nest-y 0.08f0
                           :nest-r 0.02f0 :capacity 3000 :stock 500.0f0)))
     (add-food w 0.34f0 0.43f0 0.03f0 2500.0f0 :quality 1.0f0)
     (add-obstacle w '(0.12 0.20 0.30 0.20 0.30 0.235 0.12 0.235))
     (world-seed-population! w c 150)
+    (format t "~&seed ~d   (repeat this run with SEED=~d)~%" s s)
     (run-live w :width width :height height)))

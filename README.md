@@ -354,7 +354,15 @@ make test-render       # renderer suite, on the GPU
 make test-render-mesa  # the same suite in software — no GPU needed
 
 SCENARIO=scenarios/deneubourg-binary-bridge.json make live
+SEED=12345 make live   # repeat an exact run
 ```
+
+The window draws a **fresh seed each session** and prints it, so no two runs are
+alike and any run worth keeping can be replayed with `SEED=`. That is worth
+doing on the binary bridge in particular: the result is that the winning arm
+*varies*, and watching the same arm win every time would teach the opposite.
+The headless paths — tests, acceptance, gallery — are untouched and stay
+deterministic. A playground and a result are different things.
 
 Scenarios are JSON ([§6](docs/concept.md#6-the-scenario-file)) and validation is
 strict: an unknown key is an error and the message names the path, because a

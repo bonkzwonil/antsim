@@ -91,10 +91,17 @@ smoke:
 ##   wheel zoom (cursor-anchored) · right-drag pan · left-click inspect
 ##   space pause · +/- time compression · home frame all · q or escape quit
 ##   SCENARIO=scenarios/goss-double-bridge.json make live   opens a file
+##   SEED=12345 make live                                   repeats a run
+##
+## Without SEED the window draws a fresh one and prints it, so every
+## session differs and any session worth keeping can be replayed.  The
+## headless paths — tests, acceptance, gallery — are unaffected and stay
+## deterministic; a playground and a result are different things.
+LIVE_ARGS := $(if $(SEED),:seed $(SEED),)
 live:
 	$(WIN) sh -c 'LD_LIBRARY_PATH=$$GUIX_ENVIRONMENT/lib exec $(SBCL) \
 	  --eval "(ql:quickload :antsim/live :silent t)" \
-	  --eval "$(if $(SCENARIO),(ant:live-scenario \"$(SCENARIO)\"),(ant:live-demo))" \
+	  --eval "$(if $(SCENARIO),(ant:live-scenario \"$(SCENARIO)\" $(LIVE_ARGS)),(ant:live-demo $(LIVE_ARGS)))" \
 	  --quit'
 
 ## gallery — regenerate the README's images from a known scenario.  Every

@@ -256,8 +256,12 @@ to mean one thing in a scenario file and another in an acceptance run."
                   (put "packet_falloff" '*trail-packet-falloff*))))))))
     (nreverse out)))
 
-(defun parse-scenario (root &key source)
-  "Build a SCENARIO from a parsed JSON object."
+(defun parse-scenario (root &key source seed)
+  "Build a SCENARIO from a parsed JSON object.
+
+SEED, if given, overrides the file's.  It has to be applied here rather
+than set afterwards, because the seed is fixed when the world is built
+and the starting population is placed with it."
   (handler-bind ((scenario-error
                    (lambda (c)
                      (when (and source (null (scenario-error-source c)))
@@ -267,7 +271,7 @@ to mean one thing in a scenario file and another in an acceptance run."
                       "colonies" "food" "obstacles")
                   "")
       (let* ((name (jopt r "name" "" #'jstring "scenario"))
-             (seed (jopt r "seed" "" #'jinteger +default-seed+))
+             (seed (or seed (jopt r "seed" "" #'jinteger +default-seed+)))
              (duration (jopt r "duration_s" "" #'jnumber 0.0f0))
              (wp "world")
              (wobj (jobject (jreq r "world" "" (lambda (v p) v)) wp))
@@ -335,8 +339,11 @@ to mean one thing in a scenario file and another in an acceptance run."
                 :quality (jopt o "quality" path #'jnumber 1.0f0)
                 :renew (jopt o "renew_per_min" path #'jnumber 0.0f0))))
 
-(defun load-scenario (path)
-  "Read a scenario file (§6).  Signals SCENARIO-ERROR, naming the key."
+(defun load-scenario (path &key seed)
+  "Read a scenario file (§6).  Signals SCENARIO-ERROR, naming the key.
+
+SEED overrides the file's own, so one scenario can be run as many
+different replicates without editing it."
   (unless (probe-file path)
     ;; Relative paths are resolved against the process's directory, which
     ;; is rarely where someone thinks it is when the command came through
@@ -352,7 +359,7 @@ to mean one thing in a scenario file and another in an acceptance run."
                   (error 'scenario-error :source (file-namestring path)
                                          :path "json"
                                          :detail (format nil "~a" e))))))
-    (parse-scenario root :source (file-namestring path))))
+    (parse-scenario root :source (file-namestring path) :seed seed)))
 
-(defun load-scenario-string (text &key (source "<string>"))
-  (parse-scenario (com.inuoe.jzon:parse text) :source source))
+(defun load-scenario-string (text &key (source "<string>") seed)
+  (parse-scenario (com.inuoe.jzon:parse text) :source source :seed seed))

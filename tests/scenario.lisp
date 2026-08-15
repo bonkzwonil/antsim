@@ -99,6 +99,46 @@ extra way through the band.  So it checks its own preconditions."
     (is-false (try "[{\"bottom\":0.4},{\"bottom\":0.6}]")
               "a well-formed two-arm bridge was rejected")))
 
+(test a-scenario-seed-can-be-overridden-without-editing-the-file
+  "The window draws a fresh seed for each session, so one scenario file
+has to be runnable as many different replicates.
+
+The override has to reach MAKE-WORLD rather than being assigned
+afterwards: the seed is fixed when the world is built, and the starting
+population is placed with it, so a seed set after loading would change
+the ants' *decisions* while leaving their starting positions from the
+file's seed — two runs spliced together, and reproducible as neither.
+
+Determinism is untouched by any of this. It is a property of the model
+given a seed, and this only changes which seed is given."
+  (flet ((fingerprint (s ticks)
+           (let ((w (ant:scenario-world s)))
+             (ant:world-run! w ticks)
+             (let ((b (ant:world-bodies w)) (acc 0.0d0))
+               (dotimes (i (min 300 (ant:bodies-n b)))
+                 (incf acc (+ (aref (ant:bodies-x b) i)
+                              (* 3 (aref (ant:bodies-y b) i)))))
+               acc)))
+         (scn (&rest args)
+           (apply #'ant:load-scenario-string
+                  "{\"world\":{\"width\":0.4,\"height\":0.4},
+                    \"colonies\":[{\"nest\":{\"x\":0.2,\"y\":0.1},
+                                   \"start\":60,\"stock\":200.0}],
+                    \"food\":[{\"x\":0.2,\"y\":0.3,\"amount\":9000.0}],
+                    \"seed\":1}"
+                  args)))
+    (let ((a (fingerprint (scn) 400))
+          (b (fingerprint (scn) 400))
+          (c (fingerprint (scn :seed 7) 400))
+          (d (fingerprint (scn :seed 7) 400))
+          (e (fingerprint (scn :seed 8) 400)))
+      (is (= a b) "the file's own seed did not reproduce: ~,4f vs ~,4f" a b)
+      (is (= c d) "seed 7 did not reproduce: ~,4f vs ~,4f" c d)
+      (is (/= a c) "overriding the seed changed nothing")
+      (is (/= c e) "two different seeds gave the same run")
+      (is (= 7 (ant:world-seed (ant:scenario-world (scn :seed 7))))
+          "the override did not reach the world"))))
+
 (test scenario-parameters-are-carried-not-applied
   "A scenario that sets tau and then runs under the default tau would be
 a particularly cruel bug, so the overrides are kept on the scenario and
