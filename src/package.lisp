@@ -89,4 +89,7 @@
    #:view-zoom-at! #:view-pan-pixels!
    ;; render/renderer — the 2D scene (§5.1)
    #:renderer #:make-renderer #:destroy-renderer
-   #:upload-field #:upload-bodies #:draw-world #:render-world-png))
+   #:upload-field #:upload-bodies #:draw-world #:render-world-png
+   ;; live/window — the interactive view (§5.5), system antsim/live
+   #:run-live #:live-demo #:live-inspect
+   #:*live-speed* #:*live-paused*))
