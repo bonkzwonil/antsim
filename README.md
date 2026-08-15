@@ -78,14 +78,15 @@ like success.
 ### Goss's double bridge (1989) — shortest path
 
 Now one arm is longer: 0.415 m against 0.717 m, a ratio of **1.73**. Same fork,
-same corridor width, so the arms differ in length and in nothing else.
+and the corridors are the same width *perpendicular to their own centre lines*,
+so the arms differ in length and in nothing else.
 
 | seed | short arm | long arm | | seed | short arm | long arm |
 |---|---|---|---|---|---|---|
-| 1 | **74.8%** | 25.2% | | 5 | **76.2%** | 23.8% |
-| 2 | **80.6%** | 19.4% | | 6 | **73.4%** | 26.6% |
-| 3 | **95.5%** | 4.5% | | 7 | **78.2%** | 21.8% |
-| 4 | **75.6%** | 24.4% | | 8 | **81.0%** | 19.0% |
+| 1 | **70.1%** | 29.9% | | 5 | **71.4%** | 28.6% |
+| 2 | **78.9%** | 21.1% | | 6 | **69.4%** | 30.6% |
+| 3 | **75.7%** | 24.3% | | 7 | **75.8%** | 24.2% |
+| 4 | **72.3%** | 27.7% | | 8 | **83.3%** | 16.7% |
 
 **The short arm wins eight times out of eight** — so unlike the binary bridge,
 this one *should* look the same every time you run it. Watching it pick the same

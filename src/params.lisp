@@ -403,10 +403,30 @@ The rest goes to nest stock.  Crop is social food and energy is personal
 full crop.")
 
 (defparameter *max-age-ticks* 1728000
-  "Lifespan in motion ticks.  [lit, converted] 1728000 ticks x 50 ms =
-24 hours of simulated time.  A real L. niger worker lives months; this is
-deliberately short so that demographics are observable in a run that
-finishes, and it is a calibration parameter, not a claim.")
+  "Lifespan in motion ticks.  [cal] 1728000 ticks x 50 ms = 24 hours of
+simulated time.  A real L. niger worker lives months, so this is already
+a compression, and it is a calibration parameter rather than a claim.
+
+**It is never reached, and that is worth stating plainly.**  The longest
+scenario anyone runs is an hour — 72000 ticks, one twenty-fourth of this
+— so no ant in this project has ever died of old age.  Starvation is the
+only death that has ever fired.  An earlier version of this docstring
+claimed the value was 'deliberately short so that demographics are
+observable in a run that finishes', which was simply false: at 24x the
+run length nothing about age is observable at all.
+
+Lowering it was tried and does not do what it looks like it should.  A
+colony whose stock has hit zero is trapped — too many spent ants drawing
+upkeep for any of them to be fed back over the departure threshold — and
+it is tempting to think that turnover would relieve the pressure.
+Measured on the double bridge at 20-minute and 60-minute lifespans
+against this one, the colony dies *sooner*, not later: culling ants
+removes foragers as well as mouths, so delivery falls at least as fast as
+upkeep does.  Killing workers does not create food.
+
+So this stays as it is, honestly labelled, and age-structured demographics
+wait for a scenario that runs long enough to have any.  §6's per-colony
+`max_age_s` is the right place to set it when that day comes.")
 
 ;;; --------------------------------------------------------------------
 ;;; Colony demographics (§3.10)

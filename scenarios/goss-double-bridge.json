@@ -3,11 +3,16 @@
 
   "world": { "width": 0.70, "height": 0.60, "capacity": 4000 },
 
+  "_arms": "Same width perpendicular to each centre line, so the arms",
+  "_arms2": "differ in length and in nothing else. 0.04 rather than 0.06",
+  "_arms3": "because the slant correction on the long arm would otherwise",
+  "_arms4": "leave the island between them thinner than an ant.",
+
   "obstacles": [
     { "bridge": {
         "y_lo": 0.20,
         "y_hi": 0.40,
-        "corridor_width": 0.06,
+        "corridor_width": 0.04,
         "arms": [
           { "bottom": 0.28, "top": 0.28 },
           { "bottom": 0.36, "top": 0.60 }

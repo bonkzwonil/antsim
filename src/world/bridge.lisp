@@ -80,23 +80,46 @@ way to invalidate an acceptance result."
           "a bridge needs the same number of bottom and top mouths")
   (assert (>= (length bottoms) 2) ()
           "a bridge needs at least two arms; got ~d" (length bottoms))
-  (let ((h (* 0.5f0 corridor-width))
-        (width (world-width w)))
+  (let* ((width (world-width w))
+         (span (- y-hi y-lo))
+         ;; Half-width per arm, measured HORIZONTALLY -- and scaled so
+         ;; that every arm ends up the same width PERPENDICULAR to its own
+         ;; centre line.
+         ;;
+         ;; This is not a refinement; getting it wrong invalidates the
+         ;; experiment.  Offsetting every boundary by the same horizontal
+         ;; amount makes a slanted arm narrower than a vertical one by
+         ;; cos(slant): on the double bridge as first built, the long arm
+         ;; came out 0.0384 m against the short arm's 0.0600 -- 36%
+         ;; narrower, 7.7 ants abreast against 12.  The long arm was then
+         ;; both longer *and* more congested, so "the short arm wins"
+         ;; could not distinguish distance from crowding, which is the one
+         ;; confound this apparatus exists to exclude.
+         ;;
+         ;; A vertical arm is unaffected (cos = 1), so the binary bridge
+         ;; is untouched by this.
+         (halves (loop for b in bottoms
+                       for tp in tops
+                       collect (let* ((dx (- tp b))
+                                      (len (sqrt (+ (* dx dx)
+                                                    (* span span)))))
+                                 (* 0.5f0 corridor-width (/ len span))))))
     ;; everything left of the first arm
     (add-obstacle w (list 0.0f0 y-lo
-                          (- (first bottoms) h) y-lo
-                          (- (first tops) h) y-hi
+                          (- (first bottoms) (first halves)) y-lo
+                          (- (first tops) (first halves)) y-hi
                           0.0f0 y-hi))
     ;; an island between each adjacent pair
     (loop for (b0 b1) on bottoms
           for (t0 t1) on tops
+          for (h0 h1) on halves
           while b1
-          do (add-obstacle w (list (+ b0 h) y-lo  (- b1 h) y-lo
-                                   (- t1 h) y-hi  (+ t0 h) y-hi)))
+          do (add-obstacle w (list (+ b0 h0) y-lo  (- b1 h1) y-lo
+                                   (- t1 h1) y-hi  (+ t0 h0) y-hi)))
     ;; and everything right of the last
-    (add-obstacle w (list (+ (car (last bottoms)) h) y-lo
+    (add-obstacle w (list (+ (car (last bottoms)) (car (last halves))) y-lo
                           width y-lo  width y-hi
-                          (+ (car (last tops)) h) y-hi)))
+                          (+ (car (last tops)) (car (last halves))) y-hi)))
   (values))
 
 (defun make-bridge-world (&key (width 0.70f0) (height 0.60f0)
@@ -179,10 +202,21 @@ The fork is unchanged — both corridors still leave the nest chamber side
 by side — but arm 1 is slanted so it runs further and comes out well off
 to the side of the food.  Arm 0 is the short one.
 
-The corridors are the same *width*, so the arms differ in length and in
-nothing else.  Making the long arm narrower would have produced the same
-result for the wrong reason: crowding, not distance."
-  (make-bridge-world :tops '(0.28f0 0.60f0) :seed seed :start start))
+The corridors are the same width **perpendicular to their own centre
+lines**, so the arms differ in length and in nothing else.  That is the
+whole reason ADD-BRIDGE! scales each arm's horizontal offset by its
+slant, and it was not always true here: built with a flat horizontal
+offset, the long arm came out 0.0384 m wide against the short arm's
+0.0600 — 36% narrower.  It was then both longer *and* more congested, and
+'the short arm wins' could not tell distance from crowding.
+
+The corridors are 0.04 m rather than 0.06 for a geometric reason: at 0.06
+the slant correction widens the long arm's mouth until the island between
+the two is 3 mm, thinner than an ant.  Narrowing both keeps the fork tight
+— the mouths adjacent, which is what makes this a fork at all — while
+leaving an island a body can actually be stopped by."
+  (make-bridge-world :tops '(0.28f0 0.60f0) :corridor-width 0.04f0
+                     :seed seed :start start))
 
 (defun bridge-tally! (b)
   "Count crossings of the wall since the last motion tick.

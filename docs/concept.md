@@ -1486,6 +1486,31 @@ and one the acceptance suite is now making on every run.
   The acceptance row is unaffected either way — it measures the *initial*
   commitment, in a window at 6–12 minutes.
 
+**Known limitations, measured:**
+
+- **No ant ever dies of old age.** `*max-age-ticks*` is 24 simulated
+  hours and the longest run is one, so starvation is the only death that
+  has ever fired and the model has no age structure at all. Lowering the
+  lifespan does not help a colony that has run its stock to zero — such a
+  colony is trapped, with too many spent workers drawing upkeep for any
+  of them to be fed back over the departure threshold, and culling
+  removes foragers as fast as it removes mouths. Measured at 20- and
+  60-minute lifespans: the colony dies sooner, not later.
+
+- **The double bridge's arms were not the same width.** Offsetting each
+  corridor's boundary horizontally by half the corridor width is only
+  correct for a *vertical* arm; a slanted one comes out narrower by
+  cos(slant). The long arm was 0.0384 m against the short arm's 0.0600 —
+  36% narrower, 7.7 ants abreast against 12 — so it was longer *and* more
+  congested, and "the short arm wins" could not distinguish distance from
+  crowding. That is precisely the confound the apparatus exists to
+  exclude, and the code claimed in its own docstring to have excluded it.
+
+  Fixed by scaling each arm's horizontal offset by its slant. The result
+  survives: the short arm still wins 8 of 8, but at **69–83%** of traffic
+  rather than 73–96%. The confound was inflating the effect without
+  creating it.
+
 **Needs verification before it becomes a constant:**
 
 - **The citations above are from memory and carry no DOIs.** Volume and
