@@ -56,20 +56,25 @@ one obstacle across part of the route."
     (gallery-shot w "01-searching")
     (format t "~&  40 s: pop ~d, trail ~,0f~%"
             (colony-population c) (field-total (colony-field c)))
-    ;; Established: the road is a road, and it runs in two lanes.
-    (world-run! w (- (* 1200 20) 800))
-    (gallery-shot w "02-trail")
+    ;; Forming, then established.  Five minutes is where the trail first
+    ;; reads as a single road; twenty is where it has split into lanes.
+    (world-run! w (- (* 1200 5) 800))
+    (gallery-shot w "02-forming")
+    (format t "~&  5 min: pop ~d, trail ~,0f~%"
+            (colony-population c) (field-total (colony-field c)))
+    (world-run! w (* 1200 15))
+    (gallery-shot w "03-trail")
     (format t "~&  20 min: pop ~d, trail ~,0f~%"
             (colony-population c) (field-total (colony-field c)))
     ;; Detail: the nest, its arrival radius, and the resting cluster.
-    (gallery-shot w "03-nest" :width 360 :height 360
+    (gallery-shot w "04-nest" :width 360 :height 360
                               :cx 0.30f0 :cy 0.10f0 :span 0.22f0)
     ;; Detail: mid-route traffic, outbound pale and laden returners warm.
-    (gallery-shot w "04-traffic" :width 360 :height 360
+    (gallery-shot w "05-traffic" :width 360 :height 360
                                  :cx 0.33f0 :cy 0.30f0 :span 0.18f0)
     ;; Thriving: an hour in, with the colony grown into the trail it built.
     (world-run! w (* 1200 40))
-    (gallery-shot w "05-thriving")
+    (gallery-shot w "06-thriving")
     (format t "~&  60 min: pop ~d, trail ~,0f, stock ~,0f~%"
             (colony-population c) (field-total (colony-field c))
             (colony-stock c))
