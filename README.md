@@ -1,5 +1,8 @@
 # antsim
 
+**Version M2 · 2026-08-15** — the renderer and the interactive window. See
+[where it is](#where-it-is) for what that covers and what is next.
+
 A 2D ant colony simulation built on real behavioural science, in Common Lisp,
 rendered with OpenGL.
 
