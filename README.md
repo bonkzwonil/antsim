@@ -1001,6 +1001,11 @@ of §3.8 are *literally the published experiments run as data files*.
 Deliberately shaped like waldameisen's: each milestone ends in something
 verifiable, and the risky spikes come early.
 
+Milestones are also the branching unit: `main` holds the stable line, each
+milestone is developed on `milestone/mN` and merges to `main` when its
+acceptance criteria pass, and nothing is committed to `main` directly. The
+original planning branch `concept` is archived.
+
 **M0 — the stack stands up. ✅ done.** ASDF systems, package,
 `util`/`rng`/`pool` carried over, FiveAM wired, Makefile with the guix GPU
 targets. A headless context comes up and writes a non-black PNG. *Proves
