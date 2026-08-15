@@ -64,12 +64,21 @@ vec3 ground(vec2 w, float mpp) {
 // The turn is still at k, per 5.3: below it the ants barely discriminate
 // and above it they commit, so the colour change marks the concentration
 // at which a smear becomes a road.
+//
+// The upper half runs from k to the field's own ceiling rather than to a
+// fixed multiple of k.  It used to saturate at 4k, which was fine while
+// the cap was 5k and wrong as soon as it was not: a real route peaks
+// several times higher than that, so everything from a thin trail to the
+// nest entrance came out the same flat white-blue and the picture lost
+// exactly the structure the deposits have.  Tying it to the cap makes the
+// ramp span whatever range the field can actually hold.
 vec3 trail_color(float c) {
     float t = c / u_k;                       // 1.0 at the threshold
     vec3 below = mix(vec3(0.09, 0.13, 0.18), vec3(0.13, 0.30, 0.42),
                      clamp(t, 0.0, 1.0));
+    float hi = max(u_cap - u_k, u_k);        // range above the threshold
     vec3 above = mix(vec3(0.13, 0.30, 0.42), vec3(0.55, 0.86, 1.00),
-                     clamp((t - 1.0) / 3.0, 0.0, 1.0));
+                     clamp((c - u_k) / hi, 0.0, 1.0));
     return t < 1.0 ? below : above;
 }
 
@@ -87,9 +96,30 @@ void main() {
     float conc = texture(u_field, w / u_world).r;
     if (conc > 0.001) {
         vec3 tc = trail_color(conc);
-        // alpha rises fast at first so a faint fresh trail is visible,
-        // then saturates -- the field itself already has a ceiling
-        float a = clamp(conc / (0.6 * u_k), 0.0, 1.0);
+        // Two ramps, because one cannot do this job.
+        //
+        // The first rises steeply to 0.55 by 0.6k, so a faint fresh
+        // packet is visible at all.  The second carries the rest of the
+        // way to the field's own ceiling.
+        //
+        // A single steep ramp was the earlier version and it made the
+        // field look painted rather than alive: it reached full opacity
+        // at 0.6k = 12 while the cap is 100, so seven eighths of the
+        // field's range sat off the top of the display.  A busy trail
+        // pinned at the cap had to lose 88% of its concentration before
+        // one pixel changed -- so evaporation, the only mechanism by
+        // which the colony forgets, was invisible precisely while it was
+        // doing the most work.
+        //
+        // The second ramp is square-rooted.  Linear against a cap this
+        // far above k spends almost all of its opacity on the few
+        // hottest cells and leaves an ordinary working trail looking
+        // thin; the root keeps the whole band between k and the ceiling
+        // legible, which is the band the ants are actually reading.
+        float a = 0.45 * clamp(conc / (0.6 * u_k), 0.0, 1.0)
+                + 0.55 * sqrt(clamp((conc - 0.6 * u_k)
+                                    / max(1.0, u_cap - 0.6 * u_k),
+                                    0.0, 1.0));
         c = mix(c, tc, a);
     }
     frag = vec4(c, 1.0);
@@ -171,9 +201,21 @@ vec3 kind_color(float k) {
     int base = int(floor(k + 0.01));
     float frac = k - float(base);
     if (base == 1) return vec3(0.32, 0.30, 0.30);          // corpse: grey
-    if (base == 2) return vec3(0.42, 0.74, 0.34);          // food: green
-    if (base == 3) return vec3(0.62, 0.42, 0.24);          // nest: brown
+    // The source needs no separate gauge: its body shrinks as it is
+    // eaten, so this disc *is* what is left of the pile — and it is the
+    // same circle the ants are queueing against, which is why a source
+    // running down also gets harder to feed from.
+    if (base == 2) return vec3(0.42, 0.80, 0.34);          // food: green
+    if (base == 3) return vec3(0.36, 0.25, 0.15);          // nest: brown
     if (base == 4) return vec3(0.62, 0.46, 0.30);          // arrival halo
+    if (base == 5) return vec3(0.95, 0.78, 0.36);          // stock in nest
+    if (base == 6) return vec3(0.42, 0.84, 0.34);          // food remaining
+    // Spent: too little energy left to set out again.  Checked first
+    // because it outranks the behavioural states -- an ant under this
+    // line is not going anywhere whatever it is nominally doing, and a
+    // nest quietly filling with spent ants is the shape a colony's death
+    // actually takes.  Drawn in the one hue nothing else on screen uses.
+    if (frac > 0.35) return vec3(0.95, 0.25, 0.22);        // spent, starving
     if (frac > 0.25) return vec3(1.00, 0.72, 0.30);        // returning laden
     if (frac > 0.15) return vec3(0.95, 0.90, 0.70);        // at food
     return vec3(0.86, 0.88, 0.92);                         // outbound / in nest
@@ -190,6 +232,15 @@ void main() {
     // the world that ants plainly reacted to and nothing on screen
     // explained.  Drawing it is the honest fix: the picture should show
     // where the model's edges are.
+    // Stock gauges: a filled disc whose *area* is the quantity left, so
+    // a source visibly empties instead of staying a full green circle
+    // until the instant it is gone (§5.1).
+    if (v_kind > 4.5) {
+        float aa2 = clamp(1.0 / max(v_radius_px, 1.0), 0.02, 0.9);
+        frag = vec4(c, smoothstep(1.0, 1.0 - aa2, d));
+        return;
+    }
+
     if (v_kind > 3.5) {
         float ring = smoothstep(0.86, 0.99, d) * (1.0 - smoothstep(0.99, 1.0, d));
         if (ring < 0.02) discard;

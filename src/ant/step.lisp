@@ -16,6 +16,20 @@
 (defconstant +stream-turn+ 2)
 (defconstant +stream-leave+ 3)
 (defconstant +stream-pi+ 4)
+(defconstant +stream-exit+ 5
+  "Scatter on the bearing an ant sets off from the nest.
+
+Its own stream, and it has to be.  The first version drew this from
++STREAM-LEAVE+, which is the stream the *decision* to leave was just
+taken from — and a departure only happens when that draw came out below
+*leave-probability*, about 0.005.  RND-NORMAL is Box-Muller, so it feeds
+that same u1 into sqrt(-2 ln u1): conditioning on u1 < 0.005 forces the
+magnitude above 3.2 sigma every single time.  Every ant left on a wild
+angle, deterministically.
+
+Reusing a stream after conditioning on it is the one way a counter-based
+RNG can still surprise you, because the draws look independent and are
+not.  One stream, one question.")
 
 (declaim (inline wrap-angle angle-toward choice-weight))
 
@@ -99,6 +113,12 @@ initial condition rather than merely a convenient one."
                  ;; pass reads a displacement from the origin
                  (aref (ants-px a) i) sx
                  (aref (ants-py a) i) sy
+                 (aref (ants-trailed a) i) 0.0f0
+                 ;; A newborn has no route to be faithful to, so its exit
+                 ;; bearing is simply random — which is what makes the
+                 ;; naive ants the colony's explorers (§3.4).
+                 (aref (ants-exit a) i)
+                 (* 6.2831855f0 (rnd01 id 0 93 seed))
                  ;; and the home vector is the way back from where it
                  ;; actually is, which is not quite the nest centre
                  (aref (ants-hvx a) i) (- (colony-nest-x c) sx)
@@ -187,10 +207,21 @@ switch into and no switching logic to get wrong (§3.5)."
     ;; *trail-turn-gain*).
     (let ((best (max cl (max cc cr))))
       (declare (type f32 best))
-      (values (cond ((< u wl) -1.0f0)
-                    ((< u (+ wl wc)) 0.0f0)
-                    (t 1.0f0))
-              (/ best (+ k best))))))
+      (values
+       ;; 1. the stochastic choice, which is the model proper
+       (cond ((< u wl) -1.0f0)
+             ((< u (+ wl wc)) 0.0f0)
+             (t 1.0f0))
+       ;; 2. how strongly a trail is present at all, 0..1
+       (/ best (+ k best))
+       ;; 3. the signed left/right imbalance, -1..1 — tropotaxis.  An ant
+       ;; centred on a trail gets ~0 from this and holds its line; one
+       ;; drifting off the edge gets a large correction *proportional to
+       ;; how far off it is*.  That is what a fixed-size turn cannot do,
+       ;; and why turning harder alone made things worse past a point:
+       ;; bang-bang steering oscillates across the very trail it is
+       ;; trying to hold.
+       (/ (- wr wl) total)))))
 
 ;;; --------------------------------------------------------------------
 ;;; The tick
@@ -269,10 +300,36 @@ switch into and no switching logic to get wrong (§3.5)."
                (when (and (> want 0.0f0) (> (colony-stock c) want))
                  (decf (colony-stock c) want)
                  (incf (aref (ants-energy a) i) want)))
-             (when (and (> (aref (ants-energy a) i) *energy-return-threshold*)
+             ;; Whether to set out, and the bar for doing so, both move
+             ;; with how hungry the colony is (COLONY-FORAGE-URGENCY).  A
+             ;; nest with a full larder trickles foragers out; one with an
+             ;; empty larder turns itself out of doors, and accepts ants
+             ;; with far less in reserve, because the alternative is to
+             ;; lie down and starve with the door shut.
+             (when (and (> (aref (ants-energy a) i) (colony-energy-threshold c))
                         (< (rnd01 id tick +stream-leave+ seed)
-                           *leave-probability*))
+                           (colony-leave-probability c)))
                (setf (aref (ants-state a) i) +ant-outbound+
+                     ;; Set off along the bearing this ant came home on,
+                     ;; scattered (§3.4).
+                     ;;
+                     ;; Departure used not to set a heading at all, and
+                     ;; the omission was not neutral — it was close to
+                     ;; the worst possible choice.  A returning ant
+                     ;; steers *at* the nest, so the heading it carried
+                     ;; into the nest pointed inward; keeping it meant
+                     ;; the ant walked out through the entrance and
+                     ;; straight on, away from everything it knew.
+                     ;; Measured over 613 departures on an established
+                     ;; trail: 65% left within 30 degrees of exactly
+                     ;; opposite the source, and not one of them left
+                     ;; towards it.  Reported from the window as ants
+                     ;; "wandering off with no plan", which was generous.
+                     (aref (ants-heading a) i)
+                     (wrap-angle
+                      (+ (aref (ants-exit a) i)
+                         (* *nest-exit-scatter*
+                            (rnd-normal id tick +stream-exit+ seed))))
                      ;; Set the home vector to the *actual* way back, not
                      ;; to zero.
                      ;;
@@ -307,6 +364,29 @@ switch into and no switching logic to get wrong (§3.5)."
                     (setf (aref (ants-load-quality a) i) (food-quality f))
                     (when (or (>= (aref (ants-crop a) i) 0.999f0)
                               (food-empty-p f))
+                      ;; Remember where this source lies *from the nest*,
+                      ;; so the ant can set off towards it again next
+                      ;; time (§3.4).  The home vector points from the
+                      ;; ant to the nest, so its reverse is exactly the
+                      ;; nest-to-food bearing the ant's own path
+                      ;; integrator believes in — no new sense and no new
+                      ;; state, just a reading of something it already
+                      ;; maintains.
+                      ;;
+                      ;; Taken here rather than at the nest door, and the
+                      ;; difference is not small.  The first attempt used
+                      ;; the bearing at which the ant crossed the arrival
+                      ;; radius, which sounds equivalent and is not: the
+                      ;; entrance is packed with resting ants, so an
+                      ;; arriving forager slides around the cluster and
+                      ;; comes in tangentially.  Measured, that put
+                      ;; departures at a peak of about 1.5 rad off the
+                      ;; source — perpendicular to it — because the crowd,
+                      ;; not the route, was setting the angle.
+                      (when (> (aref (ants-crop a) i) 0.0f0)
+                        (setf (aref (ants-exit a) i)
+                              (atan (- (aref (ants-hvy a) i))
+                                    (- (aref (ants-hvx a) i)))))
                       (setf (aref (ants-state a) i) +ant-returning+)))))))
 
             ;; --- OUTBOUND and RETURNING ----------------------------
@@ -317,16 +397,24 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; The choice function runs in *both* directions.  A
                     ;; returning ant is not blind to the trail — it is
                     ;; pulled home as well, and the two combine.
-                    (dir 0.0f0) (smell 0.0f0) (turn 0.0f0) (noise 0.0f0))
-               (declare (type f32 heading hvx hvy dir smell turn noise))
-               (multiple-value-setq (dir smell)
+                    (dir 0.0f0) (smell 0.0f0) (bias 0.0f0)
+                    (turn 0.0f0) (noise 0.0f0))
+               (declare (type f32 heading hvx hvy dir smell bias turn noise))
+               (multiple-value-setq (dir smell bias)
                  (choose-turn w (colony-id c) id tick x y heading))
-               ;; Which way from the choice function; how hard from how
-               ;; much pheromone is actually there.  Off a trail both
-               ;; terms reduce to the plain correlated random walk.
+               ;; Two steering terms, blended by how much pheromone is
+               ;; actually there.
+               ;;
+               ;; With none, this is the stochastic choice at a fixed turn
+               ;; rate — exactly the correlated random walk of §3.2, and
+               ;; search is untouched.  With a strong trail it becomes
+               ;; proportional: turn hard when far off the centre line,
+               ;; barely at all when on it.  Bang-bang steering could only
+               ;; be made stronger by turning harder, which oscillated
+               ;; across the trail and got *worse* past a gain of about 3.
                (setf turn (* *turn-rate*
-                             (+ 1.0f0 (* *trail-turn-gain* smell))
-                             dir)
+                             (+ (* (- 1.0f0 smell) dir)
+                                (* *trail-turn-gain* smell bias)))
                      noise (* *turn-sigma*
                               (- 1.0f0 (* *trail-noise-suppression* smell))
                               (rnd-normal id tick +stream-turn+ seed)))
@@ -334,14 +422,18 @@ switch into and no switching logic to get wrong (§3.5)."
                ;; homing urge: total for a returning ant, and growing as
                ;; energy falls for an outbound one (§3.5)
                (let* ((hv-len (sqrt (+ (* hvx hvx) (* hvy hvy))))
+                      ;; against the colony's threshold, so the urge to
+                      ;; turn back grows from the same point at which the
+                      ;; ant would actually give up
+                      (ethr (colony-energy-threshold c))
                       (urge (if returning
                                 1.0f0
                                 (* *homing-weight-low-energy*
                                    (max 0.0f0
-                                        (/ (- *energy-return-threshold*
+                                        (/ (- ethr
                                               (aref (ants-energy a) i))
-                                           *energy-return-threshold*))))))
-                 (declare (type f32 hv-len urge))
+                                           (max 1.0f-6 ethr)))))))
+                 (declare (type f32 hv-len urge ethr))
                  (when (and (> hv-len 1.0f-4) (> urge 0.0f0))
                    (setf heading
                          (angle-toward heading (atan hvy hvx)
@@ -381,12 +473,59 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; below the threshold (§3.3).  That switch is its own
                     ;; acceptance row: poor food is exploited but never
                     ;; recruited to.
-                    (when (and (> (aref (ants-crop a) i) 0.0f0)
-                               (>= (aref (ants-load-quality a) i)
-                                   *trail-quality-threshold*))
-                      (field-deposit! (colony-field c) x2 y2
-                                      (* *trail-deposit*
-                                         (aref (ants-load-quality a) i))))
+                    ;;
+                    ;; Laid as discrete packets a fixed *distance* apart,
+                    ;; not as a mark per tick in the nearest cell.  Both
+                    ;; halves of that matter.  By distance, because a
+                    ;; laden ant walks slower and a per-tick deposit would
+                    ;; therefore lay a heavier line for the same journey —
+                    ;; strength would encode speed rather than traffic.
+                    ;; As packets, because a one-cell mark is narrower
+                    ;; than the span the antennae sample, so an ant could
+                    ;; straddle a trail with a sensor either side of it
+                    ;; and read nothing at all.
+                    ;;
+                    ;; MOVED is the step the ant *attempted*, read before
+                    ;; BODIES-RESOLVE! has pushed it back out of whatever
+                    ;; it walked into — deliberately, and note that this
+                    ;; is the opposite choice from path integration, which
+                    ;; uses actual net displacement (see
+                    ;; PATH-INTEGRATION-STEP!).  Both are right, for
+                    ;; different reasons.  Path integration is about where
+                    ;; the ant *is*, so it must use where it got to.
+                    ;; Deposition is about walking effort — an ant shoving
+                    ;; against a crowd is still walking, gaster still
+                    ;; touching down — so it uses what the ant tried to
+                    ;; do.
+                    ;;
+                    ;; The visible consequence is at a bottleneck, where
+                    ;; laden ants queue: they keep marking while barely
+                    ;; advancing, so the congested spot is laid down more
+                    ;; heavily than open trail, and that mark recruits
+                    ;; more ants into the queue.  Congestion and
+                    ;; recruitment are separate rules that know nothing
+                    ;; about each other, and the geometry closes the loop.
+                    (let ((moved (sqrt (+ (* (- x2 x) (- x2 x))
+                                          (* (- y2 y) (- y2 y))))))
+                      (declare (type f32 moved))
+                      (incf (aref (ants-trailed a) i) moved)
+                      (when (and (> (aref (ants-crop a) i) 0.0f0)
+                                 (>= (aref (ants-load-quality a) i)
+                                     *trail-quality-threshold*)
+                                 (>= (aref (ants-trailed a) i)
+                                     *trail-packet-spacing*))
+                        ;; The packet carries what the ant would have laid
+                        ;; over the distance it stands for, so the pheromone
+                        ;; unit — and with it every ratio calibrated against
+                        ;; *choice-k* — is untouched by the spacing.
+                        (let ((n (aref (ants-trailed a) i)))
+                          (declare (type f32 n))
+                          (setf (aref (ants-trailed a) i) 0.0f0)
+                          (field-deposit-packet!
+                           (colony-field c) x2 y2
+                           (* (trail-deposit-rate)
+                              (aref (ants-load-quality a) i)
+                              (/ n (* *walk-speed-laden* *motion-dt*)))))))
                     ;; home?
                     (let ((ddx (- x2 (colony-nest-x c)))
                           (ddy (- y2 (colony-nest-y c))))
@@ -414,10 +553,13 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; forager turning for home on the last 22% of its
                     ;; reserve, which a winding return path through a
                     ;; crowd does not reliably cover.
+                    ;; The give-up threshold is the colony's, not the
+                    ;; constant: a forager from a hungry nest pushes
+                    ;; deeper into its reserve before turning back.
                     (cond ((world-food-at w x2 y2)
                            (setf (aref (ants-state a) i) +ant-at-food+))
                           ((< (aref (ants-energy a) i)
-                              *energy-return-threshold*)
+                              (colony-energy-threshold c))
                            (setf (aref (ants-state a) i)
                                  +ant-returning+))))
                    ))               ; cond H, let G
@@ -500,6 +642,12 @@ stops producing brood, and decays."
   "One motion tick, plus whichever slower clocks fall due (§4.3)."
   (declare (type world w))
   (ant-motion-step! w)
+  ;; A source is a blocking body, so as it is eaten its body has to shrink
+  ;; with it — before the collision pass, not after, or ants spend a tick
+  ;; queueing against a pile that is no longer there.
+  (let ((b (world-bodies w)))
+    (dolist (f (world-foods w))
+      (setf (aref (bodies-r b) (food-body f)) (food-current-radius f))))
   (bodies-resolve! (world-bodies w) (world-obstacles w))
   (path-integration-step! w)
   (incf (world-tick w))

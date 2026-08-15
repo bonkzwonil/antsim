@@ -203,6 +203,80 @@ never recruited to — and it is the reason food sources in this sim carry a
 So deposition rate is a function of: food quality, crop fullness, distance
 travelled since last deposit, and whether the ant is homebound.
 
+**Deposition is by packet, not by tick.** An ant does not paint a
+continuous stripe; it touches its gaster down at intervals, and each touch
+leaves a spot that spreads. So a laden ant lays a **packet** every
+`*trail-packet-spacing*` of *distance walked* — about 2 cm, a few body
+lengths — and each packet is splatted into the field with an exponential
+radial falloff, `exp(−d/l)`, cut off at `*trail-packet-radius*`.
+
+Both halves of that are load-bearing, and M1 had neither:
+
+- **By distance, not per tick.** A laden ant walks slower than an unladen
+  one, so a per-tick deposit lays a *heavier* line for the same journey —
+  trail strength would encode walking speed rather than traffic.
+  The distance counted is the step the ant **attempts**, read before
+  collision resolution pushes it back — the opposite choice from path
+  integration, which uses actual net displacement, and both are right.
+  Path integration is about where the ant *is*; deposition is about
+  walking effort, and an ant shoving against a crowd is still walking.
+  The consequence is visible at a bottleneck: queued laden ants keep
+  marking while barely advancing, so a congested spot is laid down more
+  heavily than open trail, and that mark recruits more ants into the
+  queue. Congestion and recruitment know nothing about each other; the
+  geometry closes the loop.
+- **As a spreading packet, not a single cell.** A one-cell mark is
+  narrower than the span the antennae sample, so an ant could straddle its
+  own trail with a sensor either side of it and read zero on both. The
+  packet is deliberately wider than `*sensor-spread*` at the sensing
+  offset.
+
+A packet is **normalised over the cells that actually receive it**, so it
+carries the same total wherever it lands — in open ground, against the
+arena edge, or beside a wall, where blocked cells are excluded *before*
+normalising rather than zeroed after. Without that, trails would thin
+exactly where geometry funnels the traffic that makes them.
+
+**Evaporation runs compressed, and says so.** τ for *L. niger* is a
+half-life of tens of minutes, and that is the value in the parameter
+table. But nothing else in the model runs on that timescale: a watcher
+sees minutes, over which a 21-minute half-life is a constant. A field that
+never visibly fades reads as a painted map rather than as a decaying
+memory, which misrepresents the one mechanism this section exists to
+describe.
+
+So `*trail-decay-scale*` divides τ — 30× by default — and is the single
+honest departure from the literature in the parameter set, kept as its own
+number so the real value stays readable and setting it to 1 turns the
+compression off.
+
+**Deposition is deliberately not scaled to match**, and the reasoning is
+worth recording because the obvious move is the wrong one. Steady-state
+concentration is `deposit-rate × τ`, so multiplying deposition by whatever
+divides τ looks like it preserves everything. It does not: the same
+multiplier makes a *single* ant's fresh mark that much louder, and at 30×
+it put one pass at 43 units against a `k` of 20 — one ant could commit the
+colony by walking past once, which is exactly the regime this section says
+must not exist. Under a compressed τ the two cannot both hold; a steady
+state sustained against 30× faster decay *is* 30× louder per deposit. Of
+the two, the science wins.
+
+No compensation turns out to be needed anyway. A packet spreads over
+roughly thirty cells where a per-tick deposit marked one, and that
+division very nearly cancels the compression by itself.
+
+**The ceiling has to stay out of the way.** `C_max` is a saturation
+ceiling — a real trail is not unboundedly strong — but wherever it binds
+it destroys information *after* deposition: a clipped cell throws away the
+exponential shape it was given, both antennae read the ceiling, their
+difference is exactly zero, and the choice function has nothing to work
+with precisely where the trail is strongest. Measured on the gallery
+scenario with the ceiling lifted, a working route peaks near 300 and the
+busiest cells at the nest entrance reach about 890 — against the original
+cap of 100, nearly every cell that mattered was pinned, and the trail was
+a flat slab both to look at and to steer by. The cap now sits well above
+ordinary traffic, so saturation is the exception it is meant to be.
+
 ### 3.4 Navigation — three systems, not one
 
 An ant is not a pheromone gradient-follower. It runs at least three
@@ -220,9 +294,41 @@ navigation systems in parallel and weights them by confidence:
 2. **Trail following.** §3.3. Used when trail concentration exceeds the
    detection threshold.
 3. **Landmark / route memory.** A learned association between a remembered
-   view and a direction. This is the *Formica* mode; keep it as a stub in
-   the first version (a per-ant memory of the last successful food bearing)
-   and expand later.
+   view and a direction. This is the *Formica* mode; the first version
+   keeps the stub — a per-ant memory of the last successful food bearing —
+   and expands later.
+
+   **Built, as the stub.** Each ant carries one bearing, and sets off from
+   the nest along it. It is read straight off the ant's own path
+   integrator at the moment it leaves a source: the home vector points
+   from the ant to the nest, so its reverse is the nest→food bearing *as
+   that ant believes it*. Nothing global is consulted, and no new sense is
+   added — this is a reading of state the ant already maintains.
+
+   Three details are load-bearing:
+
+   - **Only a paying trip overwrites it.** An ant that comes home empty
+     keeps what it had, so a failed excursion cannot replace a good route
+     with a bad one.
+   - **A newborn's bearing is random**, which is what makes the naive ants
+     the colony's explorers. Together with `*nest-exit-scatter*` (≈29°),
+     that is the whole of what stops fidelity from closing the colony's
+     eyes to a source appearing somewhere new.
+   - **It is taken at the source, not at the nest door.** The first
+     attempt used the bearing at which the ant crossed the arrival radius,
+     which sounds equivalent and is not: the entrance is packed with
+     resting ants, so an arriving forager slides around the cluster and
+     comes in tangentially. Measured, that put departures at a peak of
+     about 1.5 rad off the source — *perpendicular* to it — because the
+     crowd, not the route, was setting the angle.
+
+   Before any of this existed, departure set no heading at all. That is
+   not a neutral omission: a returning ant steers *at* the nest, so the
+   heading it carries in points inward, and keeping it walked the ant out
+   through the entrance and straight on. Measured over 613 departures on
+   an established trail, **65% left within 30° of exactly opposite the
+   source and not one left towards it**. With the memory in place, 34%
+   leave within 15° of it and 2.4% away from it.
 
 Weighting these is where personality comes from. An ant with a strong home
 vector and a weak trail ignores the trail. This is observed and it is what
@@ -290,6 +396,35 @@ Transitions are driven by continuous quantities, not timers:
   nest stock and into nestmates, and takes personal energy back. This is the
   colony's circulatory system and it is what makes the nest a *resource*
   rather than a waypoint.
+- **Foraging urgency** rises as the nest's larder runs down, measured as
+  stock per living worker. It raises the departure rate and lowers *both*
+  energy thresholds — the one an ant needs to set out, and the one at which
+  an ant already out gives up and turns back.
+
+That last one is not decoration; leaving it out **deadlocked the colony**.
+Setting out required energy, energy came from the stock, and the stock came
+from ants setting out. When a source ran dry those three closed into a
+ring: every forager came home, dropped under the departure threshold, could
+not be fed, and lay in the nest until it died of old age without one of
+them ever going out to look. Measured at the time: 499 ants in the nest, 0
+outbound, for the rest of the run. A real colony does the opposite — a
+hungry colony forages *harder*, and its foragers push deeper into their
+reserve before turning back.
+
+Both thresholds have to move together, or the deadlock simply relocates: a
+lowered departure bar alone would push a starving ant out of the nest and
+turn it round on the very next tick.
+
+The urgency term is the one place the model reads the stock as a
+colony-wide quantity, and it is worth being precise about why that is not
+telepathy. An ant is fed from the stock while it rests; **being given
+nothing is a local fact about its own body**, and that is the signal the
+term stands in for. Nothing here tells an ant anything about food it has
+not visited, and none of it lets a colony detect a source it has not found.
+
+Extinction remains a legitimate outcome (§3.10). What changed is *how* a
+colony dies: in the field with the door open, rather than in bed with it
+shut.
 
 ### 3.6 Task allocation, age, and the lazy half of the colony
 
@@ -914,8 +1049,23 @@ world has to be decided in advance to see it.
 | mouse wheel | zoom, anchored at the cursor — the world point under the pointer stays under it |
 | right-drag | pan |
 | `space` / `+` / `-` | pause, and time compression up/down |
-| left-click an ant | inspect: state, energy, crop, age, home vector |
+| left-click an ant | inspect: state, energy, crop, age, home vector, and whether it has the reserve to set out |
 | `home` | frame the whole world |
+| `h` / `?` | hide or show the key legend |
+| `q` / `escape` | quit |
+
+The window **lists its own keys**, bottom-right, and opens at 4× rather
+than real time. Both are the same judgement: the controls are not
+guessable, and the quantities worth watching — a trail forming, a source
+running down, a colony growing — move over minutes to an hour, so real
+time shows a new watcher several minutes of ants wandering in silence.
+
+`+` and `-` are read from the **character** callback rather than the key
+callback, because GLFW reports keys by their physical position on a US
+layout. On a German QWERTZ the `+` key sits where US has `]`, arrives as
+`:RIGHT-BRACKET`, and a handler written for `:EQUAL` never fires — which
+is exactly what happened. The character callback is layout-aware by
+definition and needs no table of national layouts.
 
 Cursor-anchored zoom is worth calling out because the obvious
 implementation — scale about the screen centre — feels wrong immediately
@@ -1049,6 +1199,51 @@ cursor-anchored wheel zoom, right-drag pan, pause and time compression
 keeps arena size, ant count and render scale from having to be guessed
 correctly up front. *First time you can watch a trail form, at whatever
 scale you like.*
+
+**M2.1 — what watching it found.** Not a planned milestone; an interleaved
+one, and its whole content is corrections that only became visible once
+there was a window to see them in.
+
+- **The colony could starve with the door shut.** Departure needed energy,
+  energy needed stock, stock needed departures — a three-way deadlock that
+  froze 499 ants in the nest with 0 outbound for the rest of the run.
+  Fixed with foraging urgency (§3.5), which raises the departure rate and
+  lowers both energy thresholds as the larder empties.
+- **Pheromone deposition became packets** laid by distance rather than
+  marks laid per tick (§3.3) — which is what §3.3 specified in the first
+  place and M1 had simplified away.
+- **Evaporation became visible**, via an explicit `*trail-decay-scale*`
+  and a display ramp that spans the field's actual range instead of
+  saturating at 12% of it (§3.3, §5.3).
+- **The saturation ceiling was nine times too low.** A working route
+  peaks near 300 against a cap of 100, so every cell that mattered
+  pinned to the same value — flattening the exponential deposits back
+  out, and leaving both antennae reading an identical number on the
+  strongest part of the trail (§3.3).
+- **Exhausted ants are drawn red.** A nest quietly filling with spent ants
+  had been indistinguishable from a nest full of ants declining to leave,
+  and it was read as exactly that — by a human watching, which is the
+  point.
+- **Departure set no heading at all**, so an ant left the nest pointing
+  the way it came in — *inward* — and walked out the far side. 65% of
+  departures set off within 30° of exactly opposite the source they had
+  just returned from. Fixed with the route-memory stub §3.4 had always
+  called for.
+
+Fixing that last one turned up a bug of a different kind, worth recording
+because it is the one way a counter-based RNG can still surprise you. The
+exit scatter was drawn from the same stream as the decision to leave — and
+a departure only happens when *that* draw comes out under
+`*leave-probability*` ≈ 0.005. `rnd-normal` is Box-Muller, so it feeds
+that same `u₁` into `√(−2 ln u₁)`: conditioning on `u₁ < 0.005` forces the
+magnitude above 3.2σ every single time, and every ant left on a wild angle
+deterministically. The draws look independent and are not. **One stream,
+one question.**
+
+The lesson is the same one M2 was justified by, and it keeps holding: the
+renderer earns its early place because *the model's failures are shaped
+like pictures*. Every one of these was invisible to the aggregate
+statistics that were being printed at the time.
 
 **M3 — the ant model.** The vector ant, the tripod gait rig, VS
 articulation, LOD, antennae, payload, state tint. The one genuinely novel

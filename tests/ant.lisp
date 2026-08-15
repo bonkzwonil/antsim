@@ -234,6 +234,221 @@ aggregate — population, stock, trail total — showed anything wrong."
         (is (> hx 0.0f0) "home vector points away from the nest in x")
         (is (> hy 0.0f0) "home vector points away from the nest in y")))))
 
+(test food-depletes-and-the-trail-dies
+  "§3.8 acceptance row, both halves of it.
+
+*Food depletion*: a source carries an amount, ants take from it, and at
+zero it is gone. There is no special case anywhere — the source simply
+stops filling crops.
+
+*Trail death*: and then the trail to it decays to background on the
+evaporation timescale, with nothing telling it to. That is the whole
+point of evaporation being in the model at all (§3.3): it is the only
+mechanism by which a colony can forget, and without it a trail to an
+exhausted source would persist for ever and the colony would never
+re-explore."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 600))
+         (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.08f0
+                              :capacity 400 :stock 400.0f0))
+         ;; small and close, so it is emptied inside a short run
+         (f (ant:add-food w 0.20f0 0.26f0 0.03f0 260.0f0 :quality 1.0f0)))
+    (ant:world-seed-population! w c 80)
+    ;; forage until the source is gone
+    (let ((peak 0.0d0))
+      (dotimes (i 40)
+        (ant:world-run! w 1200)
+        (setf peak (max peak (ant:field-total (ant:colony-field c))))
+        (when (ant:food-empty-p f) (return)))
+      (is-true (ant:food-empty-p f)
+               "the source still holds ~,1f after 40 minutes"
+               (ant:food-amount f))
+      (is (> peak 1000.0d0)
+          "no real trail was ever built (peak ~,0f), so trail death is ~
+           not being tested" peak)
+      ;; nothing removes the trail; only evaporation can
+      (ant:world-run! w (* 1200 60))
+      (let ((now (ant:field-total (ant:colony-field c))))
+        (is (< now (* 0.4d0 peak))
+            "trail is ~,0f, down from a peak of ~,0f — less decay than one ~
+             hour of evaporation should give" now peak)))))
+
+;;; --------------------------------------------------- foraging urgency
+
+(defun %nest-energies! (w value)
+  "Put every resting ant at exactly VALUE energy, so a departure test can
+vary one thing at a time."
+  (let ((a (ant:world-ants w)))
+    (dotimes (i (ant:ants-n a))
+      (when (ant:ant-live-p a i)
+        (setf (aref (ant:ants-energy a) i) value)))))
+
+(test an-empty-larder-sends-under-fuelled-ants-out
+  "The colony must not be able to starve with the door shut.
+
+This is a regression test for a deadlock, and the deadlock was real: a
+departure needed energy, energy came from the nest's stock, and the stock
+came from departures.  When a source ran dry those three closed into a
+ring — every ant came home, dropped below the departure threshold, could
+not be fed, and lay in the nest until it died of old age without one of
+them ever going out to look.  Measured at the time: 499 ants in the nest,
+0 outbound, for the rest of the run.
+
+The pair is the point.  Both colonies hold ants at exactly the same
+energy — 0.30, under the well-fed departure threshold — and differ only
+in what is in the larder.  So it is not the ants' own reserves doing the
+work in either case, and the two runs cannot both be explained by
+starvation.
+
+Note what an ant reads here, because it matters that this is not
+telepathy: it is fed from the stock while it rests, and being given
+nothing is a local fact about its own body.  No ant consults the colony's
+food supply, and none of this tells an ant anything about food it has not
+visited."
+  (flet ((departures (stock ticks)
+           (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0
+                                     :capacity 400))
+                  (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.20f0
+                                       :capacity 300 :stock stock)))
+             (ant:world-seed-population! w c 60)
+             (%nest-energies! w 0.30f0)
+             (ant:world-run! w ticks)
+             (values (ant:ants-count-state (ant:world-ants w)
+                                           ant:+ant-outbound+)
+                     c))))
+    ;; 60 ticks: short enough that a fed colony cannot climb back over the
+    ;; well-fed threshold within the run, so the two cases stay separated
+    ;; by the larder alone.
+    (multiple-value-bind (hungry hc) (departures 0.0f0 60)
+      (multiple-value-bind (fed fc) (departures 400.0f0 60)
+        (is (> (ant:colony-forage-urgency hc) 0.9f0)
+            "an empty larder should read as maximum urgency, got ~,2f"
+            (ant:colony-forage-urgency hc))
+        (is (< (ant:colony-forage-urgency fc) 0.1f0)
+            "a full larder should read as no urgency, got ~,2f"
+            (ant:colony-forage-urgency fc))
+        (is (> hungry 20)
+            "only ~d of 60 ants left a nest with an empty larder — the ~
+             colony is starving indoors" hungry)
+        (is (< fed hungry)
+            "a fed colony sent out ~d and a starving one ~d; hunger is ~
+             not raising the departure rate" fed hungry)))))
+
+(test hunger-lowers-both-energy-thresholds-together
+  "The bar for setting out and the bar for giving up are one number.
+
+They have to move together.  Lowering only the first would push a
+starving ant out of the nest and turn it round on the very next tick,
+which is the same deadlock standing in a different place."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 200))
+         (full (ant:add-colony w :nest-x 0.10f0 :nest-y 0.10f0
+                                 :stock 400.0f0))
+         (empty (ant:add-colony w :nest-x 0.30f0 :nest-y 0.30f0
+                                  :stock 0.0f0)))
+    (ant:world-seed-population! w full 40)
+    (ant:world-seed-population! w empty 40)
+    (is (< (ant:colony-energy-threshold empty)
+           (ant:colony-energy-threshold full))
+        "a hungry colony's foragers should push deeper into reserve ~
+         (~,3f) than a fed colony's (~,3f)"
+        (ant:colony-energy-threshold empty)
+        (ant:colony-energy-threshold full))
+    (is (> (ant:colony-leave-probability empty)
+           (* 2.0f0 (ant:colony-leave-probability full)))
+        "hunger barely changed the departure rate: ~,4f vs ~,4f"
+        (ant:colony-leave-probability empty)
+        (ant:colony-leave-probability full))
+    ;; and the fed colony must be left exactly where it was
+    (is (< (abs (- (ant:colony-energy-threshold full)
+                   ant:*energy-return-threshold*))
+           0.02f0)
+        "a fed colony's threshold drifted from the calibrated value")))
+
+;;; ---------------------------------------------------- route fidelity
+
+(test an-ant-leaves-the-nest-the-way-it-came-in
+  "§3.4 route fidelity, and a regression test for its absence.
+
+Departure used not to set a heading at all.  That is not a neutral
+omission: a returning ant steers *at* the nest, so the heading it carries
+in points inward, and keeping it sent the ant out through the entrance
+and straight on — away from everything it knew.  Measured on an
+established trail before the fix, 65% of departures left within 30
+degrees of exactly opposite the source and not one left towards it.  It
+showed up in the window as ants wandering off with no plan.
+
+Here every resting ant is given the same remembered bearing, so the only
+question the test asks is whether departure honours it."
+  (let* ((w (ant:make-world :width 0.6f0 :height 0.6f0 :capacity 400))
+         (c (ant:add-colony w :nest-x 0.30f0 :nest-y 0.30f0
+                              :capacity 300 :stock 900.0f0))
+         (target 1.2f0)                     ; the bearing they all "came in" on
+         (a (ant:world-ants w))
+         (deviations '()))
+    (ant:world-seed-population! w c 80)
+    (dotimes (i (ant:ants-n a))
+      (when (ant:ant-live-p a i)
+        (setf (aref (ant:ants-exit a) i) target
+              (aref (ant:ants-energy a) i) 1.0f0)))
+    ;; step one tick at a time so a departure can be caught at the moment
+    ;; it happens — a heading read later has already been turned by the
+    ;; walk itself
+    (let ((was (make-array (ant:ants-n a) :element-type '(unsigned-byte 8))))
+      (dotimes (i (ant:ants-n a))
+        (setf (aref was i) (aref (ant:ants-state a) i)))
+      (dotimes (tick 600)
+        (ant:world-step! w)
+        (dotimes (i (length was))
+          (when (and (ant:ant-live-p a i)
+                     (= (aref was i) ant:+ant-in-nest+)
+                     (= (aref (ant:ants-state a) i) ant:+ant-outbound+))
+            (push (abs (ant:wrap-angle
+                        (- (aref (ant:ants-heading a) i) target)))
+                  deviations))
+          (setf (aref was i) (aref (ant:ants-state a) i)))))
+    (is (> (length deviations) 20)
+        "only ~d ants left the nest — nothing to measure"
+        (length deviations))
+    (let ((mean (/ (reduce #'+ deviations) (max 1 (length deviations)))))
+      (is (< mean (* 2.0f0 ant:*nest-exit-scatter*))
+          "departures sat ~,2f rad off the remembered bearing on average, ~
+           against a scatter of ~,2f — the bearing is not being honoured"
+          mean ant:*nest-exit-scatter*)
+      ;; and specifically not the old failure, which was the opposite way
+      (is (< (count-if (lambda (d) (> d 2.0f0)) deviations)
+             (floor (length deviations) 10))
+          "~d of ~d departures left more than 115 degrees off the ~
+           remembered bearing"
+          (count-if (lambda (d) (> d 2.0f0)) deviations)
+          (length deviations)))))
+
+(test only-a-paying-trip-overwrites-the-remembered-route
+  "A forager that comes home empty keeps the bearing it had.
+
+Otherwise a failed trip would overwrite a good route with a bad one, and
+— worse — an ant that has never succeeded would stop exploring, because
+its random birth bearing is exactly what makes the naive ants the
+colony's explorers."
+  (let* ((w (ant:make-world :width 0.6f0 :height 0.6f0 :capacity 200))
+         (c (ant:add-colony w :nest-x 0.30f0 :nest-y 0.30f0
+                              :capacity 100 :stock 200.0f0))
+         (a (ant:world-ants w)))
+    ;; no food anywhere, so every trip that ends at home ended empty
+    (ant:world-seed-population! w c 40)
+    (let ((before (make-array (ant:ants-n a) :element-type 'single-float)))
+      (dotimes (i (ant:ants-n a))
+        (setf (aref before i) (aref (ant:ants-exit a) i)))
+      (ant:world-run! w 6000)
+      (let ((changed 0) (checked 0))
+        (dotimes (i (length before))
+          (when (ant:ant-live-p a i)
+            (incf checked)
+            (unless (= (aref before i) (aref (ant:ants-exit a) i))
+              (incf changed))))
+        (is (> checked 10) "no ants survived to check")
+        (is (zerop changed)
+            "~d of ~d ants rewrote their remembered route without ever ~
+             bringing anything home" changed checked)))))
+
 ;;; ------------------------------------------------------ determinism
 
 (test a-run-is-reproducible

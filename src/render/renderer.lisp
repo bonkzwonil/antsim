@@ -135,16 +135,30 @@ returners read warm, which is what makes a working trail legible as
                                             :initial-element 0.0f0))
          (count 0))
     ;; ant state, indexed by body
-    (dotimes (i (ants-n a))
-      (when (ant-live-p a i)
-        (let ((bi (aref (ants-body a) i))
-              (s (aref (ants-state a) i)))
-          (when (< bi (length state-of))
-            (setf (aref state-of bi)
-                  (cond ((= s +ant-returning+) 0.3f0)
-                        ((= s +ant-at-food+) 0.2f0)
-                        ((= s +ant-outbound+) 0.1f0)
-                        (t 0.0f0)))))))
+    (let ((colonies (coerce (world-colonies w) 'vector)))
+      (dotimes (i (ants-n a))
+        (when (ant-live-p a i)
+          (let* ((bi (aref (ants-body a) i))
+                 (s (aref (ants-state a) i))
+                 (ci (aref (ants-colony a) i))
+                 (c (when (< ci (length colonies)) (aref colonies ci))))
+            (when (< bi (length state-of))
+              (setf (aref state-of bi)
+                    ;; Spent outranks every behavioural state, because it
+                    ;; overrides them in fact: an ant below the energy it
+                    ;; needs to set out is not going to, whatever it is
+                    ;; nominally doing.  Without this the end of a colony
+                    ;; is invisible — the nest fills up with ants drawn in
+                    ;; ordinary resting grey, and a watcher sees them
+                    ;; "deciding" to stay home rather than being out of
+                    ;; fuel.  It was mistaken for exactly that.
+                    (cond ((and c (< (aref (ants-energy a) i)
+                                     (colony-energy-threshold c)))
+                           0.4f0)
+                          ((= s +ant-returning+) 0.3f0)
+                          ((= s +ant-at-food+) 0.2f0)
+                          ((= s +ant-outbound+) 0.1f0)
+                          (t 0.0f0))))))))
     (dotimes (i n)
       (let ((k (aref kinds i)))
         (unless (= k +body-free+)
@@ -156,8 +170,9 @@ returners read warm, which is what makes a working trail legible as
                   (+ (float k 1.0f0)
                      (if (= k +body-ant+) (aref state-of i) 0.0f0)))
             (incf count)))))
-    ;; One extra instance per colony for the arrival-radius ring.  Drawing
-    ;; only — it is not in the body table, because it blocks nothing.
+    ;; Drawing-only instances follow: the arrival ring and the two stock
+    ;; gauges.  None of them is in the body table, because none of them
+    ;; blocks anything.
     (dolist (c (world-colonies w))
       (when (< count (renderer-body-capacity r))
         (let ((o (* count 4)))
@@ -165,7 +180,23 @@ returners read warm, which is what makes a working trail legible as
                 (cffi:mem-aref ptr :float (+ o 1)) (colony-nest-y c)
                 (cffi:mem-aref ptr :float (+ o 2)) *nest-arrival-radius*
                 (cffi:mem-aref ptr :float (+ o 3)) 4.0f0)
+          (incf count)))
+      ;; How much food is *in* the nest, as a disc inside the entrance.
+      ;; Area proportional to the amount — hence the square root — because
+      ;; that is what the eye actually compares between two circles.
+      (when (< count (renderer-body-capacity r))
+        (let ((o (* count 4))
+              (frac (clampf (/ (colony-stock c) (colony-stock-ref c))
+                            0.0f0 1.0f0)))
+          (setf (cffi:mem-aref ptr :float (+ o 0)) (colony-nest-x c)
+                (cffi:mem-aref ptr :float (+ o 1)) (colony-nest-y c)
+                (cffi:mem-aref ptr :float (+ o 2))
+                (* 0.72f0 (colony-nest-r c) (sqrt frac))
+                (cffi:mem-aref ptr :float (+ o 3)) 5.0f0)
           (incf count))))
+    ;; Sources need no gauge instance: the body itself shrinks as it is
+    ;; eaten (FOOD-CURRENT-RADIUS), so the disc on screen *is* the amount
+    ;; left, and it is the same circle the ants are queueing against.
     count))
 
 ;;; --------------------------------------------------------------------

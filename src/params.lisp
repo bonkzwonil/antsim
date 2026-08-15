@@ -71,7 +71,7 @@ colony burned its stock on fruitless trips, and the run died out.  That
 looked like a broken foraging model and was in fact a walk with the
 wrong correlation length.")
 
-(defparameter *trail-turn-gain* 3.0f0
+(defparameter *trail-turn-gain* 14.0f0
   "How much more sharply an ant turns when it is actually on a trail.
 [cal]
 
@@ -92,7 +92,7 @@ Deliberately *not* implemented by lowering k or raising n.  Both would
 have moved trail-following in the same direction while changing the
 choice function itself, which §3.8 is a test of.")
 
-(defparameter *trail-noise-suppression* 0.6f0
+(defparameter *trail-noise-suppression* 0.85f0
   "How much of the heading noise a strong trail removes.  [cal] Same
 argument as *trail-turn-gain*, from the other side: a committed
 trail-follower is not just turning harder, it is wandering less.")
@@ -176,8 +176,46 @@ make trails 44% too persistent.
 Evaporation is not a detail — it is the only mechanism by which the
 colony forgets, and the acceptance row for trail death measures it.")
 
-(defparameter *trail-cap* 100.0f0
-  "Saturation ceiling.  [cal] A real trail is not unboundedly strong.")
+(defparameter *trail-decay-scale* 30.0f0
+  "How many times faster than life the trail evaporates.  [display]
+
+The one honest departure from the literature in this file, and it is
+here rather than hidden in *trail-tau* so that the real value stays
+readable and the compression stays a single number anyone can turn off
+by setting it to 1.
+
+The reason is that nothing else in the model runs on the pheromone's
+timescale.  A watcher sees minutes; a 21-minute half-life is, over a
+session, a constant.  Trails that never visibly fade make the field look
+like a painted map rather than a decaying memory, which misrepresents
+the one mechanism §3.3 exists to show.
+
+Deposition is deliberately *not* scaled to match — see
+TRAIL-DEPOSIT-RATE, which records why the obvious compensation is unsound
+and why none turns out to be needed.")
+
+(defun trail-tau ()
+  "Effective evaporation time constant, seconds."
+  (/ *trail-tau* (max 1.0f-3 *trail-decay-scale*)))
+
+(defparameter *trail-cap* 600.0f0
+  "Saturation ceiling.  [cal] A real trail is not unboundedly strong.
+
+Raised from 100, which was far too tight and was doing real damage.
+Measured on the gallery scenario with the ceiling lifted, a working route
+peaks around 300 and the busiest cells — where traffic converges at the
+nest entrance — reach about 890.  Against a cap of 100 that meant every
+cell with meaningful traffic pinned to the same value.
+
+The consequences were not cosmetic.  Clipping destroys the gradient
+*after* deposition: both antennae read the ceiling, their difference is
+exactly zero, and the choice function has nothing to discriminate on
+precisely where the trail is strongest.  Deposits are laid with an
+exponential falloff and the ceiling was flattening them back out.
+
+A cap this size leaves the route's own profile intact and still saturates
+the few hottest convergence points, which is what a saturation ceiling is
+actually for.")
 
 (defparameter *trail-deposit* 1.0f0
   "Units laid per motion tick by a laden ant returning from ideal food.
@@ -186,6 +224,62 @@ colony forgets, and the acceptance row for trail death measures it.")
 7 ticks in it, so a single pass lays a few units and a trail needs
 several passes before it outweighs k.  That is the intended regime: one
 ant must not be able to commit the colony.")
+
+(defun trail-deposit-rate ()
+  "Units per motion tick at ideal food, for one ant on a packet's worth of
+walking.
+
+Deliberately *not* scaled by *trail-decay-scale*, and the reason is worth
+recording because the obvious choice is the wrong one.
+
+Steady-state concentration under steady traffic is deposit-rate x tau, so
+the tempting move is to multiply deposition by whatever divides tau and
+keep the steady state fixed.  That was tried and it is not sound: the
+same multiplier also makes a *single* ant's fresh mark that much louder,
+and at 30x it put one pass at 43 units against a *choice-k* of 20.  One
+ant could then commit the colony on its own, which is precisely the
+regime *trail-deposit* documents itself as avoiding.  Under a compressed
+tau the two properties cannot both be preserved — a steady state held up
+against 30x faster decay *is* 30x louder per deposit — and of the two,
+the one that matters is the science.
+
+It happens that no scaling is needed anyway.  A packet spreads over
+roughly thirty cells where the old per-tick deposit marked one, and that
+division very nearly cancels the compression on its own.  Measured, not
+assumed: a busy trail settles around 40 units — comfortably above
+*choice-k*, comfortably under *trail-cap*, so the gradient survives
+instead of being flattened by the ceiling — and a single pass is worth
+about 1.5 units per cell, which is the 'few units' the parameter asks
+for."
+  *trail-deposit*)
+
+;;; --------------------------------------------------------------------
+;;; Trail packets (§3.3)
+;;; --------------------------------------------------------------------
+;;;
+;;; A returning ant does not paint a continuous stripe; it touches its
+;;; gaster down at intervals, and each touch leaves a spot that spreads a
+;;; little.  Depositing into the single nearest cell modelled neither
+;;; part, and the difference is visible: a one-cell-wide trail is thinner
+;;; than the sensor span that has to find it, so an ant could straddle a
+;;; trail and read nothing on either flank.
+
+(defparameter *trail-packet-spacing* 0.02f0
+  "Distance walked between packets, metres.  [cal] Two centimetres — a
+few body lengths, so a trail is a row of overlapping spots rather than a
+continuous line, and a single crossing lays a handful of them.")
+
+(defparameter *trail-packet-radius* 0.015f0
+  "Radius, metres, beyond which a packet contributes nothing.  [cal]
+Comfortably wider than *sensor-spread* at the sensing offset, which is
+what stops an ant straddling its own trail and reading zero on both
+flanks.")
+
+(defparameter *trail-packet-falloff* 0.006f0
+  "Length scale of the packet's exponential falloff, metres, in
+exp(-d/l).  [cal] About a third of the radius, so the packet is a
+concentrated spot with a soft edge rather than a flat disc.  This is the
+gradient the alpha channel draws and the sensors read.")
 
 (defparameter *trail-quality-threshold* 0.3f0
   "Food quality below which no trail is laid at all.  [lit] Beckers et
@@ -230,7 +324,70 @@ amplification to have something to amplify.
 
 This is also the whole of M1's task allocation: §3.9 defers response
 thresholds and age polyethism, so there is exactly one task and this
-probability is how an ant decides to do it.")
+probability is how an ant decides to do it.
+
+It is the *rested* rate: see *forage-ration*, which raises it as the
+colony's larder runs down.")
+
+(defparameter *nest-exit-scatter* 0.5f0
+  "Spread, radians, on the bearing an ant sets off from the nest (§3.4).
+
+An ant that came home from a source leaves again roughly the way it came
+in — route fidelity, and it is well documented: experienced foragers
+return to a known sector while naive ants strike out at random.  This is
+the scatter around that remembered bearing.
+
+Deliberately generous, about 29 degrees, because it is the *only* thing
+stopping fidelity from closing the colony's eyes.  With no scatter every
+experienced ant would retrace one line, and a colony would never notice a
+source that appeared anywhere else.  Exploration is left to the ants that
+have nothing to remember — newborns, whose bearing is random from birth,
+and foragers that came back empty and so never overwrote theirs.
+
+Before this existed, departure did not set a heading at all: an ant left
+with the heading it arrived on, which pointed *inward*, so it walked out
+through the nest and away.  Measured over 613 departures on an
+established trail, 65% set off within 30 degrees of exactly opposite the
+source and not one left straight towards it.")
+
+;;; --------------------------------------------------------------------
+;;; Foraging urgency (§3.5, §3.10)
+;;; --------------------------------------------------------------------
+;;;
+;;; Hunger is a colony-level state that an individual can read locally,
+;;; because the thing it reads is its own feeding: an ant that asks the
+;;; stock for energy and is given none has learned that the larder is
+;;; empty without anybody telling it so.  That is the only channel used
+;;; here — no ant consults a global variable about food it has not seen.
+;;;
+;;; This exists because leaving it out deadlocked the colony.  Departure
+;;; needed energy, energy came from the stock, and the stock came from
+;;; departures; when a source ran dry the three closed into a ring and
+;;; every ant lay down in the nest and starved without one of them ever
+;;; going to look.  A real colony does the opposite: a hungry colony
+;;; forages harder, and its foragers push deeper into their reserve
+;;; before turning back.
+
+(defparameter *forage-ration* 0.5f0
+  "Stock per live worker that counts as a full larder.  [cal] Upkeep is
+*nest-upkeep* per worker per colony tick, so this is a couple of hours of
+reserve — enough that a thriving colony sits near satiety and a failing
+one does not.")
+
+(defparameter *forage-urgency-gain* 12.0f0
+  "Departure rate at an empty larder, as a multiple of the rested rate.
+[cal] Large on purpose: an emptying nest should visibly turn itself out
+of doors, and this is the number that says so.")
+
+(defparameter *desperate-energy-fraction* 0.25f0
+  "How far the energy thresholds fall at maximum urgency, as a fraction
+of *energy-return-threshold*.  [cal]
+
+One number moves two thresholds, and it has to move both: the energy at
+which an ant will set out, and the energy at which an outbound ant gives
+up.  Lowering only the first would send a starving ant out of the nest
+and turn it round on the very next tick, which is a deadlock wearing a
+different hat.")
 
 (defparameter *nest-feed-rate* 0.002f0
   "Energy per motion tick a resting ant draws from the colony's stock.
@@ -283,7 +440,7 @@ relative to the trail-following choice.  [cal] Applied as a weight that
 grows as energy falls, so a tired ant curves homeward rather than
 flipping a switch (§3.5).")
 
-(defparameter *nest-arrival-radius* 0.06f0
+(defparameter *nest-arrival-radius* 0.035f0
   "How close an ant must get to the nest centre to unload, metres.
 [cal] Must be comfortably larger than the nest disc *and* than the queue
 that forms around it.
@@ -331,13 +488,18 @@ relaxation from chasing floating-point noise forever.")
                *sensor-offset* *sensor-spread* *turn-rate*
                *trail-turn-gain* *trail-noise-suppression*
                *choice-n* *choice-k* *choice-eavesdrop*
-               *trail-tau* *trail-cap* *trail-deposit*
+               *trail-tau* *trail-decay-scale* *trail-cap* *trail-deposit*
+               *trail-packet-spacing* *trail-packet-radius*
+               *trail-packet-falloff*
                *trail-quality-threshold*
                *energy-drain-walking* *energy-drain-resting*
                *energy-return-threshold* *crop-fill-rate* *crop-to-energy*
                *leave-probability* *nest-feed-rate*
+               *forage-ration* *forage-urgency-gain*
+               *desperate-energy-fraction*
                *brood-per-stock* *nest-upkeep*
                *pi-noise* *homing-weight-low-energy* *nest-arrival-radius*
+               *nest-exit-scatter*
                *relax-slop*))
 
 (declaim (type fixnum *max-age-ticks* *relax-iterations*))

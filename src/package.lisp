@@ -23,10 +23,15 @@
    #:*sensor-offset* #:*sensor-spread*
    #:*choice-n* #:*choice-k* #:*choice-eavesdrop*
    #:*trail-tau* #:*trail-cap* #:*trail-deposit* #:*trail-quality-threshold*
+   #:*trail-decay-scale* #:trail-tau #:trail-deposit-rate
+   #:*trail-packet-spacing* #:*trail-packet-radius* #:*trail-packet-falloff*
+   #:*leave-probability* #:*forage-ration* #:*forage-urgency-gain*
+   #:*desperate-energy-fraction*
    #:*energy-drain-walking* #:*energy-drain-resting*
    #:*energy-return-threshold* #:*crop-fill-rate* #:*crop-to-energy*
    #:*max-age-ticks* #:*brood-per-stock* #:*nest-upkeep*
    #:*pi-noise* #:*homing-weight-low-energy* #:*nest-arrival-radius*
+   #:*nest-exit-scatter*
    #:*relax-iterations* #:*relax-slop*
    ;; world/geom — polygons and the broad phase (§3.7, §4.2)
    #:polygon #:make-polygon #:polygon-n #:polygon-verts
@@ -37,6 +42,7 @@
    ;; world/grid — the pheromone field (§3.3)
    #:field #:make-field #:field-w #:field-h #:field-c #:field-cell
    #:field-index #:field-at #:field-blocked-p #:field-deposit! #:field-step!
+   #:field-deposit-packet!
    #:field-total #:field-max #:field-rasterize-polygon!
    #:field-cell-x #:field-cell-y #:field-tau #:field-cap
    ;; world/bodies — the one non-overlap rule (§3.11)
@@ -53,6 +59,8 @@
    #:colony #:colony-id #:colony-name #:colony-field #:colony-stock
    #:colony-population #:colony-capacity #:colony-born #:colony-died
    #:colony-nest-x #:colony-nest-y #:colony-nest-r #:colony-alive-p
+   #:colony-forage-urgency #:colony-leave-probability
+   #:colony-energy-threshold #:food-current-radius
    #:world #:make-world #:world-width #:world-height #:world-bodies
    #:world-ants #:world-colonies #:world-foods #:world-obstacles
    #:world-tick #:world-seed #:world-seconds #:world-food-at
@@ -62,6 +70,7 @@
    #:ants-id #:ants-body #:ants-colony #:ants-state #:ants-heading
    #:ants-crop #:ants-load-quality #:ants-energy #:ants-age
    #:ants-hvx #:ants-hvy #:ants-px #:ants-py #:ants-count-state
+   #:ants-trailed #:ants-exit
    #:path-integration-step!
    #:spawn-ant #:kill-ant
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+

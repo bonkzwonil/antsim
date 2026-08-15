@@ -1,7 +1,8 @@
 # antsim
 
-**Version M2 · 2026-08-15** — the renderer and the interactive window. See
-[where it is](#where-it-is) for what that covers and what is next.
+**Version M2.1 · 2026-08-15** — the renderer, the interactive window, and the
+round of corrections that watching it produced. See [where it
+is](#where-it-is) for what that covers and what is next.
 
 A 2D ant colony simulation built on real behavioural science, in Common Lisp,
 rendered with OpenGL.
@@ -19,29 +20,96 @@ every picture below was deposited by an ant that walked there.
 
 ![An established trail between nest and food](docs/images/03-trail.png)
 
-*Twenty simulated minutes. The nest is the brown disc at the bottom, the food
-source the green disc at the top, and the blue field is pheromone the ants laid
+*Twenty simulated minutes. The nest is the disc at the bottom, the food source
+the green disc at the top, and the blue field is pheromone the ants laid
 themselves. The colour turns where the concentration crosses `k`, the point at
 which ants stop exploring and start committing — so the bright core is the part
-they are actually reading as a road.*
+they are actually reading as a road, and the halo around it is the same
+deposits fading off by radius.*
+
+Ants do not paint a stripe. A laden ant puts its gaster down every couple of
+centimetres, and each touch is a **packet** — a point whose intensity falls
+away exponentially with radius. The road in the picture is a few thousand of
+those overlapping, which is why it has a soft edge instead of a hard one.
 
 ## What emerges
 
-The trail runs in **two lanes**. Nobody wrote that; it falls out of outbound and
-returning ants biasing to opposite sides of a shared route.
+At **5 minutes** the colony is running **two routes** to the same food, and by
+**20 minutes** it is running one. Nothing chose between them. The choice
+function is nonlinear — `P(i) ∝ (k + C_i)ⁿ` with `n = 2` — so whichever route
+happens to be marginally better used gets marginally more traffic, which makes
+it marginally stronger, and the difference runs away with itself. That
+amplification is the entire model, and here it is doing its job in the gap
+between two pictures.
+
+![Five minutes: two routes](docs/images/02-forming.png)
+
+*Two roads from the nest to the source, of nearly equal strength.*
+
+Compare the twenty-minute frame at the top: one road, and no trace of the other.
+Set `n = 1` and this never happens — the colony splits evenly between routes
+forever, which is a control the test suite keeps.
+
+On the surviving road, traffic runs both ways at once.
 
 ![Traffic on the route](docs/images/05-traffic.png)
 
-*Outbound ants are pale, laden returners warm orange. Zoomed to 18 cm.*
+*Outbound ants are pale, laden returners warm orange, and the few red ones no
+longer have the energy to leave the nest. Zoomed to 18 cm.*
 
-Crowding at the nest is not modelled either — it is the same non-overlap rule
-that stops ants walking through walls, applied to a hundred ants arriving at one
-entrance.
+### A traffic jam that feeds itself
+
+This is the best thing in the simulation, and nothing in the model is aware of
+any part of it.
+
+The route has to squeeze past the end of the obstacle. Ants collide there,
+because ants are discs that cannot overlap — the same rule that stops them
+walking through walls. So a **bulb** of jammed ants forms at the corner.
+
+![The jam at the obstacle's end](docs/images/07-jam.png)
+
+*The obstacle's right-hand end. Note the ants pressed flat along its top edge:
+they hit the wall and slide. Zoomed to 13 cm.*
+
+Now the part that makes it interesting. Pheromone is laid **per distance
+walked**, and the distance counted is the step the ant *attempts* — an ant
+shoving against a crowd is still walking, gaster still touching down, even
+though the collision pass pushes it back. So the ants stuck in that queue go on
+marking while barely advancing.
+
+The jam therefore lays itself down more heavily than open trail. That stronger
+mark recruits more ants to precisely the spot they are already stuck at, which
+makes the queue longer, which lays more pheromone.
+
+Congestion and recruitment are two separate rules that were never written to
+know about each other, and here the geometry of a rectangle closes a feedback
+loop between them. Nobody scripted a bottleneck. There is no bottleneck in the
+model; there is a rectangle and a rule about discs not overlapping.
+
+(Path integration makes the opposite choice — it uses the ant's *actual* net
+displacement, because that one is about where the ant really is. Both are
+right, for different reasons.)
+
+The same collision rule produces the scrum at the source, where arriving ants
+compete for an edge that gets **shorter as the pile goes down** — a depleting
+source physically supports fewer feeding ants at once.
+
+![Competition at the source](docs/images/08-crowd.png)
+
+*Ants packed around the green source, laden ones already turning for home
+against the incoming stream. Zoomed to 13 cm.*
+
+Crowding at the nest is the same rule again, applied to a few hundred ants
+arriving at one entrance.
 
 ![The nest](docs/images/04-nest.png)
 
-*The nest disc, its arrival radius as a faint ring, and the resting cluster the
-collision rule packs around the entrance.*
+*The nest disc, its arrival radius as the faint ring, and the resting cluster
+the collision rule packs around the entrance. The gold disc inside is the food
+stored in the nest, drawn so its **area** is the quantity — it visibly empties
+rather than staying full until the instant it is gone. Food sources do the same
+thing, except that theirs is the real collision circle: a pile half eaten is
+half the area, offers a shorter edge, and so feeds fewer ants at once.*
 
 ## How it starts
 
@@ -55,29 +123,154 @@ two different environments.
 
 ![Five seconds: no pheromone at all](docs/images/00-nothing.png)
 
-At **40 seconds** the total is 753 and one faint line runs from the food to the
+At **40 seconds** the total is 783 and one faint line runs from the food to the
 nest. That is the first ants home, laying the first pheromone.
 
 ![Forty seconds: the first thread](docs/images/01-searching.png)
 
-By **5 minutes** that thread has become a road. The total is 33 687 and the
-population has grown from 150 to 263 — the first turn of the loop that drives
-everything after it: food comes in, workers are made, more workers thicken the
-trail.
-
-![Five minutes: a road](docs/images/02-forming.png)
+By **5 minutes** that thread has become a road — in fact two of them, which is
+the frame [above](#what-emerges). The total is 73 282 and the population has
+grown from 150 to 267: the first turn of the loop that drives everything after
+it, where food comes in, workers are made, and more workers thicken the trail.
 
 Everything in the pictures above grew from those first ants, by the ants' own
 rules. The colour scale is identical across every image, so a trail that looks
 stronger is stronger.
 
-And an hour in, the colony has grown into the trail it built — more ants because
-the trail works, a thicker trail because there are more ants:
+## How it ends
 
-![A thriving colony](docs/images/06-thriving.png)
+The source in this scenario is finite, and it runs out after **24 minutes**.
+What happens over the next six is the part worth watching.
 
-Every image above is generated by `make gallery` from a fixed seed, so the
+### The road outlives the source
+
+At the moment the source empties, the trail is at full strength — 113 163 units
+— and the colony is still pouring ants onto it.
+
+![The source has just run out](docs/images/09-abandoned.png)
+
+Following a trail and depositing on one are **separate rules**. An ant follows
+whatever pheromone is in front of it; an ant deposits only when it is carrying
+food. So the traffic continues and the renewal stops, and evaporation starts
+taking the road out from under the ants still walking it.
+
+**Two minutes later** the trail is down to 15 470 — 86% gone — and the ants are
+still packed along the line where it was, including a knot where the food used
+to be. Not one of them is orange, because there is nothing left to carry.
+
+![Two minutes on: walking a road that is dissolving](docs/images/10-fading.png)
+
+**Six minutes** and it is 283, from 113 163. The structure is simply gone, and
+with it every trace of where the food had been. The colony disperses back into
+the random walk it started with — and the red ants are the ones that no longer
+have the reserve to try again.
+
+![Six minutes on: nothing left](docs/images/11-collapsed.png)
+
+The population is *rising* through all three frames — 733, 761, 787 — because
+the colony is still converting its stored food into workers while its road
+dissolves. It is at its largest a few minutes after it has already lost.
+
+That is evaporation doing the job it exists for. It is the only mechanism by
+which a colony can forget, and without it these ants would walk to an empty
+patch of ground for ever.
+
+### And then the colony
+
+As the larder runs down, the
+ants' **urge to forage rises**: departures get more frequent and foragers push
+deeper into their own reserve before turning back. The nest empties itself out
+of doors — at one point **589 of 667 ants are outside at once** — they search,
+they find nothing, and they come home spent. By 60 minutes the population is **0**,
+the trail has evaporated to **nothing at all**, and there is no pheromone left
+anywhere to say a road was ever there.
+
+![After the source ran out](docs/images/06-aftermath.png)
+
+*The corpses are the pale discs, packed into a rosette around the nest entrance
+— they came home to die. Nothing removes them, because nothing in the colony
+knows how yet: necrophoresis is a later milestone, and until it exists the dead
+stay where they fell.*
+
+Every image here is generated by `make gallery` from a fixed seed, so the
 documentation cannot drift away from what the simulation does.
+
+## What watching it found
+
+The renderer was built early on the argument that **the model's failures are
+shaped like pictures** — that some of them would be obvious on screen and
+invisible in any statistic worth printing. That has now happened seven times.
+Ants pinned along all four arena walls. Ants stranded with a full crop and a
+home vector reading zero. A shell of resting ants at a radius nothing explained.
+Newborns filing out to the left in a line. A food source that stayed fat and
+green while the colony starved next to it.
+
+The two below are the best of them, and neither left a mark on any number the
+program was printing at the time.
+
+The best of them is this one. **The colony could starve with the door shut.**
+
+Setting out required energy. Energy came from the nest's stock. The stock came
+from ants setting out. When a source ran dry, those three closed into a ring:
+every forager came home, dropped below the departure threshold, could not be
+fed, and lay in the nest until it died of old age — without one of them ever
+going out to look. Measured at the time: **499 ants in the nest, 0 outbound,
+for the rest of the run.**
+
+Every aggregate being printed looked plausible. Population declining, stock
+zero, trail decaying. It reads as a colony starving. It was a colony *deadlocked*,
+and the tell was on screen, not in the numbers — a nest quietly filling up with
+ants that were not leaving.
+
+The fix is the same shape as the biology: a hungry colony forages *harder*.
+Foraging urgency rises as stock-per-worker falls, which raises the departure
+rate and lowers **both** energy thresholds — the one an ant needs to set out,
+and the one at which an ant already out gives up. Both, because moving only the
+first would push a starving ant out of the door and turn it round on the very
+next tick, which is the same deadlock standing somewhere else.
+
+No ant gained any knowledge it could not have. An ant is fed from the stock
+while it rests, and **being given nothing is a local fact about its own body**.
+Nothing here tells an ant about food it has not visited.
+
+Exhausted ants are now drawn **red**, which is the other half of the fix: a nest
+filling with spent ants had been indistinguishable on screen from a nest full of
+ants declining to leave — and was read as exactly that, by a human watching.
+That is the whole argument for the window in one sentence.
+
+### Ants that left the nest backwards
+
+The eighth one, found the same way: ants returning from the food would set off
+again and wander off with no apparent plan.
+
+They were not wandering. Departure never set a heading, so an ant left with the
+heading it arrived on — and a returning ant steers *at* the nest, so that
+heading pointed **inward**. Every departing ant walked out through the entrance
+and straight on, away from everything it knew. Measured over 613 departures on
+an established trail:
+
+| | before | after |
+|---|---|---|
+| left within 15° of the source | **0.0%** | **34.3%** |
+| left more than 150° away | 36.9% | 2.4% |
+
+Not one ant in 613 left towards the food it had just come back from. "No plan"
+was generous; it was the worst available direction, chosen systematically.
+
+Each ant now remembers one bearing and sets off along it, scattered by about
+29°. The bearing is read off the ant's **own path integrator** at the moment it
+leaves a source — the home vector points from ant to nest, so its reverse is the
+nest→food bearing as that ant believes it. Nothing global is consulted. Only a
+trip that actually brought food back overwrites it, and a newborn's is random,
+which is what keeps the naive ants exploring.
+
+Fixing it exposed a bug of a rarer kind. The scatter was drawn from the same RNG
+stream as the *decision* to leave — and an ant only leaves when that draw comes
+out below 0.005. The normal draw is Box-Muller, `z = √(−2 ln u₁)·cos(2πu₂)`, and
+it reuses that same `u₁`: conditioning on `u₁ < 0.005` forces `√(−2 ln u₁)` above
+3.2 every single time. Every ant left on a wild angle, deterministically. The
+draws look independent and are not — which is the one way a counter-based RNG
+can still catch you out.
 
 ## Running it
 
@@ -98,15 +291,24 @@ when a render comes back black.
 
 ### The window
 
+The window lists its own keys in the bottom-right corner, and opens at **4×**
+rather than real time — the things worth watching take minutes to an hour, so
+real time starts with several minutes of ants wandering in silence.
+
 | input | action |
 |---|---|
 | mouse wheel | zoom, anchored at the cursor |
 | right-drag | pan |
-| left-click | inspect an ant — state, energy, crop, age, distance home |
+| left-click | inspect an ant — state, energy, crop, age, distance home, and whether it has the reserve to set out |
 | `space` | pause |
 | `+` / `-` | time compression, halving and doubling |
 | `home` | frame the whole world |
+| `h` / `?` | hide or show the key legend |
 | `q` / `escape` | quit |
+
+Ants are coloured by what they are doing: pale outbound, warm orange carrying a
+full crop, **red when they no longer have the energy to leave the nest**, grey
+once dead.
 
 ## The design document
 
@@ -126,12 +328,21 @@ A few entry points:
 
 ## Where it is
 
-M0 (toolchain) and the bulk of M1 (the simulation) and M2 (the renderer and
-window) are done. Four of §3.8's acceptance rows pass — homing without a trail,
-colony extinction, and both halves of the nonlinearity control. The rows that
-need bridge scenarios — symmetry breaking, shortest-path selection,
-quality-driven selection, trail death — are the next work, together with the
-calibration pass they imply.
+M0 (toolchain), the bulk of M1 (the simulation), M2 (the renderer and window)
+and M2.1 (the corrections above) are done. Four of §3.8's acceptance rows pass —
+homing without a trail, colony extinction, and both halves of the nonlinearity
+control. The rows that need bridge scenarios — symmetry breaking, shortest-path
+selection, quality-driven selection, trail death — are the next work, together
+with the calibration pass they imply.
+
+M2.1 also reworked the pheromone model itself: deposition by **packet** laid
+per distance walked rather than a mark per tick, each packet an exponential
+falloff by radius; an explicit `*trail-decay-scale*` so evaporation happens on
+a timescale a watcher can actually see; and a saturation ceiling raised off the
+trail, because at the old value a working route ran nine times through it and
+every cell that mattered pinned to the same number — flattening the exponential
+deposits back out, and leaving both of an ant's antennae reading an identical
+value on the strongest part of the trail.
 
 The colony in the pictures grows to a **carrying capacity** rather than
 increasing without bound: workers burn energy to live, the colony's stock is the

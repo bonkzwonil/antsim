@@ -231,6 +231,163 @@ persistent, and nothing else in the system would notice."
     (is (= 0.0f0 (ant:field-at f 0.10f0 0.10f0)))
     (is (= 50.0f0 (ant:field-at f 0.02f0 0.02f0)))))
 
+;;; ------------------------------------------------------ trail packets
+
+(test packet-carries-its-whole-amount
+  "A packet spreads, and spreading must not lose anything.
+
+The deposit is normalised over the cells that actually receive it, so the
+total is the same wherever the packet lands — in open ground, against the
+arena edge, or beside a wall.  Without that, a trail would thin exactly
+where geometry funnels the traffic that makes it, which is the worst
+possible place for a silent leak."
+  (let ((open (ant:make-field :width 0.2f0 :height 0.2f0))
+        (edge (ant:make-field :width 0.2f0 :height 0.2f0))
+        (wall (ant:make-field :width 0.2f0 :height 0.2f0)))
+    (ant:field-rasterize-polygon! wall (square 0.10 0.0 0.20 0.20))
+    (ant:field-deposit-packet! open 0.10f0 0.10f0 60.0f0)
+    (ant:field-deposit-packet! edge 0.001f0 0.001f0 60.0f0)   ; a corner
+    (ant:field-deposit-packet! wall 0.09f0 0.10f0 60.0f0)     ; beside a wall
+    (ant:field-step! open 0.0f0)
+    (ant:field-step! edge 0.0f0)
+    (ant:field-step! wall 0.0f0)
+    (dolist (spec (list (list "open ground" open)
+                        (list "the arena corner" edge)
+                        (list "a wall" wall)))
+      (destructuring-bind (what f) spec
+        (is (< (abs (- (ant:field-total f) 60.0d0)) 0.05d0)
+            "a packet against ~a carries ~,2f of its 60 units"
+            what (ant:field-total f))))))
+
+(test packet-falls-off-with-radius
+  "The intensity of a packet decays with distance from its centre — that
+gradient is what the alpha channel draws and what the antennae read.  A
+flat disc would render as a hard-edged blob and would give the sensors
+nothing to climb."
+  (let ((f (ant:make-field :width 0.2f0 :height 0.2f0)))
+    (ant:field-deposit-packet! f 0.1f0 0.1f0 100.0f0
+                               :radius 0.02f0 :falloff 0.006f0)
+    (ant:field-step! f 0.0f0)
+    (let ((c0 (ant:field-at f 0.100f0 0.100f0))
+          (c1 (ant:field-at f 0.108f0 0.100f0))
+          (c2 (ant:field-at f 0.116f0 0.100f0))
+          (out (ant:field-at f 0.140f0 0.100f0)))
+      (is (> c0 c1) "centre ~,3f is not above 8 mm out ~,3f" c0 c1)
+      (is (> c1 c2) "8 mm ~,3f is not above 16 mm ~,3f" c1 c2)
+      (is (= 0.0f0 out) "the packet reaches past its radius: ~,3f" out))))
+
+(test packet-is-wider-than-one-cell
+  "The reason packets exist at all.  A single-cell mark is narrower than
+the span the antennae sample, so an ant could straddle its own trail with
+a sensor either side of it and read zero on both."
+  (let ((f (ant:make-field :width 0.2f0 :height 0.2f0)))
+    (ant:field-deposit-packet! f 0.1f0 0.1f0 100.0f0)
+    (ant:field-step! f 0.0f0)
+    (let ((wet 0))
+      (dotimes (j (ant:field-h f))
+        (dotimes (i (ant:field-w f))
+          (when (> (aref (ant:field-c f) (+ i (* j (ant:field-w f)))) 0.0f0)
+            (incf wet))))
+      (is (> wet 8) "a packet wetted only ~d cells" wet))))
+
+(test packets-commute-like-single-cell-deposits
+  "Same determinism requirement as FIELD-DEPOSIT!: the ant loop must stay
+order-independent (§4.2)."
+  (let ((a (ant:make-field :width 0.2f0 :height 0.2f0))
+        (b (ant:make-field :width 0.2f0 :height 0.2f0)))
+    (ant:field-deposit-packet! a 0.10f0 0.10f0 7.0f0)
+    (ant:field-deposit-packet! a 0.11f0 0.10f0 3.0f0)
+    (ant:field-deposit-packet! b 0.11f0 0.10f0 3.0f0)
+    (ant:field-deposit-packet! b 0.10f0 0.10f0 7.0f0)
+    (ant:field-step! a 0.0f0)
+    (ant:field-step! b 0.0f0)
+    (dotimes (i (length (ant:field-c a)))
+      (is (= (aref (ant:field-c a) i) (aref (ant:field-c b) i))))))
+
+(test one-ant-cannot-commit-the-colony
+  "*trail-deposit* documents its own regime: a single pass lays a few
+units, and a trail needs several passes before it outweighs *choice-k*.
+
+This is the invariant that a first attempt at time compression broke.
+Steady state is deposit-rate x tau, so scaling deposition by whatever
+divides tau looks like it preserves everything — but it also makes one
+ant's fresh mark that much louder, and at 30x it put a single pass at 43
+units against a k of 20.  One ant could commit the colony by walking past
+once.  The two properties cannot both survive a compressed tau, and this
+test says which one wins."
+  (let ((f (ant:make-field :width 0.2f0 :height 0.2f0)))
+    ;; exactly one packet: what one ant leaves in one touch
+    (ant:field-deposit-packet!
+     f 0.10f0 0.10f0
+     (* (ant:trail-deposit-rate)
+        (/ ant:*trail-packet-spacing*
+           (* ant:*walk-speed-laden* ant:*motion-dt*))))
+    (ant:field-step! f 0.0f0)
+    (is (< (ant:field-max f) (* 0.5f0 ant:*choice-k*))
+        "a single pass peaks at ~,1f against k = ~,1f — one ant is ~
+         committing the colony on its own"
+        (ant:field-max f) ant:*choice-k*)
+    (is (> (ant:field-max f) 0.2f0)
+        "a single pass left ~,2f, which is not 'a few units' either"
+        (ant:field-max f))))
+
+(test a-real-trail-mostly-does-not-clip
+  "Saturation must be the exception, not the rule.
+
+*trail-cap* is a saturation ceiling — a real trail is not unboundedly
+strong — but it destroys information wherever it binds.  Deposits are
+laid with an exponential falloff, and a clipped cell throws that shape
+away *after* the fact: both antennae read the ceiling, their difference
+is exactly zero, and the choice function has nothing to discriminate on
+precisely where the trail is strongest.
+
+The cap was 100 while a working route peaks near 300 and the nest
+entrance reaches about 890, so nearly every cell that mattered was
+pinned.  This test is what stops that returning, and it is measured on a
+real run rather than on synthetic traffic — the concentration a route
+reaches depends on how ants spread along and across it, which is exactly
+what a hand-made deposit pattern gets wrong."
+  (let* ((w (ant:make-world :width 0.6f0 :height 0.6f0 :capacity 4000))
+         (c (ant:add-colony w :nest-x 0.30f0 :nest-y 0.08f0
+                              :capacity 2000 :stock 500.0f0)))
+    (ant:add-food w 0.34f0 0.43f0 0.03f0 4000.0f0 :quality 1.0f0)
+    (ant:world-seed-population! w c 150)
+    (ant:world-run! w (* 1200 10))                  ; ten simulated minutes
+    (let ((f (ant:colony-field c))
+          (wet 0) (above-k 0) (clipped 0))
+      (dotimes (i (length (ant:field-c f)))
+        (let ((v (aref (ant:field-c f) i)))
+          (when (> v 0.5f0) (incf wet))
+          (when (> v ant:*choice-k*) (incf above-k))
+          (when (>= v (* 0.99f0 ant:*trail-cap*)) (incf clipped))))
+      (is (> above-k 50)
+          "only ~d cells got above k — no trail formed, so nothing about ~
+           clipping is being tested" above-k)
+      (is (< clipped (max 1 (floor above-k 10)))
+          "~d of ~d above-threshold cells are pinned at the cap; the ~
+           ceiling is flattening the trail" clipped above-k))))
+
+(test decay-scale-actually-speeds-forgetting
+  "And the compression has to do what it is for: a trail must visibly
+fade on a timescale a watcher can see."
+  (let ((remaining
+          (loop for scale in '(1.0f0 30.0f0)
+                collect (let ((ant:*trail-decay-scale* scale))
+                          (let ((f (ant:make-field :width 0.1f0
+                                                   :height 0.1f0)))
+                            (ant:field-deposit! f 0.05f0 0.05f0 100.0f0)
+                            (ant:field-step! f 0.0f0)
+                            ;; two minutes of simulated time
+                            (dotimes (i 120) (ant:field-step! f 1.0f0))
+                            (ant:field-at f 0.05f0 0.05f0))))))
+    (destructuring-bind (slow fast) remaining
+      (is (> slow 90.0f0)
+          "at life speed a trail should barely move in two minutes, ~
+           got ~,1f" slow)
+      (is (< fast 20.0f0)
+          "at 30x a trail should be mostly gone in two minutes, got ~,1f"
+          fast))))
+
 (test field-cannot-be-authored
   "§3.3: every field starts at zero and every unit in it was deposited by
 an ant that walked there.  There is deliberately no function that paints
