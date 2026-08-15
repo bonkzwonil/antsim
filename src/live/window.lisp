@@ -24,6 +24,13 @@
   "Time compression: simulated seconds per real second.  §4.3 wants 1x,
 100x and as-fast-as-possible from the same code, so this is a multiplier
 on the clock rather than a different loop.")
+(defvar *live-hud* nil)
+(defvar *live-selected* nil
+  "Slot of the inspected ant, or NIL.  Held with its id so the panel can
+tell 'the ant you clicked' from 'whatever now occupies that slot' — slots
+are recycled by the free list, and an ant dying under the cursor would
+otherwise silently swap the readout for a different individual.")
+(defvar *live-selected-id* 0)
 (defvar *live-dragging* nil)
 (defvar *live-last-x* 0.0f0)
 (defvar *live-last-y* 0.0f0)
@@ -128,18 +135,104 @@ that makes the state machine observable while it is being calibrated."
                  (dy (- (aref (bodies-y b) bi) wy))
                  (d2 (+ (* dx dx) (* dy dy))))
             (when (< d2 best-d2) (setf best-d2 d2 best i)))))
+      ;; The readout is drawn in the window (LIVE-DRAW-HUD), not printed:
+      ;; a terminal you cannot see while looking at the ants is no use.
+      ;; Clicking empty space clears the selection.
       (if (and best (< best-d2 (* 0.02f0 0.02f0)))
-          (format t "~&ant ~d  state ~a  energy ~,3f  crop ~,3f  age ~d  ~
-                     home (~,3f ~,3f)~%"
-                  (aref (ants-id a) best)
-                  (case (aref (ants-state a) best)
-                    (0 "in-nest") (1 "outbound") (2 "at-food")
-                    (3 "returning") (t "dead"))
-                  (aref (ants-energy a) best)
-                  (aref (ants-crop a) best)
-                  (aref (ants-age a) best)
-                  (aref (ants-hvx a) best) (aref (ants-hvy a) best))
-          (format t "~&(no ant near ~,3f ~,3f)~%" wx wy)))))
+          (setf *live-selected* best
+                *live-selected-id* (aref (ants-id a) best))
+          (setf *live-selected* nil)))))
+
+(defun ant-state-name (s)
+  (case s (0 "IN NEST") (1 "OUTBOUND") (2 "AT FOOD") (3 "RETURNING")
+        (t "DEAD")))
+
+(defun ant-state-rgb (s)
+  (case s
+    (1 (values 0.86f0 0.88f0 0.92f0))
+    (2 (values 0.95f0 0.90f0 0.70f0))
+    (3 (values 1.00f0 0.72f0 0.30f0))
+    (t (values 0.62f0 0.68f0 0.78f0))))
+
+(defun live-draw-hud (h w vw vh fps)
+  "Counters along the top, and the selected ant's state readout (§5.1)."
+  (declare (type hud h) (type world w))
+  (hud-reset h)
+  (let* ((c (first (world-colonies w)))
+         (s 2.0f0)
+         (line 14.0f0))
+    ;; --- counters -----------------------------------------------------
+    (hud-quad h 0 0 vw 26 0.03 0.035 0.04 0.72)
+    (let ((x 10.0f0))
+      (setf x (hud-text h x 8 (format nil "T ~,1FS" (world-seconds w))
+                        :scale s :r 0.66 :g 0.72 :b 0.80))
+      (setf x (hud-text h (+ x 14) 8
+                        (format nil "ANTS ~D" (if c (colony-population c) 0))
+                        :scale s))
+      (setf x (hud-text h (+ x 14) 8
+                        (format nil "STOCK ~D"
+                                (round (if c (colony-stock c) 0.0)))
+                        :scale s :r 0.72 :g 0.86 :b 0.60))
+      (setf x (hud-text h (+ x 14) 8
+                        (format nil "TRAIL ~D"
+                                (round (if c (field-total (colony-field c)) 0)))
+                        :scale s :r 1.00 :g 0.86 :b 0.42))
+      (setf x (hud-text h (+ x 14) 8
+                        (format nil "~,2FX~:[~; PAUSED~]" *live-speed*
+                                *live-paused*)
+                        :scale s :r 0.90 :g 0.76 :b 0.50))
+      (hud-text h (+ x 14) 8 (format nil "~D FPS" (round fps))
+                :scale s :r 0.50 :g 0.55 :b 0.62))
+
+    ;; --- selected ant -------------------------------------------------
+    (let ((a (world-ants w)) (b (world-bodies w)) (i *live-selected*))
+      (when (and i (ant-live-p a i)
+                 (= (aref (ants-id a) i) *live-selected-id*))
+        (let* ((px 10.0f0) (py 38.0f0)
+               (pw 210.0f0) (ph 128.0f0)
+               (st (aref (ants-state a) i))
+               (tx (+ px 10.0f0))
+               (ty (+ py 10.0f0)))
+          (hud-quad h px py pw ph 0.04 0.045 0.055 0.86)
+          ;; a state-coloured stripe down the left, so the mode reads
+          ;; before any of the text does
+          (multiple-value-bind (r g bl) (ant-state-rgb st)
+            (hud-quad h px py 4.0 ph r g bl 0.95))
+          (hud-text h tx ty (format nil "ANT ~D" (aref (ants-id a) i))
+                    :scale s)
+          (multiple-value-bind (r g bl) (ant-state-rgb st)
+            (hud-text h tx (+ ty line) (ant-state-name st)
+                      :scale s :r r :g g :b bl))
+          ;; energy and crop as bars: both are bounded, and a bar reads
+          ;; faster than a number for anything bounded
+          (hud-text h tx (+ ty (* 2 line)) "ENERGY" :scale s
+                    :r 0.60 :g 0.66 :b 0.74)
+          (hud-bar h (+ tx 62) (+ ty (* 2 line)) 118 8
+                   (aref (ants-energy a) i) 0.95 0.55 0.35)
+          (hud-text h tx (+ ty (* 3 line)) "CROP" :scale s
+                    :r 0.60 :g 0.66 :b 0.74)
+          (hud-bar h (+ tx 62) (+ ty (* 3 line)) 118 8
+                   (aref (ants-crop a) i) 0.55 0.80 0.95)
+          (hud-text h tx (+ ty (* 4 line))
+                    (format nil "AGE ~D" (aref (ants-age a) i))
+                    :scale s :r 0.60 :g 0.66 :b 0.74)
+          ;; the home vector, as its length -- the direction is better
+          ;; seen on the map than read as two numbers
+          (let ((hx (aref (ants-hvx a) i)) (hy (aref (ants-hvy a) i)))
+            (hud-text h tx (+ ty (* 5 line))
+                      (format nil "HOME ~,1FCM"
+                              (* 100.0 (sqrt (+ (* hx hx) (* hy hy)))))
+                      :scale s :r 0.60 :g 0.66 :b 0.74))
+          ;; and mark it on the map, or a panel about an ant you cannot
+          ;; find is only half an answer
+          (let ((bi (aref (ants-body a) i)))
+            (multiple-value-bind (sx sy)
+                (view-world->screen *live-view*
+                                    (aref (bodies-x b) bi)
+                                    (aref (bodies-y b) bi))
+              (hud-quad h (- sx 9) (- sy 1) 18 2 1.0 1.0 1.0 0.85)
+              (hud-quad h (- sx 1) (- sy 9) 2 18 1.0 1.0 1.0 0.85)))))))
+  (hud-draw h vw vh))
 
 (defun live-title (w fps)
   (let ((c (first (world-colonies w))))
@@ -186,6 +279,8 @@ Returns the world, so a session can keep poking at it afterwards."
                                                      (world-bodies w))))))
       (setf *live-world* w
             *live-renderer* r
+            *live-hud* (make-hud)
+            *live-selected* nil
             *live-view* (view-fit w :vw width :vh height)
             *live-paused* nil)
       (unwind-protect
@@ -219,14 +314,19 @@ Returns the world, so a session can keep poking at it afterwards."
                         (gl:clear-color 0.02 0.022 0.025 1.0)
                         (gl:clear :color-buffer-bit :depth-buffer-bit)
                         (draw-world r w *live-view*)
+                        (live-draw-hud *live-hud* w
+                                       (view-vw *live-view*)
+                                       (view-vh *live-view*)
+                                       fps)
                         (glfw:swap-buffers)
                         (glfw:poll-events)
                         (incf title-timer dt)
                         (when (> title-timer 0.25f0)
                           (setf title-timer 0.0f0)
                           (glfw:set-window-title (live-title w fps))))))
+        (when *live-hud* (destroy-hud *live-hud*))
         (destroy-renderer r)
-        (setf *live-world* nil *live-renderer* nil))))
+        (setf *live-world* nil *live-renderer* nil *live-hud* nil))))
   w)
 
 (defun live-demo (&key (width 1100) (height 800))

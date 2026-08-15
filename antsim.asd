@@ -48,7 +48,8 @@
                (:file "smoke")
                (:file "view")
                (:file "shaders")
-               (:file "renderer"))
+               (:file "renderer")
+               (:file "hud"))
   :in-order-to ((test-op (test-op "antsim/render-test"))))
 
 (defsystem "antsim/live"
