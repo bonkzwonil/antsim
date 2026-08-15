@@ -176,7 +176,7 @@ that makes the state machine observable while it is being calibrated."
       (setf x (hud-text h (+ x 14) 8
                         (format nil "TRAIL ~D"
                                 (round (if c (field-total (colony-field c)) 0)))
-                        :scale s :r 1.00 :g 0.86 :b 0.42))
+                        :scale s :r 0.55 :g 0.86 :b 1.00))
       (setf x (hud-text h (+ x 14) 8
                         (format nil "~,2FX~:[~; PAUSED~]" *live-speed*
                                 *live-paused*)
@@ -333,10 +333,15 @@ Returns the world, so a session can keep poking at it afterwards."
   "The scenario the M2 gallery renders, but watchable.  A single colony,
 one food source, one obstacle — enough to see a trail form, thicken and
 carry traffic."
-  (let* ((w (make-world :width 0.6f0 :height 0.6f0 :capacity 4000))
-         (c (add-colony w :name "home" :nest-x 0.30f0 :nest-y 0.10f0
-                          :nest-r 0.02f0 :capacity 1500 :stock 400.0f0)))
-    (add-food w 0.30f0 0.28f0 0.03f0 5000.0f0 :quality 1.0f0)
-    (add-obstacle w '(0.10 0.16 0.22 0.16 0.22 0.19 0.10 0.19))
-    (world-seed-population! w c 120)
+  ;; Nest low and centre, food across most of the arena — 35 cm, about 90
+  ;; body lengths, so the trail is a road rather than a smudge and the
+  ;; obstacle is a real detour rather than a bump.  Deliberately further
+  ;; than the first version: at 18 cm the outbound and returning traffic
+  ;; overlapped into one blob and there was nothing to watch.
+  (let* ((w (make-world :width 0.6f0 :height 0.6f0 :capacity 8000))
+         (c (add-colony w :name "home" :nest-x 0.30f0 :nest-y 0.08f0
+                          :nest-r 0.02f0 :capacity 3000 :stock 500.0f0)))
+    (add-food w 0.34f0 0.43f0 0.03f0 500000.0f0 :quality 1.0f0)
+    (add-obstacle w '(0.12 0.20 0.30 0.20 0.30 0.235 0.12 0.235))
+    (world-seed-population! w c 150)
     (run-live w :width width :height height)))

@@ -156,6 +156,16 @@ returners read warm, which is what makes a working trail legible as
                   (+ (float k 1.0f0)
                      (if (= k +body-ant+) (aref state-of i) 0.0f0)))
             (incf count)))))
+    ;; One extra instance per colony for the arrival-radius ring.  Drawing
+    ;; only — it is not in the body table, because it blocks nothing.
+    (dolist (c (world-colonies w))
+      (when (< count (renderer-body-capacity r))
+        (let ((o (* count 4)))
+          (setf (cffi:mem-aref ptr :float (+ o 0)) (colony-nest-x c)
+                (cffi:mem-aref ptr :float (+ o 1)) (colony-nest-y c)
+                (cffi:mem-aref ptr :float (+ o 2)) *nest-arrival-radius*
+                (cffi:mem-aref ptr :float (+ o 3)) 4.0f0)
+          (incf count))))
     count))
 
 ;;; --------------------------------------------------------------------

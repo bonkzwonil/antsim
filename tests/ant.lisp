@@ -195,6 +195,45 @@ nothing."
           "home vector wound up to ~,3f while the ant walked on the spot"
           (aref (ant:ants-hvx a) 0)))))
 
+(test displaced-nest-ant-still-knows-the-way-home
+  "Regression.  A resting ant is a blocking body, so the crowd at a busy
+nest shoves it, and path integration records the drift.  Departure used
+to zero the home vector — which told the ant that wherever it had been
+pushed to *was* home.  It would forage, return to that false origin, read
+a home vector of zero and sit there with a full crop it could not unload.
+
+Reported from the live window, where a stuck ant is obvious.  No
+aggregate — population, stock, trail total — showed anything wrong."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 32))
+         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :nest-r 0.02f0
+                              :stock 1.0f6))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w)))
+    (ant:world-seed-population! w c 1)
+    (let ((bi (aref (ant:ants-body a) 0)))
+      ;; shove the resting ant well clear of the nest, exactly as a crowd
+      ;; would, and let path integration see the displacement
+      (setf (aref (ant:ants-state a) 0) ant:+ant-in-nest+
+            (aref (ant:ants-hvx a) 0) 0.0f0
+            (aref (ant:ants-hvy a) 0) 0.0f0)
+      (setf (aref (ant:bodies-x b) bi) 0.20f0
+            (aref (ant:bodies-y b) bi) 0.20f0)
+      ;; force it out of the nest
+      (let ((ant:*leave-probability* 1.0f0))
+        (setf (aref (ant:ants-energy a) 0) 1.0f0)
+        (ant:world-step! w))
+      (is (= ant:+ant-outbound+ (aref (ant:ants-state a) 0)))
+      ;; it must believe home is back at the nest, not under its feet
+      (let* ((hx (aref (ant:ants-hvx a) 0))
+             (hy (aref (ant:ants-hvy a) 0))
+             (len (sqrt (+ (* hx hx) (* hy hy)))))
+        (is (> len 0.2f0)
+            "home vector is ~,3f m long; the ant thinks it is standing on ~
+             the nest while 0.42 m away from it" len)
+        ;; and it must point the right way
+        (is (> hx 0.0f0) "home vector points away from the nest in x")
+        (is (> hy 0.0f0) "home vector points away from the nest in y")))))
+
 ;;; ------------------------------------------------------ determinism
 
 (test a-run-is-reproducible
