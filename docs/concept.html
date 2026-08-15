@@ -1,0 +1,2086 @@
+<title>antsim</title>
+
+<style>
+  /* ---------------------------------------------------------------- tokens
+     Light is the base. Dark redefines tokens only, twice: once behind
+     prefers-color-scheme for the un-stamped default, once behind the
+     explicit stamp so the toggle wins in both directions. No component
+     ever declares a colour outside this block. */
+  :root {
+    --ground:      #E9EBE4;
+    --surface:     #F3F5EE;
+    --surface-2:   #DEE2D6;
+    --ink:         #1B201B;
+    --ink-2:       #4C5349;
+    --ink-3:       #78806F;
+    --rule:        #C7CDBE;
+    --rule-soft:   #D8DDCF;
+    --accent:      #8A5606;
+    --accent-2:    #C08322;
+    --teal:        #1D6259;
+    --crimson:     #99303C;
+    --code-bg:     #E2E6D9;
+    --shadow:      0 1px 2px rgba(27,32,27,.06), 0 8px 24px -16px rgba(27,32,27,.28);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:    #12150F;
+      --surface:   #191D16;
+      --surface-2: #232820;
+      --ink:       #DEE3D6;
+      --ink-2:     #A5AC9C;
+      --ink-3:     #79806F;
+      --rule:      #2E342A;
+      --rule-soft: #232820;
+      --accent:    #E0A23A;
+      --accent-2:  #F2C775;
+      --teal:      #52B7A8;
+      --crimson:   #E2727E;
+      --code-bg:   #1D211A;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:    #12150F;
+    --surface:   #191D16;
+    --surface-2: #232820;
+    --ink:       #DEE3D6;
+    --ink-2:     #A5AC9C;
+    --ink-3:     #79806F;
+    --rule:      #2E342A;
+    --rule-soft: #232820;
+    --accent:    #E0A23A;
+    --accent-2:  #F2C775;
+    --teal:      #52B7A8;
+    --crimson:   #E2727E;
+    --code-bg:   #1D211A;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+
+  /* ------------------------------------------------------------------ type */
+  :root {
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua",
+             "URW Palladio L", Georgia, serif;
+    --mono:  ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code",
+             Menlo, Consolas, monospace;
+    --measure: 68ch;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------------------------------------------------------------- layout */
+  .shell { max-width: 1240px; margin: 0 auto; padding: 0 28px 96px; }
+  .cols { display: block; }
+  @media (min-width: 1080px) {
+    .cols {
+      display: grid;
+      grid-template-columns: 208px minmax(0, 1fr);
+      gap: 56px;
+      align-items: start;
+    }
+  }
+  main { min-width: 0; }
+
+  /* --------------------------------------------------------------- masthead */
+  .masthead { padding: 52px 0 0; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 18px;
+  }
+  .wordmark {
+    font-family: var(--serif);
+    font-size: clamp(52px, 9vw, 84px);
+    line-height: .95;
+    font-weight: 400;
+    letter-spacing: -.02em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: clamp(19px, 2.2vw, 22px);
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 58ch;
+    margin: 20px 0 0;
+    text-wrap: pretty;
+  }
+
+  /* ------------------------------------------------------------ the banner */
+  .banner {
+    margin: 40px 0 0;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--ground);
+    box-shadow: var(--shadow);
+  }
+  #pher { display: block; width: 100%; height: 210px; }
+  .banner-note {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    align-items: baseline;
+    padding: 11px 16px;
+    border-top: 1px solid var(--rule);
+    background: var(--surface);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  .banner-note strong { color: var(--ink-2); font-weight: 400; }
+  .swatch {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: -1px;
+  }
+
+  /* ------------------------------------------------------------- status bar */
+  .status {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 40px 0 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .status div { flex: 1 1 170px; padding: 14px 20px 14px 0; }
+  .status dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 5px;
+  }
+  .status dd { margin: 0; font-size: 15.5px; color: var(--ink); }
+
+  /* ------------------------------------------------------------------- toc */
+  .toc { display: none; }
+  @media (min-width: 1080px) {
+    .toc { display: block; position: sticky; top: 40px; padding-top: 8px; }
+  }
+  .toc p {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 14px;
+  }
+  .toc ol {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .toc a {
+    display: flex;
+    gap: 10px;
+    padding: 3px 0 3px 12px;
+    margin-left: -14px;
+    font-size: 14px;
+    line-height: 1.35;
+    color: var(--ink-3);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: color .15s, border-color .15s;
+  }
+  .toc a span { font-family: var(--mono); font-size: 11px; padding-top: 2px; }
+  .toc a:hover { color: var(--ink); }
+  .toc a.on { color: var(--ink); border-left-color: var(--accent); }
+
+  /* -------------------------------------------------------------- sections */
+  section { padding-top: 68px; scroll-margin-top: 24px; }
+  h2 {
+    font-size: clamp(27px, 3.6vw, 34px);
+    line-height: 1.15;
+    font-weight: 400;
+    letter-spacing: -.015em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: .1em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 10px;
+  }
+  h3 {
+    font-size: 20px; font-weight: 600; line-height: 1.3;
+    margin: 42px 0 2px; text-wrap: balance;
+  }
+  h4 {
+    font-family: var(--mono);
+    font-size: 12px; font-weight: 500;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 32px 0 0;
+  }
+  p, ul, ol { max-width: var(--measure); }
+  p { margin: 14px 0 0; }
+  ul, ol { margin: 14px 0 0; padding-left: 22px; }
+  li { margin: 7px 0 0; }
+  li > ul { margin-top: 6px; }
+  strong { font-weight: 600; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+  code {
+    font-family: var(--mono);
+    font-size: .855em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+  .lead { font-size: 19px; line-height: 1.55; color: var(--ink-2); max-width: 60ch; }
+
+  /* ------------------------------------------------------------ code / pre */
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.62;
+    background: var(--code-bg);
+    color: var(--ink);
+    border: 1px solid var(--rule-soft);
+    border-radius: 3px;
+    padding: 18px 20px;
+    margin: 22px 0 0;
+    overflow-x: auto;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  pre .c { color: var(--ink-3); }
+  pre .k { color: var(--accent); }
+  pre .s { color: var(--teal); }
+
+  /* ---------------------------------------------------------------- tables */
+  .tw { overflow-x: auto; margin: 24px 0 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 480px; font-size: 15px; }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding-bottom: 10px;
+  }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding: 0 18px 9px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: bottom;
+  }
+  td {
+    padding: 11px 18px 11px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  td:last-child, th:last-child { padding-right: 0; }
+  tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
+  .num-col {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  td code { font-size: 12.5px; }
+  .sign-a { color: var(--accent); }
+  .sign-r { color: var(--teal); }
+  .sign-t { color: var(--crimson); }
+
+  /* the cut table's verdict column carries the meaning, so it gets weight */
+  .verdict-in    { font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+                   text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+  .verdict-later { font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+                   text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+  tr.rule-row td { border-bottom: 1px solid var(--rule); padding: 0; height: 0; }
+
+  .chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 2px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.hi  { color: var(--crimson); }
+  .chip.mid { color: var(--accent); }
+  .chip.lo  { color: var(--teal); }
+  .chip.post { color: var(--ink-3); }
+
+  /* --------------------------------------------------------------- figures */
+  figure { margin: 30px 0 0; padding: 0; }
+  .fig-frame {
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--surface);
+    padding: 22px;
+    overflow-x: auto;
+  }
+  figcaption {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink-3);
+    margin-top: 11px;
+    max-width: 62ch;
+  }
+  figcaption b { color: var(--ink-2); font-weight: 600; }
+  svg { display: block; max-width: 100%; height: auto; }
+  .svg-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .06em;
+    fill: var(--ink-3);
+  }
+  .svg-node {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    fill: var(--ink);
+  }
+  .svg-edge { font-family: var(--mono); font-size: 9.5px; fill: var(--ink-3); }
+
+  /* ----------------------------------------------------------------- notes */
+  .callout {
+    border-left: 2px solid var(--accent);
+    background: var(--surface);
+    padding: 16px 20px;
+    margin: 26px 0 0;
+    max-width: var(--measure);
+    border-radius: 0 3px 3px 0;
+  }
+  .callout p { margin-top: 0; }
+  .callout p + p { margin-top: 12px; }
+  .callout.warn { border-left-color: var(--crimson); }
+  .callout.rule { border-left-color: var(--teal); }
+  .callout .banner-rule {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--ink);
+    letter-spacing: .01em;
+  }
+
+  .decisions { list-style: none; padding: 0; max-width: var(--measure); }
+  .decisions li {
+    padding: 15px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    margin: 0;
+  }
+  .decisions li:first-child { border-top: 1px solid var(--rule); }
+  .decisions b { display: block; margin-bottom: 3px; }
+  .pick { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .alt { color: var(--ink-3); font-size: 15px; }
+
+  .ms { list-style: none; padding: 0; max-width: var(--measure); }
+  .ms li {
+    display: grid;
+    grid-template-columns: 60px minmax(0,1fr);
+    gap: 18px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule-soft);
+    margin: 0;
+  }
+  .ms li:first-child { border-top: 1px solid var(--rule); }
+  .ms .tag { font-family: var(--mono); font-size: 13px; color: var(--accent); padding-top: 2px; }
+  .ms .tag.far { color: var(--ink-3); }
+  .ms b { display: block; margin-bottom: 3px; }
+
+  footer {
+    margin-top: 80px;
+    padding-top: 26px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--ink-3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 28px;
+  }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">Concept · rev. 2 · 15 August 2026 · not yet implemented</p>
+    <h1 class="wordmark">antsim</h1>
+    <p class="standfirst">
+      A top-down, GL-rendered colony of individual ants — foraging, recruiting,
+      breeding, tiring and starving — where every behaviour on screen is a
+      mechanism someone measured in a real ant.
+    </p>
+
+    <div class="banner">
+      <canvas id="pher" aria-label="A live simulation: ants leaving a nest at left, finding food at right, and laying a pheromone trail that consolidates between the two."></canvas>
+      <div class="banner-note">
+        <span><strong>Live, not a loop.</strong> Correlated random walk → path integration home → trail deposit → evaporation.</span>
+        <span><span class="swatch" style="background: var(--ink-2)"></span>outbound</span>
+        <span><span class="swatch" style="background: var(--accent)"></span>laden, depositing</span>
+        <span><span class="swatch" style="background: var(--teal)"></span>food</span>
+      </div>
+    </div>
+
+    <dl class="status">
+      <div><dt>Stack</dt><dd>SBCL 2.6.4 · OpenGL 4.5 core</dd></div>
+      <div><dt>Verified on</dt><dd>RTX 3070, driver 580.159.04</dd></div>
+      <div><dt>Reference species</dt><dd><em>Lasius niger</em></dd></div>
+      <div><dt>Repository</dt><dd>bonk/antsim · branch <code>concept</code></dd></div>
+    </dl>
+  </header>
+
+  <div class="cols">
+
+    <nav class="toc" aria-label="Contents">
+      <p>Contents</p>
+      <ol>
+        <li><a href="#s1"><span>01</span> What this is</a></li>
+        <li><a href="#s2"><span>02</span> Principles</a></li>
+        <li><a href="#s3"><span>03</span> The science model</a></li>
+        <li><a href="#s4"><span>04</span> Architecture</a></li>
+        <li><a href="#s5"><span>05</span> Rendering</a></li>
+        <li><a href="#s6"><span>06</span> Scenario file</a></li>
+        <li><a href="#s7"><span>07</span> Milestones</a></li>
+        <li><a href="#s8"><span>08</span> Risks</a></li>
+        <li><a href="#s9"><span>09</span> Decisions</a></li>
+        <li><a href="#s10"><span>10</span> Sources</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- ============================================================ 1 -->
+      <section id="s1">
+        <h2><span class="num">01</span>What this is, and what it is not</h2>
+        <p class="lead">
+          A toy that tells the truth. The point is that you can watch it, enjoy it,
+          and what you are enjoying is a real mechanism.
+        </p>
+        <p>
+          When a hundred ants converge on one of two identical paths for no reason
+          at all, that is not a scripted effect. It is Deneubourg's symmetry
+          breaking falling out of a nonlinear choice function — and the simulation
+          reproduces the published experiment as a test.
+        </p>
+        <p>
+          Colonies grow from a starting population and can starve to nothing; ants
+          that die stay where they fell; trails are only ever laid by ants that
+          walked there. <strong>§3.9 is the section to read second</strong> — it is
+          the explicit cut between the model described here and the much smaller
+          thing M1 actually builds, because a design this deep ships nothing
+          without one.
+        </p>
+
+        <h3>It is not waldameisen</h3>
+        <p>
+          waldameisen is a 3D thermophysical model of a <em>Formica polyctena</em>
+          mound: soil columns, microbial heat, a volume raymarcher, and no ants in
+          the simulation at all until M3. antsim is the opposite half of the same
+          world — the ants, outdoors, in 2D, individually visible, doing things you
+          can watch on a timescale of seconds.
+        </p>
+        <p>
+          What antsim takes from waldameisen is <strong>the engineering, not the
+          model</strong>.
+        </p>
+
+        <div class="tw">
+          <table>
+            <caption>Carried over</caption>
+            <thead>
+              <tr><th style="width:38%">Component</th><th>Why it comes across intact</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SBCL + ASDF, dependency-free numeric core</td><td>The core stays portable and fast; dependencies live in the render and scenario layers only.</td></tr>
+              <tr><td><code>render/preload.lisp</code> — the libGL trap fix</td><td>Verbatim. Without it every frame comes back black on this machine. See §5.4.</td></tr>
+              <tr><td>Headless EGL 4.5 context → FBO → PNG</td><td>Headless is the <em>test</em> path, not a fallback.</td></tr>
+              <tr><td>Dependency-free PNG writer</td><td>Verbatim, along with its CRC32 / Adler32 test vectors.</td></tr>
+              <tr><td>Counter-based RNG keyed on <code>(id, tick)</code></td><td>Determinism by construction. <code>*random-state*</code> stays banned.</td></tr>
+              <tr><td>Persistent worker pool, fixed partitions</td><td>Never <code>make-thread</code> per tick; fixed ranges keep threaded runs bit-exact.</td></tr>
+              <tr><td>Struct-of-arrays, specialized <code>simple-array</code></td><td>Zero allocation in the tick loop, asserted by a test.</td></tr>
+              <tr><td>Persistent-mapped SSBO for instances</td><td>The instancing path is already proven at 3 000 instances.</td></tr>
+              <tr><td>Makefile with <code>guix shell nvda@580</code> targets</td><td>GPU work needs the driver from a guix profile.</td></tr>
+              <tr><td>“Nothing is silently tuned”</td><td>Every unmeasured parameter is a <code>defparameter</code> whose docstring names what it was fitted against.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          What antsim does <em>not</em> take: the thermal core, the voxel grid, the
+          raymarcher, the soil and weather model. Different problem.
+        </p>
+      </section>
+
+      <!-- ============================================================ 2 -->
+      <section id="s2">
+        <h2><span class="num">02</span>Design principles</h2>
+        <ol>
+          <li><strong>Every behaviour cites a mechanism.</strong> If a rule cannot be
+            traced to a published observation or a named model, it is either a
+            calibration parameter — documented as such — or it does not go in.</li>
+          <li><strong>Emergence is not scripted.</strong> Trail selection,
+            shortest-path finding, division of labour and the death of a trail after
+            food runs out are all <em>consequences</em>, never special-cased. Each has
+            an acceptance test that reproduces the published experiment.</li>
+          <li><strong>Determinism is a feature.</strong> Same scenario, same seed ⇒
+            byte-identical run, single-threaded or threaded. This is what makes the
+            acceptance tests meaningful and bug reports reproducible.</li>
+          <li><strong>Headless first.</strong> The sim must run and render without a
+            window, so it can be tested in CI and so results can be inspected as
+            images rather than described.</li>
+          <li><strong>Legibility is a design goal.</strong> An observer should be able
+            to tell what an ant is doing by looking at it.</li>
+          <li><strong>Simple first, refined later — and the simplification must still
+            be science.</strong> The model below is deep enough to never ship. So M1
+            takes the <em>smallest</em> set of mechanisms that can still produce the
+            §3.8 phenomena, and every one of them is a sound abstraction of something
+            measured rather than a placeholder to be thrown away. §3.9 draws that line
+            explicitly. Nothing deferred is deleted; it is scheduled.</li>
+        </ol>
+      </section>
+
+      <!-- ============================================================ 3 -->
+      <section id="s3">
+        <h2><span class="num">03</span>The science model</h2>
+
+        <h3>3.1 &ensp;Species, and the scale it sets</h3>
+        <p>
+          The choice of reference species is not cosmetic — it determines whether
+          pheromone trails are even the dominant navigation mode.
+        </p>
+        <div class="callout">
+          <p><strong>Calibrate on <em>Lasius niger</em>, the black garden
+            ant</strong>, with species as a swappable parameter set.</p>
+          <p><em>L. niger</em> is a mass recruiter with the best quantitative
+            literature on trail laying and following anywhere in myrmecology.
+            <em>Formica polyctena</em> — the waldameisen species — is the sentimental
+            choice, but wood ants are comparatively <em>poor</em> trail followers:
+            they navigate primarily by visual landmark memory and individual route
+            fidelity, and their “trunk trails” are largely cleared physical paths
+            rather than chemical gradients. Building the pheromone core around
+            Formica would mean building it around the species that uses it least.</p>
+        </div>
+
+        <div class="tw">
+          <table>
+            <caption>The scale that follows</caption>
+            <thead><tr><th style="width:34%">Quantity</th><th style="width:26%">Value</th><th>Note</th></tr></thead>
+            <tbody>
+              <tr><td>Worker body length</td><td class="num-col">~4 mm</td><td><em>L. niger</em> minor worker</td></tr>
+              <tr><td>Walking speed</td><td class="num-col">~1–3 cm/s</td><td>Approximate — calibration parameter, §10</td></tr>
+              <tr><td>Arena</td><td class="num-col">1–2 m square</td><td>≈ 250–500 body lengths</td></tr>
+              <tr><td>Pheromone cell</td><td class="num-col">5 mm</td><td>≈ one body length</td></tr>
+              <tr><td>Grid</td><td class="num-col">400 × 400</td><td>160 k cells per field — trivial</td></tr>
+              <tr><td>Motion tick</td><td class="num-col">50 ms (20 Hz)</td><td>Ant moves ≤ 1.5 mm/tick — sub-cell</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Sub-cell movement per tick matters: it means an ant cannot tunnel through
+          a one-cell obstacle wall, and pheromone deposition never skips cells.
+        </p>
+
+        <h3>3.2 &ensp;Individual movement — the correlated random walk</h3>
+        <p>
+          An ant with no information does not walk randomly in the naive sense. It
+          performs a <strong>correlated random walk</strong>: each step's heading is
+          the previous heading plus a turn drawn from a peaked, zero-centred
+          distribution, so the path is locally straight and globally diffusive.
+        </p>
+        <ul>
+          <li>Turn angles from a <strong>wrapped Cauchy</strong> distribution.
+            Real ant search paths sit well toward the ballistic end, which is why
+            searching ants cover ground rather than spinning in place.</li>
+          <li><strong>Thigmotaxis</strong> — ants preferentially follow edges and
+            walls. Real, and it makes obstacles interesting rather than merely
+            blocking: a wall becomes a route.</li>
+          <li><strong>U-turns.</strong> An ant that loses a trail performs a
+            characteristic U-turn and casts about, rather than continuing — a large
+            part of why trails are stable.</li>
+          <li><strong>Search spirals.</strong> An ant homing on a path-integration
+            vector that does not find the nest switches to an expanding spiral.</li>
+        </ul>
+
+        <h3>3.3 &ensp;Pheromones — the field, and the nonlinearity that matters</h3>
+        <p>
+          Pheromones are <strong>scalar fields on a grid</strong>, one per chemical,
+          each with its own decay constant and deposition rule.
+        </p>
+
+        <div class="callout rule">
+          <p><strong>Trails are never authored.</strong> A scenario configures a
+            field's τ, diffusion and ceiling — it never contains a trail. Every field
+            starts at zero and every milligram of pheromone in a run was deposited by
+            an ant that walked there. There is no path data in the scenario format
+            and no way to add any; a trail that appears is a claim the model is
+            making, and seeding one would make every result meaningless.</p>
+        </div>
+
+        <div class="tw">
+          <table>
+            <caption>Fields — M1 builds only the first</caption>
+            <thead><tr><th style="width:24%">Field</th><th style="width:14%">Sign</th><th>Role</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Trail</strong> (recruitment)</td><td class="sign-a">attractant</td><td>Deposited mainly on the <em>return</em> trip by a laden ant. The core positive feedback.</td></tr>
+              <tr><td><strong>Nest / home-range</strong></td><td class="sign-a">attractant</td><td>A colony-specific area mark — a “near home” signal that is not the trail.</td></tr>
+              <tr><td><strong>No-entry</strong></td><td class="sign-r">repellent</td><td>Marks branches that led nowhere. Documented in pharaoh ants, and genuinely different from merely letting the attractant decay — the colony visibly prunes dead ends.</td></tr>
+              <tr><td><strong>Alarm</strong></td><td class="sign-t">transient</td><td>Fast-diffusing, fast-decaying; released on disturbance, triggering aggregation then dispersal. The interaction hook: poke the nest, watch it erupt.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Dynamics, per field, on the 1 Hz pheromone clock</h4>
+<pre><code>C ← C · exp(−Δt/τ)     <span class="c">; evaporation — the essential negative feedback</span>
+C ← C + D·∇²C          <span class="c">; optional diffusion (alarm needs it, trail barely)</span>
+C ← C + deposits       <span class="c">; folded in from the per-ant deposit buffer</span>
+C ← min(C, C_max)      <span class="c">; saturation — a real trail is not unbounded</span></code></pre>
+
+        <div class="callout">
+          <p>Evaporation is not a detail. <strong>It is the mechanism that lets a
+            colony forget.</strong> Without it, a trail to an exhausted food source
+            persists forever and the colony never re-explores.</p>
+        </div>
+
+        <h4>The choice function is the heart of the model</h4>
+        <p>
+          When an ant samples concentrations ahead — left, centre, right, via its
+          antennae — it does not pick the maximum. It picks probabilistically, with
+          a <strong>nonlinear</strong> response, in the form Deneubourg established
+          for the Argentine ant:
+        </p>
+<pre><code>P(i) = (k + C_i)^n / Σ_j (k + C_j)^n          n ≈ 2,  k ≈ 20</code></pre>
+
+        <figure>
+          <div class="fig-frame">
+            <svg id="choice-plot" viewBox="0 0 660 300" role="img"
+                 aria-label="Probability of choosing branch A against A's share of the pheromone present. With n=1 the response is a straight diagonal; with n=2 it is an S-curve that amplifies small differences; with n=4 it is nearly a step function."></svg>
+          </div>
+          <figcaption>
+            <b>Why n &gt; 1 is the whole thing.</b> With <code>n = 1</code> the colony
+            splits in proportion to what it finds and never commits — a good control
+            test to keep. With <code>n = 2</code> a small concentration difference
+            produces a large probability difference, and that amplification is what
+            turns a random fluctuation into a trail. <code>k</code> sets how much
+            pheromone must be present before the ants care at all; below it the
+            choice is near-uniform and the ants explore.
+          </figcaption>
+        </figure>
+
+        <h4>Deposition is modulated, not constant</h4>
+        <p>
+          Beckers, Deneubourg &amp; Goss showed that <em>L. niger</em> lays trail as a
+          function of food quality: richer sucrose means more frequent and larger
+          deposits, and <strong>below a threshold concentration the ants stop laying
+          trail altogether</strong> while still feeding. That threshold is a
+          beautiful emergent switch — poor food gets eaten but never recruited to —
+          and it is the reason food sources here carry a <em>quality</em> as well as
+          an <em>amount</em>.
+        </p>
+
+        <h3>3.4 &ensp;Navigation — three systems, not one</h3>
+        <ol>
+          <li><strong>Path integration — the home vector.</strong> The ant
+            continuously integrates its own displacement into a running vector
+            pointing back at the nest. It means a forager that finds food in virgin
+            territory with no trail <em>can still get home</em> — and then lay the
+            first trail on the way. Without it, the first trail can never exist and
+            the whole recruitment cascade has no seed. PI accumulates error, so long
+            trips come home imprecisely.</li>
+          <li><strong>Trail following.</strong> §3.3, used when concentration exceeds
+            the detection threshold.</li>
+          <li><strong>Landmark / route memory.</strong> The <em>Formica</em> mode.
+            A stub in the first version, expanded later.</li>
+        </ol>
+        <p>
+          Weighting these is where personality comes from. An ant with a strong home
+          vector and a weak trail ignores the trail — which is what prevents a colony
+          from being trivially hijacked by a single strong trail.
+        </p>
+
+        <h3>3.5 &ensp;Internal state and the foraging cycle</h3>
+
+        <div class="tw">
+          <table>
+            <caption>Per-ant state — all of it struct-of-arrays</caption>
+            <thead><tr><th style="width:24%">Field</th><th style="width:12%">Type</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td class="num-col">x, y</td><td class="num-col">f32</td><td>Position, metres</td></tr>
+              <tr><td class="num-col">heading</td><td class="num-col">f32</td><td>Radians</td></tr>
+              <tr><td class="num-col">speed</td><td class="num-col">f32</td><td>m/s, modulated by state and energy</td></tr>
+              <tr><td class="num-col">state</td><td class="num-col">u8</td><td>Behavioural mode, below</td></tr>
+              <tr><td class="num-col">crop</td><td class="num-col">f32</td><td>Food carried in the social stomach, 0…1</td></tr>
+              <tr><td class="num-col">energy</td><td class="num-col">f32</td><td>Personal reserve, 0…1 — <strong>the return-urge driver</strong></td></tr>
+              <tr><td class="num-col">age</td><td class="num-col">u32</td><td>Ticks alive; drives mortality, later polyethism</td></tr>
+              <tr><td class="num-col">hv_x, hv_y</td><td class="num-col">f32</td><td>Home vector (path integration)</td></tr>
+              <tr><td class="num-col">thr_*</td><td class="num-col">f32</td><td>Response thresholds, §3.6 — post-M1</td></tr>
+              <tr><td class="num-col">colony</td><td class="num-col">u8</td><td>Colony membership — indexes its trail field (§3.12)</td></tr>
+              <tr><td class="num-col">body</td><td class="num-col">u32</td><td>Index into the body table (§3.11)</td></tr>
+              <tr><td class="num-col">gait</td><td class="num-col">f32</td><td>Stride phase, for rendering (§5.2)</td></tr>
+              <tr><td class="num-col">id</td><td class="num-col">u32</td><td>RNG key, stable for life</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <figure>
+          <div class="fig-frame">
+            <svg viewBox="0 0 860 310" role="img"
+                 aria-label="State machine with four live states. IN-NEST leads to OUTBOUND when the ant leaves; OUTBOUND to AT-FOOD when food is reached, or straight to RETURNING when energy runs low; AT-FOOD to RETURNING when the crop is full or the food is poor; RETURNING back to IN-NEST to unload. Any state can lead to DEAD when energy reaches zero or from age.">
+              <defs>
+                <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+                </marker>
+              </defs>
+              <g color="var(--ink-3)" fill="none" stroke="currentColor" stroke-width="1.3">
+                <path d="M126,104 C126,70 190,79 282,79" marker-end="url(#ar2)"/>
+                <path d="M426,79 L516,79" marker-end="url(#ar2)"/>
+                <path d="M586,104 L586,182" marker-end="url(#ar2)"/>
+                <path d="M516,213 L210,213 C168,213 126,198 126,166" marker-end="url(#ar2)"/>
+                <path d="M400,104 C400,152 442,198 516,207" marker-end="url(#ar2)" stroke-dasharray="3 3"/>
+              </g>
+              <g color="var(--crimson)" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3">
+                <path d="M300,213 C230,226 186,240 178,250" marker-end="url(#ar2)"/>
+              </g>
+
+              <g>
+                <rect x="60" y="104" width="132" height="58" rx="3" fill="var(--surface-2)" stroke="var(--rule)"/>
+                <text class="svg-node" x="126" y="129" text-anchor="middle">IN-NEST</text>
+                <text class="svg-edge" x="126" y="146" text-anchor="middle">unload · rest</text>
+
+                <rect x="286" y="54" width="140" height="50" rx="3" fill="var(--surface-2)" stroke="var(--accent)"/>
+                <text class="svg-node" x="356" y="76" text-anchor="middle">OUTBOUND</text>
+                <text class="svg-edge" x="356" y="92" text-anchor="middle">one rule, two worlds</text>
+
+                <rect x="520" y="54" width="132" height="50" rx="3" fill="var(--surface-2)" stroke="var(--rule)"/>
+                <text class="svg-node" x="586" y="84" text-anchor="middle">AT-FOOD</text>
+
+                <rect x="520" y="186" width="132" height="54" rx="3" fill="var(--surface-2)" stroke="var(--rule)"/>
+                <text class="svg-node" x="586" y="218" text-anchor="middle">RETURNING</text>
+
+                <rect x="68" y="232" width="110" height="44" rx="3" fill="none" stroke="var(--crimson)"/>
+                <text class="svg-node" x="123" y="259" text-anchor="middle" fill="var(--crimson)">DEAD</text>
+              </g>
+
+              <g>
+                <text class="svg-edge" x="196" y="66">leaves</text>
+                <text class="svg-edge" x="471" y="70" text-anchor="middle">food reached</text>
+                <text class="svg-edge" x="596" y="148">crop full · food poor</text>
+                <text class="svg-edge" x="360" y="231" text-anchor="middle">unload — crop into nest stock</text>
+                <text class="svg-edge" x="432" y="152">energy low</text>
+                <text class="svg-edge" x="250" y="266" fill="var(--crimson)">energy → 0 · age</text>
+              </g>
+            </svg>
+          </div>
+          <figcaption>
+            <b>There is deliberately no <code>TRAIL-FOLLOWING</code> state</b>, and
+            that simplification makes the model <em>more</em> correct rather than
+            less. An outbound ant always runs the same rule: sample three headings,
+            weight by the choice function, pick. Where there is no pheromone every
+            weight is <code>k</code><sup>n</sup> and the rule degenerates
+            <em>exactly</em> into the correlated random walk of §3.2. Exploring and
+            trail-following are not two behaviours an ant switches between — they are
+            the same behaviour in two environments, which is what the Deneubourg
+            formulation actually says. One state, one rule, no switching logic to get
+            wrong.
+          </figcaption>
+        </figure>
+
+        <p>
+          Transitions are driven by <strong>continuous quantities, not timers</strong>.
+          As energy falls the return urge rises — a weight on the home-vector
+          direction that grows as the reserve drops, so a tired ant curves homeward
+          rather than flipping a switch.
+        </p>
+        <p>
+          <strong>Crop and energy are deliberately separate fields.</strong> Crop is
+          <em>social</em> food carried for the colony; energy is the ant's own
+          reserve. An ant can starve while carrying a full crop, which is real, and
+          is the whole reason the two are not one number.
+        </p>
+
+        <h3>3.6 &ensp;Task allocation, age, and the lazy half of the colony</h3>
+        <p>
+          <strong>Response thresholds.</strong> Each ant has a threshold θ per task
+          and engages when the stimulus S exceeds it, with probability
+          <code>S²/(S² + θ²)</code>. Thresholds adapt: performing a task lowers its
+          threshold, not performing it raises it. From identical ants with slightly
+          different thresholds, <strong>specialization emerges</strong>, and the
+          colony reallocates automatically when you remove half the foragers. No
+          central control anywhere.
+        </p>
+        <p>
+          <strong>Age polyethism.</strong> Young workers work inside; older workers
+          forage. Foraging is the most dangerous task and is performed by the ants
+          with the least remaining life — the colony spends its most expendable
+          members.
+        </p>
+        <p>
+          <strong>Inactivity is real.</strong> A large fraction of workers are doing
+          nothing at any moment, and “inactive” behaves like a genuine specialization
+          rather than sampling error. A nest with visibly idle ants is more correct,
+          not less.
+        </p>
+
+        <h3>3.7 &ensp;Food sources and obstacles</h3>
+        <p><strong>Food</strong> carries two independent quantities, plus one option:</p>
+        <ul>
+          <li><strong>amount</strong> — depletes on consumption. At zero the source is
+            gone and the trail to it dies by evaporation alone, with no special case
+            anywhere.</li>
+          <li><strong>quality</strong> — sets crop fill rate <em>and</em> trail
+            deposition rate, so a rich source out-recruits a poor one even at equal
+            distance.</li>
+          <li><strong>renewal rate</strong> — aphid honeydew regenerates, a seed pile
+            does not.</li>
+        </ul>
+        <p>
+          <strong>Obstacles are polygons.</strong> They are static, authored, and
+          often want to be straight, long or awkwardly shaped — a wall, a leaf, the
+          rim of a dish — and a polygon says all of that exactly, where a chain of
+          discs only approximates it and costs more to test. Three representations:
+          the polygon for rendering, its edge list for collision, and a rasterized
+          blocked-cell mask for pheromone blocking and broad-phase rejection.
+        </p>
+        <p>
+          Food is worth one note: <strong>a food source is a blocking body, not a
+          marker you walk through.</strong> Ants must physically reach its edge, so
+          they crowd and queue at a rich source. Crowding is a real constraint on
+          foraging rate, and getting it free from the collision rule is better than
+          modelling it.
+        </p>
+
+        <h3>3.8 &ensp;What must emerge — the acceptance list</h3>
+        <p>
+          These are not features. They are consequences, and each one is a test.
+          <strong>This table is the project's definition of “working”.</strong>
+        </p>
+        <div class="tw">
+          <table>
+            <caption>Acceptance</caption>
+            <thead><tr><th style="width:24%">Phenomenon</th><th style="width:26%">Source experiment</th><th>What the test asserts</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Symmetry breaking</strong></td><td>Deneubourg binary bridge, two equal paths</td><td>≥80% of traffic on one arm within N minutes; <em>which</em> arm varies with seed</td></tr>
+              <tr><td><strong>Shortest path selection</strong></td><td>Goss double bridge, unequal arms</td><td>The short arm wins, reliably, across seeds</td></tr>
+              <tr><td><strong>No selection without nonlinearity</strong></td><td>Set <code>n = 1</code></td><td>Traffic stays ~50/50 — proves the choice function is doing the work</td></tr>
+              <tr><td><strong>Quality-driven selection</strong></td><td>Beckers, two sources differing in quality</td><td>The richer source wins even at equal distance</td></tr>
+              <tr><td><strong>No trail below threshold</strong></td><td>Beckers, dilute sucrose</td><td>Poor food is exploited but not recruited to; no trail forms</td></tr>
+              <tr><td><strong>Trail death</strong></td><td>Deplete the source</td><td>Trail decays to background on the evaporation timescale; colony re-explores</td></tr>
+              <tr><td><strong>Task reallocation</strong></td><td>Remove 50% of foragers</td><td>Forager count recovers from the nurse pool with no global controller</td></tr>
+              <tr><td><strong>Homing without trail</strong></td><td>Single ant, virgin arena</td><td>Path integration returns it to the nest within its error radius</td></tr>
+              <tr><td><strong>Colony extinction</strong></td><td>Nest placed out of foraging range</td><td>Stock falls, births stop, population decays to zero — starvation is a legitimate outcome, not a bug (§3.10)</td></tr>
+              <tr><td><strong>Bodies never interpenetrate</strong></td><td>Dense crowd at one small source</td><td>No two blocking bodies overlap after the relaxation pass, at any density (§3.11)</td></tr>
+              <tr><td><strong>Competition</strong> <span class="chip post">post-M1</span></td><td>Two colonies, one contested source</td><td>The nearer colony wins; raising ε visibly degrades both colonies' trail fidelity (§3.12)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>3.9 &ensp;The M1 cut — what actually gets built first</h3>
+        <p class="lead">
+          Sections 3.1–3.8 describe the model. They do not describe M1.
+        </p>
+        <p>
+          Left unchecked the science above is a multi-year project, so M1 takes the
+          smallest subset that can still produce §3.8, and each item in that subset
+          is a defensible abstraction rather than a stub. <strong>The test of a good
+          cut is that nothing removed is load-bearing for an acceptance row.</strong>
+          Everything below passes that test.
+        </p>
+        <div class="tw">
+          <table>
+            <caption>The cut</caption>
+            <thead><tr><th style="width:26%">Mechanism</th><th style="width:9%">M1</th><th>The simplification, and why it is still science</th></tr></thead>
+            <tbody>
+              <tr><td>Correlated random walk</td><td class="verdict-in">in</td><td>Gaussian turn instead of wrapped Cauchy. Same locally-straight, globally-diffusive path; the tail shape is a refinement, not a mechanism.</td></tr>
+              <tr><td>Trail pheromone field</td><td class="verdict-in">in</td><td>One field. Decay, deposit, ceiling. No diffusion — real trail pheromone barely diffuses on the timescale that matters.</td></tr>
+              <tr><td>Deneubourg choice function</td><td class="verdict-in">in</td><td>Unchanged. The one thing that must be exactly right, because §3.8 is a test <em>of</em> it.</td></tr>
+              <tr><td>Path integration</td><td class="verdict-in">in</td><td>Home vector with proportional noise. The mechanism that seeds the first trail; without it nothing else happens.</td></tr>
+              <tr><td>Foraging state machine</td><td class="verdict-in">in</td><td>Four states. No <code>TRAIL-FOLLOWING</code>, no <code>SEARCHING</code>.</td></tr>
+              <tr><td>Energy + crop</td><td class="verdict-in">in</td><td>Two scalars, linear drain and fill. Return urge as a weight on the home vector.</td></tr>
+              <tr><td>Food amount + quality</td><td class="verdict-in">in</td><td>Both load-bearing for two acceptance rows.</td></tr>
+              <tr><td>Obstacles</td><td class="verdict-in">in</td><td>Polygons, with a rasterized mask for broad-phase and pheromone blocking.</td></tr>
+              <tr><td>Disc bodies + non-overlap</td><td class="verdict-in">in</td><td>§3.11. One rule, Jacobi resolution. Cheaper than the alternatives <em>and</em> the thing that makes crowding emerge.</td></tr>
+              <tr><td>Colony growth and death</td><td class="verdict-in">in</td><td>§3.10 — a birth rate, not a brood model. Extinction falls out of the same line.</td></tr>
+              <tr><td>Corpses as bodies</td><td class="verdict-in">in</td><td>Dying leaves a blocking disc. Passive — costs one body kind, and makes the missing behaviour visible.</td></tr>
+              <tr><td>Per-colony fields + ε</td><td class="verdict-in">in</td><td>§3.12. M1 runs one colony, so ε never fires — but the indirection is free now and unaddable later.</td></tr>
+              <tr class="rule-row"><td colspan="3"></td></tr>
+              <tr><td>No-entry, alarm, nest-marking</td><td class="verdict-later">later</td><td>Three of the four fields. None is needed for §3.8; each is a self-contained addition to an existing abstraction.</td></tr>
+              <tr><td>Response thresholds, polyethism</td><td class="verdict-later">later</td><td>M1 has one task. Age still accumulates and still kills — it just does not yet steer behaviour.</td></tr>
+              <tr><td>Trophallaxis between ants</td><td class="verdict-later">later</td><td>M1 unloads the crop straight into nest stock. The only mechanism needing pairwise coupling, and skipping it keeps the M1 tick embarrassingly parallel.</td></tr>
+              <tr><td>Landmark / route memory</td><td class="verdict-later">later</td><td>The <em>Formica</em> mode; irrelevant to a mass recruiter.</td></tr>
+              <tr><td>U-turns, spirals, thigmotaxis</td><td class="verdict-later">later</td><td>Real, measured, and all three make trails <em>more</em> stable — so M1 passing without them is the stronger result.</td></tr>
+              <tr><td>Necrophoresis</td><td class="verdict-later">later</td><td>Corpses accumulate in M1 and nothing clears them. A behaviour, not a mechanism.</td></tr>
+              <tr><td>Multiple colonies</td><td class="verdict-later">later</td><td>The data model supports them from day one; M1 runs one.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout">
+          <p>The rule for adding anything back: <strong>it must be addable without
+            changing the tick's shape.</strong> Every deferred item above is either a
+            new field on an existing grid, a new scalar on an existing ant, or a new
+            state on an existing machine. None requires rewriting M1.</p>
+        </div>
+
+        <h3>3.10 &ensp;Colony growth — a population, not a headcount</h3>
+        <p>
+          A run <strong>starts with a configured population and grows from
+          there.</strong> The starting count is a free parameter — a couple of
+          founders, or a mature colony of a few thousand, whichever the scenario
+          wants. What changes is that it is a <em>starting</em> count rather than
+          <em>the</em> count: births and deaths run from tick one, so the population
+          is a state variable, not a setting.
+        </p>
+        <ul>
+          <li><strong>Capacity</strong> is a configured upper bound on the ant table —
+            a memory budget, not a target. The table is allocated once at capacity and
+            a liveness mask says which slots are alive, so growth is free: birth claims
+            a slot from the free list, death returns it. This is exactly why the table
+            was fixed-capacity to begin with.</li>
+          <li><strong>Birth rate</strong> is a function of nest food stock, scaled by a
+            brood efficiency and clamped at capacity. A colony that forages well grows;
+            one that cannot feed itself shrinks. That coupling is the point, and it is
+            one line of arithmetic.</li>
+          <li><strong>Death</strong> comes from energy reaching zero and from age, with
+            a per-tick hazard rising with age. Foragers die away from home; that is
+            what foragers do.</li>
+          <li><strong>No brood stages</strong> in M1 — a single <code>stock →
+            workers</code> rate is the sound simple abstraction. Brood stages add a
+            lag, and the lag is the only thing they add until nursing exists to
+            interact with it.</li>
+        </ul>
+        <div class="callout warn">
+          <p><strong>A colony can also shrink to nothing.</strong> If stock runs out,
+            births stop while deaths do not, and the nest depopulates and dies. This
+            needs no special case — it is the growth rule with the sign reversed — but
+            it does need stating, because it is the first genuinely unforgiving outcome
+            in the model. A nest placed too far from food does not forage
+            inefficiently; it starves.</p>
+        </div>
+        <p>
+          The visible consequence is that “400 ants” becomes where a scenario
+          <em>starts</em>, never where it stays. How many ants a run ends with is a
+          result.
+        </p>
+
+        <h3>3.11 &ensp;Bodies — a disc for every ant, and one non-overlap rule</h3>
+        <p>
+          <strong>An ant is a disc.</strong> Not for rendering — §5.2 draws the full
+          articulated vector model — but for physics. A real ant is a head, a
+          mesosoma, a gaster and six splayed legs, and colliding that shape against a
+          few thousand copies of itself every tick is a problem with no payoff: at
+          the scale anything is decided, an ant is a blob that takes up room. One
+          position, one radius, done. <strong>The visual model and the collision
+          model are deliberately different, and only the cheap one runs in the tick
+          loop.</strong>
+        </p>
+
+        <div class="callout rule">
+          <p class="banner-rule">No two blocking bodies may overlap — disc against
+            disc, and no disc inside a polygon.</p>
+        </div>
+
+        <p>
+          That single constraint is doing a surprising amount of work. It gives ants
+          collision with each other, collision with terrain, crowding and queueing at
+          food, physical congestion on a busy trail, and corpses that genuinely get
+          in the way — all from one mechanism with one code path, rather than four
+          subsystems that interact badly at the seams.
+        </p>
+
+        <figure>
+          <div class="fig-frame">
+            <svg viewBox="0 0 660 250" role="img"
+                 aria-label="Left: two overlapping discs, each pushed back along the line joining their centres by half the overlap. Right: a disc penetrating a polygon edge, pushed out along the edge normal from the closest point.">
+              <defs>
+                <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+                </marker>
+              </defs>
+
+              <!-- left: disc vs disc -->
+              <g>
+                <circle cx="148" cy="120" r="46" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/>
+                <circle cx="216" cy="120" r="46" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/>
+                <circle cx="136" cy="120" r="46" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="4 3"/>
+                <circle cx="228" cy="120" r="46" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="4 3"/>
+                <line x1="148" y1="120" x2="216" y2="120" stroke="var(--rule)" stroke-width="1"/>
+                <circle cx="148" cy="120" r="2.5" fill="var(--ink-2)"/>
+                <circle cx="216" cy="120" r="2.5" fill="var(--ink-2)"/>
+                <g color="var(--accent)" stroke="currentColor" stroke-width="1.6" fill="none">
+                  <path d="M146,146 L134,146" marker-end="url(#ar3)"/>
+                  <path d="M218,146 L230,146" marker-end="url(#ar3)"/>
+                </g>
+                <text class="svg-label" x="182" y="196" text-anchor="middle">½ overlap each, along the centre line</text>
+                <text class="svg-label" x="182" y="40" text-anchor="middle" fill="var(--ink-2)">DISC vs DISC</text>
+                <text class="svg-edge" x="182" y="56" text-anchor="middle">overlap is a subtraction</text>
+              </g>
+
+              <line x1="330" y1="30" x2="330" y2="220" stroke="var(--rule)" stroke-width="1"/>
+
+              <!-- right: disc vs polygon -->
+              <g>
+                <path d="M386,150 L610,150 L610,206 L386,206 Z" fill="var(--surface-2)" stroke="var(--ink-3)" stroke-width="1.4"/>
+                <circle cx="482" cy="138" r="36" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/>
+                <circle cx="482" cy="114" r="36" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="4 3"/>
+                <circle cx="482" cy="138" r="2.5" fill="var(--ink-2)"/>
+                <circle cx="482" cy="150" r="3" fill="var(--teal)"/>
+                <g color="var(--accent)" stroke="currentColor" stroke-width="1.6" fill="none">
+                  <path d="M534,140 L534,116" marker-end="url(#ar3)"/>
+                </g>
+                <text class="svg-label" x="546" y="134">along the normal</text>
+                <text class="svg-label" x="498" y="172" fill="var(--teal)">closest point on edge</text>
+                <text class="svg-label" x="498" y="40" text-anchor="middle" fill="var(--ink-2)">DISC vs POLYGON</text>
+                <text class="svg-edge" x="498" y="56" text-anchor="middle">obstacles stay exact</text>
+              </g>
+            </svg>
+          </div>
+          <figcaption>
+            <b>Resolution must be Jacobi, not Gauss-Seidel.</b> The obvious
+            implementation — walk the pairs and push each apart as you find it — is
+            order-dependent, which would break determinism and make threaded runs
+            differ from single-threaded ones. So overlaps accumulate a correction
+            <em>vector per body</em> into a preallocated buffer, applied after the
+            sweep. Every body sees the same world, corrections commute, and two or
+            three relaxation iterations settle a dense crowd.
+          </figcaption>
+        </figure>
+
+        <p>
+          A box would work too, and is the obvious alternative — but a disc earns its
+          place for one technical reason and one aesthetic one. <strong>Technically,
+          an ant is always turning</strong>, and a disc is the only shape whose
+          collision test does not care: an axis-aligned box has to be re-fitted every
+          time the heading changes (and is badly wrong at 45°), and an oriented box
+          needs a separating-axis test and a contact normal that flips between edges
+          and corners. A disc's overlap is a subtraction and its normal is the centre
+          difference, at any heading, for free. <strong>Aesthetically</strong>, discs
+          simply look better in motion: contacts resolve along the line of centres, so
+          crowded ants jostle and slide past each other smoothly, where boxes catch on
+          their corners and produce a visible grid-lock jitter that reads as broken.
+        </p>
+
+        <div class="tw">
+          <table>
+            <caption>What blocks what</caption>
+            <thead><tr><th style="width:20%">Body</th><th style="width:16%">Shape</th><th style="width:12%">Moves</th><th style="width:12%">Blocks</th><th>Note</th></tr></thead>
+            <tbody>
+              <tr><td>ant</td><td class="num-col">disc</td><td>yes</td><td>yes</td><td>radius ≈ half a body length</td></tr>
+              <tr><td>corpse</td><td class="num-col">disc</td><td>pushable</td><td>yes</td><td>inert; clutters, and can occlude a trail</td></tr>
+              <tr><td>food source</td><td class="num-col">disc</td><td>no</td><td>yes</td><td>ants reach its edge and queue — crowding for free</td></tr>
+              <tr><td>obstacle</td><td class="num-col"><strong>polygon</strong></td><td>no</td><td>yes</td><td>static, exact, authored</td></tr>
+              <tr><td>nest entrance</td><td class="num-col">disc</td><td>no</td><td><strong>no</strong></td><td>a trigger, not a wall — ants must get in</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The nest entrance is the deliberate exception. Making it blocking would
+          seal the colony in; making it a narrow gap between two blocking discs is a
+          tempting refinement — real nest entrances create measurable traffic jams —
+          but that is a later scenario, not an M1 mechanism.
+        </p>
+
+        <h4>Corpses stay</h4>
+        <p>
+          An ant that dies becomes a corpse body where it fell, and it stays there.
+          Nothing removes it, because removal is a <em>behaviour</em> the colony does
+          not have yet — real ants perform necrophoresis, carrying corpses to refuse
+          middens, and it is one of the best-documented stereotyped behaviours there
+          is (Wilson's oleic-acid experiment: daub a live ant with the corpse cue and
+          its nestmates carry it out anyway, while it struggles). Until that exists,
+          corpses accumulate, clutter the approaches to a busy nest, and physically
+          deform trail routes. That is not a bug to hide — it is an honest statement
+          of what the colony cannot yet do, and it makes adding necrophoresis a
+          change with a visible payoff rather than invisible bookkeeping.
+        </p>
+
+        <h4>A contact is a channel — much later</h4>
+        <p>
+          The relaxation pass already knows, every tick, exactly which ants are
+          touching which. That list is the natural substrate for everything ants do
+          to each other <em>by touch</em>: trophallaxis, antennation, tactile
+          recruitment signals, nestmate recognition, alarm transmitted by contact
+          rather than by air. All of it is real, all of it is contact-mediated in the
+          literature, and none of it needs new spatial machinery — it needs a rule
+          applied to a list the physics is computing anyway.
+        </p>
+        <p>
+          This is a <strong>long way out — after M6</strong>, and is noted only
+          because it argues for keeping the contact list rather than discarding it
+          once positions are corrected. Cheap to retain, expensive to reconstruct.
+        </p>
+
+        <h3>3.12 &ensp;More than one colony — competition and trail corruption</h3>
+        <p>
+          The ant record already carries a colony id, so multiple colonies cost the
+          model almost nothing structurally — but one decision has to be made now,
+          because it is not retrofittable.
+        </p>
+        <p>
+          <strong>Trail fields are per colony, not global.</strong> Each colony
+          deposits into its own field. An ant weights its own colony's field fully
+          and every foreign field by an <strong>eavesdropping coefficient</strong>
+          ε ∈ [0,1]:
+        </p>
+<pre><code>C_effective(cell) = C_own(cell) + ε · Σ C_foreign(cell)</code></pre>
+        <div class="tw">
+          <table>
+            <thead><tr><th style="width:14%">ε</th><th>Behaviour</th></tr></thead>
+            <tbody>
+              <tr><td class="num-col">0</td><td>Colonies are blind to each other and merely compete for food.</td></tr>
+              <tr><td class="num-col">small</td><td>The realistic setting. Intercolony trail eavesdropping is documented; ants do read foreign trails, imperfectly.</td></tr>
+              <tr><td class="num-col">1</td><td>One shared field — the colonies' trails genuinely corrupt one another: a strong foreign trail pulls your foragers toward a source someone else is already draining.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A single coefficient spans the whole range from independence to mutual
+          interference, which is the cheapest possible way to make competition
+          interesting. Memory is one field per colony — 640 kB at 400², so a handful
+          of colonies is nothing.
+        </p>
+        <p>
+          Competition then has three channels, none special-cased: the food itself
+          depletes and is shared; the trail fields interfere through ε; and the
+          bodies physically block each other at a contested source (§3.11). Fighting
+          is <em>not</em> in the model and will not be until there is a reason for it
+          beyond spectacle.
+        </p>
+        <div class="callout">
+          <p><strong>M1 runs one colony.</strong> All of the above is a constraint on
+            the data model, not M1 scope — the point of settling it now is that
+            per-colony fields and a colony id cost nothing on day one and cannot be
+            added later without touching every line that reads a pheromone.</p>
+        </div>
+      </section>
+
+      <!-- ============================================================ 4 -->
+      <section id="s4">
+        <h2><span class="num">04</span>Architecture</h2>
+
+        <h3>4.1 &ensp;Systems</h3>
+        <p>
+          Mirrors waldameisen's split, for the same reason: the numeric core stays
+          dependency-free and therefore fast, portable and CI-friendly, while
+          everything needing a foreign library lives behind its own system.
+        </p>
+<pre><code><span class="k">antsim.asd</span>
+  antsim               <span class="c">; core sim.  deps: none (sb-thread only)</span>
+  antsim/scenario      <span class="c">; JSON loading.  deps: com.inuoe.jzon</span>
+  antsim/render        <span class="c">; GL 2D renderer.  deps: cffi, cl-opengl</span>
+  antsim/live          <span class="c">; window + camera + input.  deps: cl-glfw3     [M2]</span>
+  antsim/test          <span class="c">; FiveAM core suite</span>
+  antsim/render-test   <span class="c">; FiveAM render suite (GL tests skip without a driver)</span>
+
+<span class="k">antsim-gl-preload.asd</span>
+  antsim-gl-preload    <span class="c">; the libGL preload, via :defsystem-depends-on</span></code></pre>
+        <div class="callout warn">
+          <p>The preload <strong>must</strong> be a separate primary system pulled in
+            with <code>:defsystem-depends-on</code> — that is the only ASDF hook that
+            runs before ordinary dependencies, and it has to run before
+            <code>cl-opengl</code> binds a libGL. Not stylistic. See §5.4.</p>
+        </div>
+<pre><code>src/package.lisp        <span class="c">; the ANTSIM package (nickname AS)</span>
+src/util.lisp           <span class="c">; specialized array types + constructors   [from wa]</span>
+src/rng.lisp            <span class="c">; counter-based RNG keyed on (id, tick)    [from wa]</span>
+src/pool.lisp           <span class="c">; persistent worker pool                   [from wa]</span>
+src/world/grid.lisp     <span class="c">; pheromone fields, decay, deposit buffers</span>
+src/world/geom.lisp     <span class="c">; polygons, rasterization, spatial hash</span>
+src/world/bodies.lisp   <span class="c">; the disc table, broad phase, Jacobi relaxation</span>
+src/world/scene.lisp    <span class="c">; nests, food sources, obstacles</span>
+src/ant/state.lisp      <span class="c">; the SoA ant table, birth/death, free list</span>
+src/ant/sense.lisp      <span class="c">; antennal sampling, the choice function</span>
+src/ant/navigate.lisp   <span class="c">; path integration, trail following</span>
+src/ant/behave.lisp     <span class="c">; the state machine, energy, crop</span>
+src/ant/colony.lisp     <span class="c">; stock, birth rate, mortality, extinction</span>
+src/ant/step.lisp       <span class="c">; the per-tick integrator — the hot loop</span>
+src/sim.lisp            <span class="c">; multi-rate clocks, the top-level tick</span>
+src/scenario/json.lisp  <span class="c">; scenario load / validate</span>
+src/render/preload.lisp <span class="c">; driver libGL, before cl-opengl            [from wa]</span>
+src/render/png.lisp     <span class="c">; dependency-free PNG writer                [from wa]</span>
+src/render/egl.lisp     <span class="c">; headless GL 4.5 core context              [from wa]</span>
+src/render/shaders.lisp <span class="c">; GLSL: field, geometry, instanced ants</span>
+src/render/antmesh.lisp <span class="c">; the 2D ant vector model + gait rig</span>
+src/render/view.lisp    <span class="c">; ortho camera, layers, the frame</span>
+src/render/capture.lisp <span class="c">; headless frame → PNG, contact sheets</span>
+src/live/window.lisp    <span class="c">; GLFW window, zoom/pan, pause, inspect</span>
+tests/                  <span class="c">; FiveAM suites, incl. the §3.8 acceptance tests</span>
+scenarios/*.json        <span class="c">; the scenes, including the bridge experiments</span></code></pre>
+
+        <h3>4.2 &ensp;Data model</h3>
+        <p>
+          <strong>Struct-of-arrays throughout, allocated once.</strong> Ants are a
+          fixed-capacity table with a free list; birth and death flip a liveness
+          bitmask rather than resizing anything (§3.10 — this is precisely why the
+          table is fixed-capacity). Pheromones are <code>(simple-array single-float
+          (*))</code> per field <em>per colony</em>, indexed <code>y*w + x</code>. No
+          consing in the tick loop, ever.
+        </p>
+        <p>
+          <strong>Bodies</strong> are a second SoA table — <code>x</code>,
+          <code>y</code>, <code>r</code>, <code>kind</code>, <code>flags</code> — that
+          ants index into rather than duplicate, so collision sweeps one contiguous
+          array covering ants, corpses and food alike. A corpse is a body whose ant
+          slot has been freed.
+        </p>
+        <p>
+          <strong>Every write to shared state goes through a buffer.</strong> There
+          are two, and they exist for the same reason:
+        </p>
+        <div class="tw">
+          <table>
+            <thead><tr><th style="width:32%">Buffer</th><th style="width:30%">Written by</th><th>Folded in on</th></tr></thead>
+            <tbody>
+              <tr><td>pheromone deposit, per field</td><td>any ant laying trail</td><td>the pheromone clock</td></tr>
+              <tr><td>position correction, per body</td><td>any overlapping pair</td><td>the end of each relaxation iteration</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout">
+          <p>Both make the ant loop <strong>order-independent</strong> — two ants
+            depositing in the same cell, or two pairs correcting the same body,
+            commute — and order-independence is exactly what makes threaded runs
+            bit-exact (§4.4). Applying either in place would be faster and would
+            silently destroy determinism.</p>
+        </div>
+        <p>
+          A <strong>spatial hash</strong> over a coarse grid (say 5 cm cells) serves
+          both proximity queries and collision broad-phase, rebuilt each tick by
+          counting sort into preallocated arrays.
+        </p>
+
+        <h3>4.3 &ensp;Multi-rate clocks</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th style="width:20%">Clock</th><th style="width:20%">Rate</th><th>Drives</th></tr></thead>
+            <tbody>
+              <tr><td>Motion</td><td class="num-col">20 Hz</td><td>Movement, sensing, collision, deposits</td></tr>
+              <tr><td>Pheromone</td><td class="num-col">1 Hz</td><td>Evaporation, diffusion, deposit fold-in</td></tr>
+              <tr><td>Colony</td><td class="num-col">1 / min</td><td>Births, deaths, stock, food renewal</td></tr>
+              <tr><td>Render</td><td class="num-col">30–60 Hz</td><td>Decoupled from sim; interpolates ant positions</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Plus a <strong>time compression</strong> factor, because a foraging trip is
+          minutes but colony dynamics are days. The sim must run at 1×, at 100×, and
+          headless as fast as it can.
+        </p>
+
+        <h3>4.4 &ensp;Determinism</h3>
+        <ul>
+          <li><code>rnd01(id, tick)</code> — a pure function of the ant's stable id and
+            the tick number. No shared RNG state, no order dependence, thread-safe by
+            construction.</li>
+          <li><code>*random-state*</code> is <strong>banned</strong> from simulation
+            code. A test greps for it.</li>
+          <li>Fixed contiguous range partitioning in the pool, so the thread count
+            never changes the result.</li>
+          <li>A test steps two identical sims and requires byte-identical state.</li>
+        </ul>
+
+        <h3>4.5 &ensp;Threading</h3>
+        <p>
+          The ant step partitions cleanly because both shared-state writes go to
+          buffers and reads of the pheromone field come from the <em>previous</em>
+          pheromone tick. With trophallaxis deferred past M1 (§3.9), there is no
+          pairwise ant coupling left in the tick at all — which is a large part of
+          why the cut was drawn there.
+        </p>
+      </section>
+
+      <!-- ============================================================ 5 -->
+      <section id="s5">
+        <h2><span class="num">05</span>Rendering</h2>
+
+        <h3>5.1 &ensp;The pipeline</h3>
+        <p>Top-down orthographic. Layers, back to front:</p>
+        <ol>
+          <li><strong>Ground</strong> — subtle texture, so motion has a reference frame.</li>
+          <li><strong>Pheromone fields</strong> — the sim grid uploaded as a texture
+            and colour-mapped in the fragment shader. <em>This is the most beautiful
+            thing on screen and should be treated as such</em> — a living gradient that
+            thickens into a road and then evaporates.</li>
+          <li><strong>Obstacles</strong> — filled polygons with a soft outline.</li>
+          <li><strong>Food sources</strong> — radius scales with remaining amount, so
+            depletion is visible without a number.</li>
+          <li><strong>Nests</strong> — entrance, plus a home-range halo.</li>
+          <li><strong>Corpses</strong> — below the living, so a busy nest reads
+            correctly.</li>
+          <li><strong>Ants</strong> — instanced, §5.2.</li>
+          <li><strong>Overlay</strong> — home vectors, choice probabilities, a selected
+            ant's state readout, counters. Toggleable, off by default.</li>
+        </ol>
+
+        <h3>5.2 &ensp;The ant — a real 2D vector model, animated</h3>
+        <p>
+          This is the part with no precedent in waldameisen, whose ants are two
+          triangles with an elliptical mask — deliberately, because at a 1.3 m mound
+          scale an ant is two pixels. Here ants are the subject, so they get built
+          properly.
+        </p>
+
+        <figure>
+          <div class="fig-frame">
+            <svg viewBox="0 0 620 400" role="img"
+                 aria-label="Top-down ant anatomy: head with mandibles and two elbowed antennae, mesosoma carrying three pairs of two-segment legs, a petiole node, and a gaster. Legs L1, R2 and L3 are highlighted as one tripod; R1, L2 and R3 form the other. A dashed circle around the body shows the much simpler disc used for collision.">
+              <!-- the collision proxy, drawn first so it sits behind -->
+              <circle cx="310" cy="197" r="116" fill="none" stroke="var(--teal)"
+                      stroke-width="1.6" stroke-dasharray="5 4"/>
+
+              <g stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <g stroke="var(--accent)" stroke-width="2.4">
+                  <path d="M292,158 L246,120 L206,96"/>
+                  <path d="M328,186 L378,188 L420,208"/>
+                  <path d="M292,212 L248,250 L214,292"/>
+                </g>
+                <g stroke="var(--ink-2)" stroke-width="2.4">
+                  <path d="M328,158 L374,120 L414,96"/>
+                  <path d="M292,186 L242,188 L200,208"/>
+                  <path d="M328,212 L372,250 L406,292"/>
+                </g>
+                <g stroke="var(--ink-2)" stroke-width="2">
+                  <path d="M296,104 L262,74 L236,58"/>
+                  <path d="M324,104 L358,74 L384,58"/>
+                </g>
+                <g stroke="var(--ink)" stroke-width="2">
+                  <path d="M300,88 L288,70"/>
+                  <path d="M320,88 L332,70"/>
+                </g>
+              </g>
+
+              <g stroke="var(--ink)" stroke-width="1.6" fill="var(--surface-2)">
+                <ellipse cx="310" cy="104" rx="19" ry="21"/>
+                <ellipse cx="310" cy="184" rx="21" ry="38"/>
+                <circle cx="310" cy="228" r="7"/>
+                <ellipse cx="310" cy="278" rx="26" ry="34"/>
+              </g>
+
+              <g stroke="var(--rule)" stroke-width="1" fill="none">
+                <path d="M291,100 L152,100"/>
+                <path d="M289,180 L152,180"/>
+                <path d="M284,278 L152,290"/>
+                <path d="M236,58 L152,44"/>
+                <path d="M420,208 L502,208"/>
+                <path d="M406,292 L502,300"/>
+              </g>
+              <g class="svg-label" text-anchor="end">
+                <text x="144" y="96">HEAD · mandibles</text>
+                <text x="144" y="176">MESOSOMA · 3 leg pairs</text>
+                <text x="144" y="286">GASTER · deposits here</text>
+                <text x="144" y="40">ANTENNAE · sweep + bend to gradient</text>
+              </g>
+              <g class="svg-label">
+                <text x="510" y="204" fill="var(--accent)">TRIPOD A — swing</text>
+                <text x="510" y="219">L1 · R2 · L3</text>
+                <text x="510" y="296" fill="var(--ink-2)">TRIPOD B — stance</text>
+                <text x="510" y="311">R1 · L2 · R3</text>
+              </g>
+              <g class="svg-label">
+                <text x="310" y="352" text-anchor="middle" fill="var(--teal)">COLLISION DISC — §3.11</text>
+                <text x="310" y="368" text-anchor="middle">all the physics ever sees</text>
+              </g>
+            </svg>
+          </div>
+          <figcaption>
+            <b>Alternating tripod.</b> Three legs swing while three hold. The stride
+            phase φ advances with <em>distance travelled</em>, not with time — that is
+            the difference between an ant that walks and one that moonwalks while
+            sliding. During stance a foot is planted in <em>world</em> space, so the
+            leg visibly sweeps backward relative to the body; during swing it snaps
+            forward. Note how much simpler the dashed circle is than everything inside
+            it: that gap is the point of §3.11.
+          </figcaption>
+        </figure>
+
+        <h4>Implementation — articulate in the vertex shader</h4>
+        <p>
+          Per-instance data is <code>(x, y, heading, gait_phase, scale, state,
+          tint)</code> in the persistent-mapped SSBO — the same buffer path already
+          proven in waldameisen. The mesh carries per-vertex attributes for
+          <em>which limb</em> a vertex belongs to and its parameter along that limb;
+          the vertex shader derives the foot target from φ, solves the trivial
+          two-link 2D IK, and places the vertex. No per-ant CPU work, and no buffer
+          rewrite for animation.
+        </p>
+        <p class="alt">
+          <em>Fallback if the VS math gets unwieldy:</em> bake ~16 gait poses into a
+          small UBO and lerp. Cheaper, easier to art-direct, loses the world-planted
+          foot. Decide during the M3 spike.
+        </p>
+
+        <h4>Legibility touches, all of them real behaviour</h4>
+        <ul>
+          <li><strong>Antennae</strong> sweep sinusoidally <em>and</em> bend toward the
+            local pheromone gradient — you can watch an ant's antennae find a trail
+            before its body turns.</li>
+          <li><strong>Carried payload</strong> drawn at the mandibles when the crop is
+            loaded, sized by load.</li>
+          <li><strong>Gaster tip</strong> flicks down at the moment of a deposit — a
+            visible event marking an invisible mechanism.</li>
+          <li><strong>State tint</strong>, subtle: outbound, at food, laden, tired.</li>
+          <li><strong>Speed</strong> modulated by energy, so a colony visibly slows
+            when it is hungry.</li>
+        </ul>
+
+        <h3>5.3 &ensp;Colour</h3>
+        <p>
+          Dark ground, warm high-value trail, ants dark and high-contrast against
+          both. The waldameisen lesson applies — a <em>diverging</em> map keyed on a
+          meaningful midpoint reads without a legend, where a sequential ramp needs
+          one. Here the meaningful midpoint is the detection threshold <code>k</code>:
+          below it the ants ignore the pheromone, above it they commit. That is where
+          the colour map should turn.
+        </p>
+
+        <h3>5.4 &ensp;Headless, and the libGL trap</h3>
+        <p>
+          <strong>Headless is the test path.</strong> Every render is capturable to
+          PNG without a window, which is what makes visual regressions testable and
+          lets results be inspected as images rather than described.
+        </p>
+        <div class="callout warn">
+          <p>cl-opengl asks the loader for <code>libGL.so.1</code>. On a machine with
+            both Mesa and NVIDIA it may get Mesa's — while the EGL context came up on
+            the NVIDIA vendor. <strong>Nothing errors.</strong> Entry points resolve,
+            buffer and framebuffer names are handed out, and every pixel comes back
+            black, because the dispatch layer has no current context.</p>
+          <p><code>(gl:get-string :version)</code> returning <code>NIL</code> is the
+            tell. <strong>If frames come back black, check that first.</strong></p>
+        </div>
+        <p>
+          Hence <code>preload.lisp</code>, loaded via
+          <code>:defsystem-depends-on</code> so it runs before <code>cl-opengl</code>,
+          and hence the <code>guix shell nvda@580 --</code> wrapper on every GPU
+          Makefile target. CI has no GPU, so GL tests must <em>skip</em>, not fail —
+          and a green CI run therefore does not mean the renderer was verified.
+        </p>
+
+        <h3>5.5 &ensp;The live window, and why the camera comes early</h3>
+        <p>
+          Headless covers tests and image output but not “watch it run”, which is most
+          of the point of a playful sim. <strong><code>antsim/live</code> therefore
+          lands with the renderer at M2, not at the end</strong> — because a free
+          camera is what keeps every question about scale open.
+        </p>
+        <div class="callout">
+          <p>Without pan and zoom, arena size, ant count and render scale are all
+            locked together, and every one of them has to be guessed correctly up
+            front. With them, the same run is legible at any scale: zoom in and a
+            single ant is a vector model with a gait; zoom out and the same colony is
+            a trail network. <strong>Nothing about the world has to be decided in
+            advance to see it.</strong></p>
+        </div>
+        <div class="tw">
+          <table>
+            <caption>Controls</caption>
+            <thead><tr><th style="width:30%">Input</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td class="num-col">mouse wheel</td><td>zoom, anchored at the cursor — the world point under the pointer stays under it</td></tr>
+              <tr><td class="num-col">right-drag</td><td>pan</td></tr>
+              <tr><td class="num-col">space · + · −</td><td>pause, and time compression up/down</td></tr>
+              <tr><td class="num-col">left-click an ant</td><td>inspect: state, energy, crop, age, home vector</td></tr>
+              <tr><td class="num-col">home</td><td>frame the whole world</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Cursor-anchored zoom is worth calling out because the obvious
+          implementation — scale about the screen centre — feels wrong immediately and
+          is the same two lines of arithmetic to do properly.
+        </p>
+        <p>
+          <strong>Backend: cl-glfw3</strong> — minimal, suited to one GL window, and
+          its input model is a direct fit for the above. Alternatives considered:
+          <code>sdl2</code> (heavier, more capable, more moving parts) and a frame
+          sequence piped to <code>ffmpeg</code> (no new dependency, fine for sharing
+          results, useless for interaction).
+        </p>
+        <p>
+          The renderer stays surface-agnostic regardless: the camera is an ortho
+          transform and a viewport, and the headless path is the same renderer with an
+          FBO instead of a window. The live window is a second consumer of the frame,
+          never a fork of it — which is what keeps the tested path and the watched
+          path the same path.
+        </p>
+      </section>
+
+      <!-- ============================================================ 6 -->
+      <section id="s6">
+        <h2><span class="num">06</span>The scenario file</h2>
+        <p>
+          JSON, loaded by <code>antsim/scenario</code> — which owns the JSON
+          dependency — into plain structs, so the core never sees a parser.
+        </p>
+<pre><code>{
+  <span class="s">"name"</span>: <span class="s">"goss-double-bridge"</span>,
+  <span class="s">"world"</span>:  { <span class="s">"width"</span>: 1.2, <span class="s">"height"</span>: 0.8, <span class="s">"cell"</span>: 0.005 },
+  <span class="s">"clock"</span>:  { <span class="s">"motion_hz"</span>: 20, <span class="s">"pheromone_hz"</span>: 1, <span class="s">"colony_per_min"</span>: 1 },
+  <span class="s">"species"</span>: <span class="s">"lasius-niger"</span>,
+
+  <span class="s">"pheromones"</span>: {
+    <span class="s">"trail"</span>:    { <span class="s">"tau_s"</span>: 1800, <span class="s">"diffusion"</span>: 0.0,  <span class="s">"max"</span>: 100.0 },
+    <span class="s">"no_entry"</span>: { <span class="s">"tau_s"</span>: 900,  <span class="s">"diffusion"</span>: 0.0,  <span class="s">"max"</span>: 50.0  },
+    <span class="s">"alarm"</span>:    { <span class="s">"tau_s"</span>: 30,   <span class="s">"diffusion"</span>: 0.02, <span class="s">"max"</span>: 20.0  }
+  },
+
+  <span class="s">"choice"</span>: { <span class="s">"n"</span>: 2.0, <span class="s">"k"</span>: 20.0, <span class="s">"eavesdrop"</span>: 0.0 },
+
+  <span class="s">"bodies"</span>: { <span class="s">"ant_radius"</span>: 0.0025, <span class="s">"relax_iterations"</span>: 3 },
+
+  <span class="s">"colonies"</span>: [
+    { <span class="s">"id"</span>: <span class="s">"home"</span>,
+      <span class="s">"nest"</span>:     { <span class="s">"x"</span>: 0.10, <span class="s">"y"</span>: 0.40, <span class="s">"r"</span>: 0.03 },
+      <span class="s">"capacity"</span>: 4000,
+      <span class="s">"start"</span>:    400,
+      <span class="s">"stock"</span>:    0.5,
+      <span class="s">"brood_per_stock"</span>: 0.8,
+      <span class="s">"max_age_s"</span>:       86400 }
+  ],
+
+  <span class="s">"food"</span>: [
+    { <span class="s">"x"</span>: 1.10, <span class="s">"y"</span>: 0.40, <span class="s">"r"</span>: 0.02,
+      <span class="s">"amount"</span>: 500.0, <span class="s">"quality"</span>: 1.0, <span class="s">"renew_per_min"</span>: 0.0 }
+  ],
+
+  <span class="s">"obstacles"</span>: [
+    { <span class="s">"polygon"</span>: [[0.4,0.30],[0.8,0.30],[0.8,0.34],[0.4,0.34]] },
+    { <span class="s">"polygon"</span>: [[0.4,0.46],[0.8,0.46],[0.8,0.50],[0.4,0.50]] }
+  ],
+
+  <span class="s">"seed"</span>: 12345,
+  <span class="s">"duration_s"</span>: 3600
+}</code></pre>
+        <div class="callout rule">
+          <p>Note what is <strong>not</strong> in there, and cannot be: <strong>no ant
+            positions and no pheromone.</strong> <code>start</code> seeds a count at
+            the nest, not a layout, and there is no key anywhere that puts trail on the
+            grid (§3.3). <code>capacity</code> is a memory bound, <code>start</code> is
+            an initial condition, and the population between them is a result.
+            Colonies are a list from the outset even though M1 runs one, so competition
+            (§3.12) is a scenario change rather than a format change.</p>
+        </div>
+        <p>
+          Anything a scenario omits falls back to the species parameter set; anything
+          the species set omits falls back to a documented default. Validation is
+          strict and errors name the offending path — a silently-defaulted typo in a
+          scenario is a bug that costs an afternoon.
+        </p>
+        <p>
+          The bridge experiments ship as scenarios, which means the acceptance tests
+          of §3.8 are <strong>literally the published experiments run as data
+          files</strong>.
+        </p>
+      </section>
+
+      <!-- ============================================================ 7 -->
+      <section id="s7">
+        <h2><span class="num">07</span>Milestones</h2>
+        <ol class="ms">
+          <li><span class="tag">M0</span><div><b>The stack stands up.</b>
+            ASDF systems, package, <code>util</code>/<code>rng</code>/<code>pool</code>
+            carried over, FiveAM wired, Makefile with the guix GPU targets. A headless
+            context comes up and writes a non-black PNG. <em>Proves the toolchain
+            before any design is committed to it.</em></div></li>
+          <li><span class="tag">M1</span><div><b>The core simulation, no renderer.</b>
+            Exactly the §3.9 cut and nothing past it: the ant and body tables, CRW
+            movement, disc collision with Jacobi relaxation, one trail field per colony,
+            the choice function, path integration, the four-state machine, food
+            depletion, colony growth and death. <em>Ends when the §3.8 acceptance tests
+            pass</em> — verified numerically with no picture involved. This is the
+            milestone that decides whether the science is right, and it deliberately
+            does not depend on a single line of GL.</div></li>
+          <li><span class="tag">M2</span><div><b>The renderer, and the window.</b>
+            Ortho camera, pheromone field texture, obstacle polygons, food, nests, ants
+            as simple discs. Headless PNG gallery <em>and</em> <code>antsim/live</code>
+            on GLFW with cursor-anchored wheel zoom, right-drag pan, pause and time
+            compression. The window comes in here rather than at the end because it is
+            what keeps arena size, ant count and render scale from having to be guessed
+            up front. <em>First time you can watch a trail form, at whatever scale you
+            like.</em></div></li>
+          <li><span class="tag">M3</span><div><b>The ant model.</b>
+            The vector ant, the tripod gait rig, VS articulation, LOD, antennae,
+            payload, state tint. The one genuinely novel piece of engineering in the
+            project. Note the collision model does not change: the disc stays, the
+            drawing gets legs.</div></li>
+          <li><span class="tag">M4</span><div><b>Scenarios and behaviour depth.</b>
+            JSON loading, richer scenes, then the deferred half of §3.9 in dependency
+            order: response thresholds and age polyethism, trophallaxis, the no-entry
+            and alarm fields, necrophoresis and middens, U-turns and search spirals.
+            Multiple colonies and the ε competition scenario.</div></li>
+          <li><span class="tag">M5</span><div><b>Interaction.</b>
+            Click an ant to inspect it, drop food, place obstacles, poke the nest and
+            watch the alarm field propagate. The window already exists from M2; this is
+            what you can <em>do</em> to a running world.</div></li>
+          <li><span class="tag">M6</span><div><b>Polish.</b>
+            Colour, time-lapse capture, the <em>Formica</em> parameter set as a
+            contrasting species, a gallery document like
+            <code>docs/M2-renderer.md</code>.</div></li>
+          <li><span class="tag far">→</span><div><b>Beyond M6 — the contact layer.</b>
+            Ant-to-ant touch as a communication channel: trophallaxis between
+            individuals, antennation, tactile recruitment, nestmate recognition,
+            contact-borne alarm. The collision pass already produces the contact list
+            this needs (§3.11), which is the only reason it is worth naming this far
+            out — the groundwork is a decision made in M1, the work itself is not
+            scheduled.</div></li>
+        </ol>
+      </section>
+
+      <!-- ============================================================ 8 -->
+      <section id="s8">
+        <h2><span class="num">08</span>Risks</h2>
+        <div class="tw">
+          <table>
+            <thead><tr><th style="width:30%">Risk</th><th style="width:12%">Level</th><th>Mitigation</th></tr></thead>
+            <tbody>
+              <tr><td>Literature constants are in units the model does not use — <code>k</code> is in “passages”, not concentration</td><td><span class="chip hi">High</span></td><td>A calibration pass with documented fits, exactly as waldameisen §2.8. The bridge experiments <em>are</em> the calibration target</td></tr>
+              <tr><td>Scope — the science is deep enough to never ship</td><td><span class="chip hi">High</span></td><td>The §3.9 cut is the answer: M1 builds a named subset, §3.8 is the definition of done, and everything else is explicitly scheduled rather than argued about again</td></tr>
+              <tr><td>VS leg articulation fights back</td><td><span class="chip mid">Medium</span></td><td>LOD-simple ants work from M2; the pose-LUT fallback is a known-good plan B</td></tr>
+              <tr><td>Trail dynamics tuned into a regime that looks right but is not</td><td><span class="chip mid">Medium</span></td><td>The <code>n = 1</code> control test — if it still selects a path, the selection is coming from something other than the choice function</td></tr>
+              <tr><td>Non-overlap relaxation does not converge in a dense crowd</td><td><span class="chip mid">Medium</span></td><td>Jacobi with fixed 2–3 iterations is a <em>soft</em> constraint — residual overlap is bounded, not zero. If a queue at a rich source jitters, raise iterations before changing the scheme; §3.8 measures it rather than assuming it</td></tr>
+              <tr><td>Multi-rate clocks introduce order dependence</td><td><span class="chip mid">Medium</span></td><td>Both shared-state writes are buffered and folded in; the determinism test catches regressions</td></tr>
+              <tr><td>Corpses accumulate until they choke a nest</td><td><span class="chip lo">Low</span></td><td>Intended, and visible. It is the argument for necrophoresis at M4 — but a scenario running for simulated weeks needs the midden behaviour before its results mean anything</td></tr>
+              <tr><td>Performance</td><td><span class="chip lo">Low</span></td><td>5 k ants × 160 k cells at 20 Hz is small; waldameisen already instanced 3 k</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============================================================ 9 -->
+      <section id="s9">
+        <h2><span class="num">09</span>Decisions</h2>
+
+        <h3>Settled</h3>
+        <ol class="decisions">
+          <li><b>Reference species — <em>Lasius niger</em></b>
+            <div class="alt">Best trail literature, a true mass recruiter. <em>Formica polyctena</em> becomes a contrasting parameter set at M6.</div></li>
+          <li><b>Complexity is capped at the §3.9 cut</b>
+            <div class="alt">M1 builds that subset and nothing past it. Everything deferred is scheduled, not deleted, and each deferred item is addable without changing the tick's shape.</div></li>
+          <li><b>Trails are never authored</b>
+            <div class="alt">The scenario format has no way to place pheromone, by construction (§3.3).</div></li>
+          <li><b>The live window lands at M2, with cursor-anchored wheel zoom and right-drag pan</b>
+            <div class="alt">So arena size, ant count and render scale stay open questions instead of up-front guesses (§5.5).</div></li>
+          <li><b>Population is dynamic on top of a configured start</b>
+            <div class="alt"><code>capacity</code> bounds memory, <code>start</code> is an initial condition, and the running count is a result — including zero, when a colony starves (§3.10).</div></li>
+          <li><b>Ants are discs; obstacles are polygons</b>
+            <div class="alt">One non-overlap rule, Jacobi resolution so determinism survives (§3.11).</div></li>
+          <li><b>Trail fields are per colony with an eavesdropping coefficient ε</b>
+            <div class="alt">M1 runs one colony; the indirection is free now and unaddable later (§3.12).</div></li>
+          <li><b>Repository</b>
+            <div class="alt">Initialised and pushed to <code>bonk/antsim</code>, branch <code>concept</code>.</div></li>
+        </ol>
+
+        <h3>Still open</h3>
+        <ol class="decisions">
+          <li><b>Colony scale</b>
+            <div class="pick">→ hundreds of ants in a 1–2 m arena for the M1 acceptance scenarios</div>
+            <div class="alt">Those reproduce lab experiments at lab scale. With pan and zoom in from M2 this is much less of a commitment than it was, and <code>capacity</code> and arena size are per-scenario anyway.</div></li>
+          <li><b>JSON dependency</b>
+            <div class="pick">→ <code>com.inuoe.jzon</code>, confined to <code>antsim/scenario</code></div>
+            <div class="alt">Alternative: a hand-rolled reader, to keep the whole project dependency-free.</div></li>
+          <li><b>Default branch</b>
+            <div class="pick">→ undecided</div>
+            <div class="alt"><code>concept</code> is currently the only branch on the remote; nothing has been set as default yet.</div></li>
+        </ol>
+      </section>
+
+      <!-- =========================================================== 10 -->
+      <section id="s10">
+        <h2><span class="num">10</span>Sources, and what still needs checking</h2>
+        <div class="callout warn">
+          <p>The mechanisms are well established. <strong>Several specific constants
+            below are from memory and must be verified against the papers before they
+            are committed to code.</strong> This project inherits waldameisen's rule
+            that nothing is silently tuned — and that rule is worth nothing if the
+            “measured” values were guessed.</p>
+        </div>
+
+        <h3>Load-bearing, confident</h3>
+        <ul>
+          <li><strong>Deneubourg, Aron, Goss &amp; Pasteels (1990)</strong>, <em>The
+            self-organizing exploratory pattern of the Argentine ant</em>, J. Insect
+            Behavior 3:159 — the binary bridge, and the nonlinear choice function.</li>
+          <li><strong>Goss, Aron, Deneubourg &amp; Pasteels (1989)</strong>,
+            <em>Self-organized shortcuts in the Argentine ant</em>,
+            Naturwissenschaften 76:579 — the double bridge and shortest-path
+            selection.</li>
+          <li><strong>Beckers, Deneubourg &amp; Goss (1992, 1993)</strong> on
+            <em>Lasius niger</em> trail laying — deposition modulated by food quality,
+            and the quality threshold below which no trail is laid.</li>
+          <li><strong>Robinson, Jackson, Holcombe &amp; Ratnieks (2005)</strong>,
+            <em>“No entry” signal in ant foraging</em>, Nature 438:442 — the repellent
+            pheromone.</li>
+          <li><strong>Wilson, Durlach &amp; Roth (1958)</strong> — necrophoresis and
+            the oleic-acid corpse cue.</li>
+          <li><strong>Bonabeau, Theraulaz &amp; Deneubourg</strong> — the
+            response-threshold model of division of labour.</li>
+          <li><strong>Hölldobler &amp; Wilson (1990)</strong>, <em>The Ants</em> — age
+            polyethism, trophallaxis, recruitment taxonomy; the general reference.</li>
+          <li><strong>Müller &amp; Wehner</strong> on <em>Cataglyphis</em> path
+            integration, and the systematic search spiral of a homing ant that arrives
+            at the wrong place.</li>
+          <li><strong>Charbonneau &amp; Dornhaus</strong> — inactivity as a genuine
+            specialization, not sampling noise.</li>
+        </ul>
+
+        <h3>Needs verification before it becomes a constant</h3>
+        <ul>
+          <li><code>n ≈ 2</code>, <code>k ≈ 20</code> — recalled from Deneubourg 1990,
+            in units of <em>bridge passages</em>. The exponent is the robust part;
+            <code>k</code> needs both the paper and a unit translation into the sim's
+            concentration scale.</li>
+          <li>Trail pheromone lifetime τ — “tens of minutes” for <em>L. niger</em> is
+            safe, the specific half-life is not, and it is one of the most
+            consequential parameters in the model.</li>
+          <li>Walking speeds, crop capacity, and the sucrose threshold for trail laying
+            — all quoted approximately above, all needing a source.</li>
+          <li>Worker lifespan and the age-mortality hazard, now that demography is in
+            M1 (§3.10) rather than a later refinement.</li>
+          <li>Whether <em>Formica polyctena</em>'s weak trail-following is best
+            modelled as a low deposition rate, a low following fidelity, or a shorter
+            τ. Probably all three — but that is a claim, not a citation.</li>
+        </ul>
+        <p>
+          A <code>docs/calibration.md</code> should hold these, each with the fit it
+          came from and the date, in the waldameisen style.
+        </p>
+      </section>
+
+      <footer>
+        <span>antsim — concept rev. 2, 15 August 2026</span>
+        <span>Source of truth: <code>README.md</code> on branch <code>concept</code></span>
+        <span>Next step: M0</span>
+      </footer>
+
+    </main>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  function isDark() {
+    var t = document.documentElement.getAttribute('data-theme');
+    if (t === 'dark') return true;
+    if (t === 'light') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  /* ================================================= the pheromone banner
+     A genuine miniature of the model this document describes: correlated
+     random walk outbound, nonlinear choice on sampled concentration, path
+     integration home, deposition only while laden, exponential decay. No
+     path is scripted; the trail that appears is the trail the rules make. */
+  var cv = document.getElementById('pher');
+  if (cv) {
+    var ctx = cv.getContext('2d');
+    var off = document.createElement('canvas');
+    var octx = off.getContext('2d');
+
+    var K = 14, DEP = 7.5, DECAY = 0.9965, CAP = 90, SCALE_N = 42;
+    var GW = 0, GH = 0, field = null, img = null, ants = [];
+    var nest = {x: 0, y: 0}, food = {x: 0, y: 0};
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var running = true, raf = 0, ready = false;
+
+    function setup() {
+      var rect = cv.getBoundingClientRect();
+      if (rect.width < 2) return false;
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = Math.round(rect.width * dpr);
+      cv.height = Math.round(rect.height * dpr);
+
+      var cell = 6 * dpr;
+      GW = Math.max(40, Math.floor(cv.width / cell));
+      GH = Math.max(16, Math.floor(cv.height / cell));
+
+      off.width = GW; off.height = GH;
+      img = octx.createImageData(GW, GH);
+      field = new Float32Array(GW * GH);
+
+      nest = {x: 5, y: GH / 2};
+      food = {x: GW - 6, y: GH / 2};
+
+      ants = [];
+      var n = Math.min(320, Math.round(GW * 2.4));
+      for (var i = 0; i < n; i++) {
+        ants.push({x: nest.x, y: nest.y, h: Math.random() * Math.PI * 2, ret: false});
+      }
+      ready = true;
+      return true;
+    }
+
+    function at(x, y) {
+      var ix = x | 0, iy = y | 0;
+      if (ix < 0 || iy < 0 || ix >= GW || iy >= GH) return -1;
+      return field[iy * GW + ix];
+    }
+
+    var OFFS = [-0.55, 0, 0.55], W = [0, 0, 0];
+
+    function step() {
+      var i;
+      for (i = 0; i < field.length; i++) field[i] *= DECAY;
+
+      for (var j = 0; j < ants.length; j++) {
+        var a = ants[j];
+
+        if (!a.ret) {
+          /* sample three headings; weight by (k + C)^2 — the choice function */
+          var tot = 0;
+          for (var s = 0; s < 3; s++) {
+            var hh = a.h + OFFS[s];
+            var c = at(a.x + Math.cos(hh) * 3.2, a.y + Math.sin(hh) * 3.2);
+            if (c < 0) { W[s] = 0; } else { var v = K + c; W[s] = v * v; }
+            tot += W[s];
+          }
+          if (tot <= 0) {
+            a.h += Math.PI * (0.5 + Math.random());
+          } else {
+            var r = Math.random() * tot, pick = 2;
+            for (var t = 0; t < 3; t++) { r -= W[t]; if (r <= 0) { pick = t; break; } }
+            a.h += OFFS[pick] * 0.8;
+          }
+          a.h += (Math.random() - 0.5) * 0.34;
+        } else {
+          /* home vector, with integration noise, and deposit while laden */
+          var d = Math.atan2(nest.y - a.y, nest.x - a.x) - a.h;
+          while (d > Math.PI) d -= 2 * Math.PI;
+          while (d < -Math.PI) d += 2 * Math.PI;
+          a.h += d * 0.24 + (Math.random() - 0.5) * 0.3;
+
+          var ix = a.x | 0, iy = a.y | 0;
+          if (ix >= 0 && iy >= 0 && ix < GW && iy < GH) {
+            var kk = iy * GW + ix;
+            var nv = field[kk] + DEP;
+            field[kk] = nv > CAP ? CAP : nv;
+          }
+        }
+
+        a.x += Math.cos(a.h) * 0.6;
+        a.y += Math.sin(a.h) * 0.6;
+
+        if (a.x < 0.5) { a.x = 0.5; a.h = Math.PI - a.h; }
+        if (a.x > GW - 1.5) { a.x = GW - 1.5; a.h = Math.PI - a.h; }
+        if (a.y < 0.5) { a.y = 0.5; a.h = -a.h; }
+        if (a.y > GH - 1.5) { a.y = GH - 1.5; a.h = -a.h; }
+
+        if (!a.ret) {
+          var fx = a.x - food.x, fy = a.y - food.y;
+          if (fx * fx + fy * fy < 14) { a.ret = true; a.h += Math.PI; }
+        } else {
+          var nx = a.x - nest.x, ny = a.y - nest.y;
+          if (nx * nx + ny * ny < 14) { a.ret = false; a.h = Math.random() * Math.PI * 2; }
+        }
+      }
+    }
+
+    function draw() {
+      if (!ready) return;
+      var dark = isDark();
+      var bg  = dark ? [18, 21, 15]   : [233, 235, 228];
+      var mid = dark ? [224, 162, 58] : [166, 118, 26];
+      var hot = dark ? [246, 220, 150]: [58, 34, 4];
+
+      var d = img.data;
+      for (var i = 0, n = GW * GH; i < n; i++) {
+        var v = field[i] / SCALE_N;
+        if (v > 1) v = 1;
+        var u = Math.pow(v, 0.62), r, g, b, w;
+        if (u < 0.62) {
+          w = u / 0.62;
+          r = bg[0] + (mid[0] - bg[0]) * w;
+          g = bg[1] + (mid[1] - bg[1]) * w;
+          b = bg[2] + (mid[2] - bg[2]) * w;
+        } else {
+          w = (u - 0.62) / 0.38;
+          r = mid[0] + (hot[0] - mid[0]) * w;
+          g = mid[1] + (hot[1] - mid[1]) * w;
+          b = mid[2] + (hot[2] - mid[2]) * w;
+        }
+        var o = i * 4;
+        d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
+      }
+      octx.putImageData(img, 0, 0);
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(off, 0, 0, GW, GH, 0, 0, cv.width, cv.height);
+
+      var sx = cv.width / GW, sy = cv.height / GH;
+
+      ctx.beginPath();
+      ctx.arc(food.x * sx, food.y * sy, 4.6 * sx, 0, Math.PI * 2);
+      ctx.fillStyle = dark ? 'rgba(82,183,168,.30)' : 'rgba(29,98,89,.22)';
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, sx * 0.28);
+      ctx.strokeStyle = dark ? '#52B7A8' : '#1D6259';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(nest.x * sx, nest.y * sy, 4.6 * sx, 0, Math.PI * 2);
+      ctx.strokeStyle = dark ? '#A5AC9C' : '#4C5349';
+      ctx.stroke();
+
+      var rr = Math.max(1.4, sx * 0.34);
+      for (var j = 0; j < ants.length; j++) {
+        var a = ants[j];
+        ctx.fillStyle = a.ret ? (dark ? '#F2C775' : '#8A5606')
+                              : (dark ? '#C6CCBB' : '#3B4238');
+        ctx.beginPath();
+        ctx.arc(a.x * sx, a.y * sy, rr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function frame() {
+      if (running) { step(); draw(); }
+      raf = requestAnimationFrame(frame);
+    }
+
+    function start() {
+      cancelAnimationFrame(raf);
+      if (!setup()) { setTimeout(start, 60); return; }
+      var warm = reduce ? 900 : 260;
+      for (var i = 0; i < warm; i++) step();
+      draw();
+      if (!reduce) raf = requestAnimationFrame(frame);
+    }
+
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (es) {
+        running = es[0].isIntersecting;
+      }, {threshold: 0}).observe(cv);
+    }
+
+    var rt = 0;
+    window.addEventListener('resize', function () {
+      clearTimeout(rt);
+      rt = setTimeout(start, 220);
+    });
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) mq.addEventListener('change', function () { draw(); });
+
+    start();
+  }
+
+  /* =============================================== the choice-function plot */
+  var plot = document.getElementById('choice-plot');
+  if (plot) {
+    var NS = 'http://www.w3.org/2000/svg';
+    var X0 = 78, Y0 = 246, X1 = 596, Y1 = 40, KK = 14;
+
+    function el(name, attrs) {
+      var e = document.createElementNS(NS, name);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    }
+    function txt(x, y, s, anchor, fill) {
+      var e = el('text', {x: x, y: y, 'class': 'svg-label'});
+      if (anchor) e.setAttribute('text-anchor', anchor);
+      if (fill) e.setAttribute('fill', fill);
+      e.textContent = s;
+      return e;
+    }
+
+    for (var g = 0; g <= 4; g++) {
+      var gy = Y0 + (Y1 - Y0) * (g / 4);
+      plot.appendChild(el('line', {
+        x1: X0, y1: gy, x2: X1, y2: gy, stroke: 'var(--rule-soft)', 'stroke-width': 1
+      }));
+    }
+    plot.appendChild(el('line', {x1: X0, y1: Y0, x2: X1, y2: Y0, stroke: 'var(--rule)', 'stroke-width': 1.2}));
+    plot.appendChild(el('line', {x1: X0, y1: Y0, x2: X0, y2: Y1, stroke: 'var(--rule)', 'stroke-width': 1.2}));
+
+    var half = Y0 + (Y1 - Y0) * 0.5;
+    plot.appendChild(el('line', {
+      x1: X0, y1: half, x2: X1, y2: half,
+      stroke: 'var(--ink-3)', 'stroke-width': 1, 'stroke-dasharray': '2 4'
+    }));
+
+    var curves = [
+      {n: 1, stroke: 'var(--ink-3)', width: 1.6, dash: '5 4', label: 'n = 1  — never commits'},
+      {n: 2, stroke: 'var(--accent)', width: 2.6, dash: '',    label: 'n = 2  — the model'},
+      {n: 4, stroke: 'var(--teal)',   width: 1.6, dash: '',    label: 'n = 4  — near-switch'}
+    ];
+
+    /* Total pheromone held at 4k, so x is A's share of what is actually there. */
+    var TOTAL = 4 * KK;
+    curves.forEach(function (c) {
+      var pts = [];
+      for (var i = 0; i <= 100; i++) {
+        var frac = i / 100;
+        var wa = Math.pow(KK + TOTAL * frac, c.n);
+        var wb = Math.pow(KK + TOTAL * (1 - frac), c.n);
+        var p = wa / (wa + wb);
+        pts.push((X0 + (X1 - X0) * frac).toFixed(1) + ',' + (Y0 + (Y1 - Y0) * p).toFixed(1));
+      }
+      plot.appendChild(el('polyline', {
+        points: pts.join(' '), fill: 'none', stroke: c.stroke,
+        'stroke-width': c.width, 'stroke-dasharray': c.dash, 'stroke-linecap': 'round'
+      }));
+    });
+
+    plot.appendChild(txt(X0 - 12, Y0 + 4, '0', 'end'));
+    plot.appendChild(txt(X0 - 12, half + 4, '0.5', 'end'));
+    plot.appendChild(txt(X0 - 12, Y1 + 4, '1', 'end'));
+    plot.appendChild(txt(X0, Y0 + 22, '0 — all on B'));
+    plot.appendChild(txt(X1, Y0 + 22, 'all on A — 1', 'end'));
+    plot.appendChild(txt((X0 + X1) / 2, Y0 + 44, "A's share of the pheromone present", 'middle'));
+    plot.appendChild(txt(6, 24, 'P(choose A)'));
+
+    var ly = 64;
+    curves.forEach(function (c) {
+      plot.appendChild(el('line', {
+        x1: X0 + 16, y1: ly - 4, x2: X0 + 46, y2: ly - 4,
+        stroke: c.stroke, 'stroke-width': c.width, 'stroke-dasharray': c.dash
+      }));
+      plot.appendChild(txt(X0 + 54, ly, c.label, null, c.n === 2 ? 'var(--accent)' : null));
+      ly += 19;
+    });
+  }
+
+  /* ====================================================== toc scroll-spy */
+  var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  var secs = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  if (secs.length && 'IntersectionObserver' in window) {
+    var seen = {};
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { seen[e.target.id] = e.isIntersecting; });
+      var active = -1;
+      for (var i = 0; i < secs.length; i++) {
+        if (secs[i] && seen[secs[i].id]) { active = i; break; }
+      }
+      links.forEach(function (l, i) { l.classList.toggle('on', i === active); });
+    }, {rootMargin: '-10% 0px -70% 0px', threshold: 0});
+    secs.forEach(function (s) { if (s) io.observe(s); });
+  }
+})();
+</script>
