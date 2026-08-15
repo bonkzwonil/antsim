@@ -39,18 +39,18 @@ one obstacle across part of the route."
   "Render the README's images.  `make gallery`."
   (multiple-value-bind (w c) (gallery-world)
     (format t "~&rendering gallery into ~a~%" *gallery-directory*)
-    ;; Early: 40 seconds, before the first ants have made it home to lay
-    ;; anything.  Deliberately this early — at three minutes there is
-    ;; already a visible trail, which blunts the whole point of the
-    ;; picture.  What it has to show is the colony with *no* pheromone at
-    ;; all, where the choice function degenerates exactly into the
-    ;; correlated random walk and every ant is searching.
-    (world-run! w 800)
+    ;; Early: 5 seconds — the trail total here is exactly 0.  Deliberately
+    ;; this early: at forty seconds a faint thread is already visible and
+    ;; at three minutes there is a proper trail, either of which blunts
+    ;; the point.  What this frame has to show is *no pheromone at all*,
+    ;; where the choice function degenerates exactly into the correlated
+    ;; random walk of §3.2 and every ant is searching.
+    (world-run! w 100)
     (gallery-shot w "01-searching")
-    (format t "~&  40 s: pop ~d, trail ~,0f~%"
+    (format t "~&  5 s: pop ~d, trail ~,0f~%"
             (colony-population c) (field-total (colony-field c)))
     ;; Established: the road is a road, and it runs in two lanes.
-    (world-run! w (- (* 1200 20) 800))
+    (world-run! w (- (* 1200 20) 100))
     (gallery-shot w "02-trail")
     (format t "~&  20 min: pop ~d, trail ~,0f~%"
             (colony-population c) (field-total (colony-field c)))

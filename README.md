@@ -43,13 +43,16 @@ entrance.
 *The nest disc, its arrival radius as a faint ring, and the resting cluster the
 collision rule packs around the entrance.*
 
-Forty seconds in, the same colony looks nothing like this. No trail exists yet,
-so there is nothing for the choice function to read, and it degenerates
-*exactly* into a correlated random walk — every ant searching, the arena bare.
-Look closely and one faint thread runs from the food to the nest: the first ant
-home, laying the first pheromone. Everything above grew from that.
+Five seconds in, the same colony and the same seed. The pheromone total is
+exactly zero: the first foragers are only now leaving the nest, none has reached
+the food, and nothing has been laid. With no pheromone to read, the choice
+function degenerates *exactly* into a correlated random walk — there is no
+trail-following mode to switch on, because following and exploring are the same
+rule in two different environments.
 
-![Searching, before a trail exists](docs/images/01-searching.png)
+![Five seconds in: no trail exists yet](docs/images/01-searching.png)
+
+Everything in the pictures above grew from this, by the ants' own rules.
 
 And an hour in, the colony has grown into the trail it built — more ants because
 the trail works, a thicker trail because there are more ants:
@@ -120,6 +123,8 @@ that reaches zero the birth rate does too. How many ants a colony can support is
 therefore a result of how far the food is and how good the trail to it is, which
 is the coupling §3.10 is about.
 
-## Licence
+## Copyright and licence
 
-MIT.
+Copyright © 2026 Mathias Menzel-Nielsen. All rights reserved.
+
+No licence has been chosen yet, so no rights are granted.
