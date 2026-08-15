@@ -118,5 +118,5 @@
    ;; render/gallery — the README images (§7, M2)
    #:render-gallery #:gallery-world #:gallery-shot #:*gallery-directory*
    ;; live/window — the interactive view (§5.5), system antsim/live
-   #:run-live #:live-demo #:live-inspect
+   #:run-live #:live-demo #:live-scenario #:live-inspect
    #:*live-speed* #:*live-paused*))

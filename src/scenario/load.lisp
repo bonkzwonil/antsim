@@ -337,8 +337,21 @@ to mean one thing in a scenario file and another in an acceptance run."
 
 (defun load-scenario (path)
   "Read a scenario file (§6).  Signals SCENARIO-ERROR, naming the key."
-  (let ((root (with-open-file (s path :external-format :utf-8)
-                (com.inuoe.jzon:parse s))))
+  (unless (probe-file path)
+    ;; Relative paths are resolved against the process's directory, which
+    ;; is rarely where someone thinks it is when the command came through
+    ;; make or a shell alias.  Say what was actually looked for.
+    (error 'scenario-error
+           :source (namestring path) :path "file"
+           :detail (format nil "no such file (looked in ~a)"
+                           (namestring (truename *default-pathname-defaults*)))))
+  (let ((root (handler-case (with-open-file (s path :external-format :utf-8)
+                              (com.inuoe.jzon:parse s))
+                (scenario-error (e) (error e))
+                (error (e)
+                  (error 'scenario-error :source (file-namestring path)
+                                         :path "json"
+                                         :detail (format nil "~a" e))))))
     (parse-scenario root :source (file-namestring path))))
 
 (defun load-scenario-string (text &key (source "<string>"))
