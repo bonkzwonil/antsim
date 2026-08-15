@@ -1,0 +1,32 @@
+{
+  "name": "deneubourg-binary-bridge",
+
+  "world": { "width": 0.70, "height": 0.60, "capacity": 4000 },
+
+  "obstacles": [
+    { "bridge": {
+        "y_lo": 0.20,
+        "y_hi": 0.40,
+        "corridor_width": 0.06,
+        "arms": [
+          { "bottom": 0.28, "top": 0.28 },
+          { "bottom": 0.36, "top": 0.36 }
+        ]
+      } }
+  ],
+
+  "colonies": [
+    { "id": "home",
+      "nest": { "x": 0.32, "y": 0.10, "r": 0.02 },
+      "capacity": 4000,
+      "start": 150,
+      "stock": 400.0 }
+  ],
+
+  "food": [
+    { "x": 0.32, "y": 0.50, "r": 0.035, "amount": 500000.0, "quality": 1.0 }
+  ],
+
+  "seed": 1,
+  "duration_s": 720
+}

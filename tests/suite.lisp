@@ -11,7 +11,7 @@
 ;;; asking an implementation-defined question for no benefit.
 (defpackage #:antsim/test
   (:use #:cl #:fiveam)
-  (:export #:antsim))
+  (:export #:antsim #:acceptance))
 
 (in-package #:antsim/test)
 

@@ -29,8 +29,21 @@
    (:file "world/grid")
    (:file "world/bodies")
    (:file "world/scene")
-   (:file "ant/step"))
+   (:file "ant/step")
+   ;; The §3.8 bridge apparatus.  Last, because it builds worlds and runs
+   ;; ticks and therefore needs everything above it — and because nothing
+   ;; above it may depend on an experiment.
+   (:file "world/bridge"))
   :in-order-to ((test-op (test-op "antsim/test"))))
+
+(defsystem "antsim/scenario"
+  :description "The JSON scenario format (§6).  Owns the JSON dependency."
+  ;; §4.1: the core never sees a parser.  This is the only system that
+  ;; knows JSON exists, and nothing in `antsim` depends on it.
+  :depends-on ("antsim" "com.inuoe.jzon")
+  :serial t
+  :pathname "src/scenario"
+  :components ((:file "load")))
 
 (defsystem "antsim/render"
   :description "Headless GL 4.5 via EGL, offscreen targets, PNG capture."
@@ -57,20 +70,32 @@
   ;; The same preload as the headless path, and for the same reason: the
   ;; window's GL and the process's GL have to be one implementation (§5.4).
   :defsystem-depends-on ("antsim-gl-preload")
-  :depends-on ("antsim/render" "cl-glfw3")
+  ;; antsim/scenario so the window is a playground for scenario *files*
+  ;; and not only for worlds written in Lisp — §6's format is worth very
+  ;; little if the only way to look at one is to render it headless.
+  :depends-on ("antsim/render" "antsim/scenario" "cl-glfw3")
   :serial t
   :pathname "src/live"
   :components ((:file "window")))
 
 (defsystem "antsim/test"
   :description "Test suite for the antsim core.  No GPU required."
-  :depends-on ("antsim" "fiveam")
+  ;; antsim/scenario, not just antsim: the shipped bridge scenarios must be
+  ;; checked against the Lisp constructors, and a test that cannot read the
+  ;; files cannot do that.  The *core* still has no parser (§4.1).
+  :depends-on ("antsim" "antsim/scenario" "fiveam")
   :serial t
   :pathname "tests"
   :components ((:file "suite")
                (:file "world")
                (:file "bodies")
-               (:file "ant"))
+               (:file "ant")
+               (:file "scenario")
+               ;; Its own FiveAM suite, not part of `antsim`: these are
+               ;; colony runs over several seeds and they are slow, so
+               ;; `make test` stays fast and `make acceptance` is what
+               ;; says the science works.
+               (:file "acceptance"))
   :perform (test-op (o c)
              (symbol-call :fiveam :run!
                           (find-symbol (string :antsim) :antsim/test))))

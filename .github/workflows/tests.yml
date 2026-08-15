@@ -1,0 +1,95 @@
+# The core suite, the §3.8 acceptance experiments, and the renderer in
+# software.
+#
+# Note which remote this actually runs on.  The canonical remote is the
+# self-hosted Git instance and this repository is only pushed here for
+# releases, so this workflow fires on release pushes rather than on every
+# commit.  `.forgejo/workflows/tests.yml` is the same suite on the
+# upstream, and that is the one that gates day-to-day work.
+#
+# Nothing here needs a GPU: the renderer is tested against Mesa's software
+# rasteriser, which is a real GL 4.5 core implementation and has already
+# caught one bug the GPU path could not (SBCL's float traps versus a JIT
+# rasteriser — see src/render/egl.lisp).
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push makes an older run irrelevant, except on main where the
+# result is a record rather than a check.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SBCL
+        run: sudo apt-get update && sudo apt-get install -y sbcl
+
+      # Quicklisp is cached by its dist version rather than by date, so a
+      # cache hit means the same library versions and not merely a recent
+      # download.
+      - name: Cache Quicklisp
+        id: ql-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/quicklisp
+          key: quicklisp-${{ runner.os }}-v1
+
+      - name: Install Quicklisp
+        if: steps.ql-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+          sbcl --non-interactive \
+            --load /tmp/quicklisp.lisp \
+            --eval '(quicklisp-quickstart:install)' \
+            --eval '(ql-util:without-prompting (ql:add-to-init-file))'
+
+      - name: Core suite
+        run: make test
+
+      # The two rows that are published experiments rather than properties
+      # of a function: Deneubourg's binary bridge and Goss's double bridge.
+      # Several simulated colony-minutes per seed, so about half a minute.
+      - name: Acceptance experiments (§3.8)
+        run: make acceptance
+
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SBCL and Mesa
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sbcl libgl1 libegl1 libgbm1 \
+                                  libglx-mesa0 mesa-utils
+
+      - name: Cache Quicklisp
+        id: ql-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/quicklisp
+          key: quicklisp-${{ runner.os }}-v1
+
+      - name: Install Quicklisp
+        if: steps.ql-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+          sbcl --non-interactive \
+            --load /tmp/quicklisp.lisp \
+            --eval '(quicklisp-quickstart:install)' \
+            --eval '(ql-util:without-prompting (ql:add-to-init-file))'
+
+      - name: Renderer suite (software rasteriser)
+        run: make test-render-ci

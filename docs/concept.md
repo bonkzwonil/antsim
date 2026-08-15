@@ -496,6 +496,24 @@ These are not features. They are consequences, and each one is a test:
 
 That table is the project's definition of "working".
 
+**Status.** Seven of the ten in-scope rows pass. The two that are
+published *experiments* rather than properties — symmetry breaking and
+shortest-path selection — are implemented as such, on the apparatus in
+`src/world/bridge.lisp`, and run by `make acceptance`; measured across
+eight seeds, the binary bridge commits at ≥93% with the winning arm
+varying by seed, and the double bridge picks the short arm 8 times out of
+8 at a length ratio of 1.73. Trail death, homing without a trail, colony
+extinction and non-interpenetration are in the fast suite.
+
+Two of the seven carry a caveat, recorded here rather than quietly
+enjoyed: the `n = 1` control is asserted on the choice function's
+probabilities rather than on bridge traffic, and non-interpenetration on
+a synthetic crowd rather than a scrum at a small source. Both should
+graduate to their apparatus.
+
+Still open: quality-driven selection, no trail below the quality
+threshold, and task reallocation.
+
 ### 3.9 The M1 cut — what actually gets built first
 
 Sections 3.1–3.8 describe the model. **They do not describe M1.** Left
@@ -1049,7 +1067,7 @@ world has to be decided in advance to see it.
 | mouse wheel | zoom, anchored at the cursor — the world point under the pointer stays under it |
 | right-drag | pan |
 | `space` / `+` / `-` | pause, and time compression up/down |
-| left-click an ant | inspect: state, energy, crop, age, home vector, and whether it has the reserve to set out |
+| left-click an ant | inspect: state, energy, crop, age, home vector, and whether it has the reserve to set out — the ant is marked on the map by a pulsing pink reticle |
 | `home` | frame the whole world |
 | `h` / `?` | hide or show the key legend |
 | `q` / `escape` | quit |
@@ -1145,6 +1163,55 @@ afternoon.
 
 The bridge experiments ship as scenarios, which means the acceptance tests
 of §3.8 are *literally the published experiments run as data files*.
+
+### 6.1 Obstacle primitives, and the `bridge`
+
+An obstacle is one of `polygon`, `rect`, or `bridge`.
+
+```json
+{ "bridge": { "y_lo": 0.20, "y_hi": 0.40, "corridor_width": 0.06,
+              "arms": [ { "bottom": 0.28, "top": 0.28 },
+                        { "bottom": 0.36, "top": 0.60 } ] } }
+```
+
+A bridge is a band from `y_lo` to `y_hi` that is solid everywhere except
+for one corridor per arm. Each arm gives its centre line where it leaves
+the lower chamber and where it enters the upper one; an arm whose `bottom`
+and `top` differ is slanted, and therefore longer, **without the fork
+moving** — which is exactly what the unequal-arm experiment needs. The one
+above is Goss's double bridge.
+
+It is a primitive rather than three polygons for a reason that is not
+convenience. The solid parts are the *complement* of the corridors, and
+their coordinates are all derived from four numbers; written out by hand
+they are unreadable and easy to get wrong in the single way that matters —
+an extra way through the band that nobody notices. The ants find it, the
+traffic splits three ways, and the science gets blamed for a hole in the
+wall. That is not hypothetical: the first version of the apparatus had a
+different geometric mistake and produced a flat 51/49 result that looked
+exactly like the choice function failing.
+
+The primitive expands by calling the same `add-bridge!` the Lisp
+constructors use, and a test asserts that the shipped files and the Lisp
+constructors produce identical geometry, vertex for vertex. A bridge that
+meant one thing in JSON and another in an acceptance run would make the
+published result and the thing anyone can look at two different
+experiments with the same name.
+
+### 6.2 Strictness
+
+An unknown key is an error, a key of the wrong type is an error, and the
+message names the full path — `world.heigth`, not "invalid scenario".
+
+Keys that §6 documents but the loader does not implement yet are reported
+*differently* from typos, because the two need different answers: a typo
+is a mistake in the file, and a deferred key is a mistake in the author's
+expectations of the program. Telling them apart is most of what makes an
+error message worth reading.
+
+Deferred so far: `clock`, `species`, `bodies`, and the per-colony
+`brood_per_stock` / `max_age_s`, all of which are global parameters at
+M1's cut.
 
 ## 7. Milestones
 
@@ -1332,14 +1399,30 @@ committed to code** — this project inherits waldameisen's rule that nothing
 is silently tuned, and that rule is worth nothing if the "measured" values
 were guessed.
 
-**Load-bearing, confident:**
+**Implemented as runnable experiments.** These two are not background
+reading: they are in the suite, as apparatus, with the papers' own
+criteria. `make acceptance` runs them; the apparatus is
+`src/world/bridge.lisp` and the assertions are `tests/acceptance.lisp`.
+Anything cited here that the code depends on should be reachable by
+someone who wants to check the claim, so each carries a general-audience
+link as well as the citation.
 
 - **Deneubourg, Aron, Goss & Pasteels (1990)**, *The self-organizing
   exploratory pattern of the Argentine ant*, J. Insect Behavior 3:159 — the
   binary bridge, and the nonlinear choice function `(k+C)^n`.
+  Background: [Stigmergy](https://en.wikipedia.org/wiki/Stigmergy),
+  [Self-organization](https://en.wikipedia.org/wiki/Self-organization).
+  → **passes**, ≥93% commitment across 8 seeds, winner varying with seed.
 - **Goss, Aron, Deneubourg & Pasteels (1989)**, *Self-organized shortcuts in
   the Argentine ant*, Naturwissenschaften 76:579 — the double bridge and
   shortest-path selection.
+  Background: [Ant colony optimization
+  algorithms](https://en.wikipedia.org/wiki/Ant_colony_optimization_algorithms),
+  which is the double bridge's direct descendant in computer science, and
+  [Swarm intelligence](https://en.wikipedia.org/wiki/Swarm_intelligence).
+  → **passes**, short arm winning 8 of 8 at a length ratio of 1.73.
+
+**Load-bearing, confident:**
 - **Beckers, Deneubourg & Goss (1992, 1993)** on *Lasius niger* trail laying
   — deposition modulated by food quality, and the quality threshold below
   which no trail is laid.
@@ -1351,10 +1434,27 @@ were guessed.
   recruitment taxonomy; the general reference.
 - **Müller & Wehner** on *Cataglyphis* path integration; and the systematic
   search spiral of a homing ant that arrives at the wrong place.
+  Background: [Path integration](https://en.wikipedia.org/wiki/Path_integration),
+  [*Cataglyphis*](https://en.wikipedia.org/wiki/Cataglyphis).
 - **Charbonneau & Dornhaus** — inactivity as a genuine specialization, not
   sampling noise.
 
+The species is worth a link too, since every parameter in §3.1 is
+supposed to be its: [*Lasius
+niger*](https://en.wikipedia.org/wiki/Lasius_niger), and the
+[Argentine ant](https://en.wikipedia.org/wiki/Argentine_ant) the two
+bridge experiments were actually run on. That difference is a real
+caveat, not a footnote: both papers used *Linepithema humile* and this
+model is parameterised for *L. niger*. The mechanism is believed to be
+the same and the model reproduces both results — which is itself a claim,
+and one the acceptance suite is now making on every run.
+
 **Needs verification before it becomes a constant:**
+
+- **The citations above are from memory and carry no DOIs.** Volume and
+  page numbers especially: they are worth checking against the papers
+  before anyone cites this project's reading of them. The Wikipedia links
+  are orientation for a reader, not sources.
 
 - `n ≈ 2`, `k ≈ 20` — the values I recall from Deneubourg 1990, in units of
   *bridge passages*. The exponent is the robust part; `k` needs both the
