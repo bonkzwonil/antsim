@@ -57,9 +57,50 @@ On the surviving road, traffic runs both ways at once.
 *Outbound ants are pale, laden returners warm orange, and the few red ones no
 longer have the energy to leave the nest. Zoomed to 18 cm.*
 
-Crowding at the nest is not modelled either — it is the same non-overlap rule
-that stops ants walking through walls, applied to a hundred ants arriving at one
-entrance.
+### A traffic jam that feeds itself
+
+This is the best thing in the simulation, and nothing in the model is aware of
+any part of it.
+
+The route has to squeeze past the end of the obstacle. Ants collide there,
+because ants are discs that cannot overlap — the same rule that stops them
+walking through walls. So a **bulb** of jammed ants forms at the corner.
+
+![The jam at the obstacle's end](docs/images/07-jam.png)
+
+*The obstacle's right-hand end. Note the ants pressed flat along its top edge:
+they hit the wall and slide. Zoomed to 13 cm.*
+
+Now the part that makes it interesting. Pheromone is laid **per distance
+walked**, and the distance counted is the step the ant *attempts* — an ant
+shoving against a crowd is still walking, gaster still touching down, even
+though the collision pass pushes it back. So the ants stuck in that queue go on
+marking while barely advancing.
+
+The jam therefore lays itself down more heavily than open trail. That stronger
+mark recruits more ants to precisely the spot they are already stuck at, which
+makes the queue longer, which lays more pheromone.
+
+Congestion and recruitment are two separate rules that were never written to
+know about each other, and here the geometry of a rectangle closes a feedback
+loop between them. Nobody scripted a bottleneck. There is no bottleneck in the
+model; there is a rectangle and a rule about discs not overlapping.
+
+(Path integration makes the opposite choice — it uses the ant's *actual* net
+displacement, because that one is about where the ant really is. Both are
+right, for different reasons.)
+
+The same collision rule produces the scrum at the source, where arriving ants
+compete for an edge that gets **shorter as the pile goes down** — a depleting
+source physically supports fewer feeding ants at once.
+
+![Competition at the source](docs/images/08-crowd.png)
+
+*Ants packed around the green source, laden ones already turning for home
+against the incoming stream. Zoomed to 13 cm.*
+
+Crowding at the nest is the same rule again, applied to a few hundred ants
+arriving at one entrance.
 
 ![The nest](docs/images/04-nest.png)
 
@@ -82,14 +123,14 @@ two different environments.
 
 ![Five seconds: no pheromone at all](docs/images/00-nothing.png)
 
-At **40 seconds** the total is 698 and one faint line runs from the food to the
+At **40 seconds** the total is 783 and one faint line runs from the food to the
 nest. That is the first ants home, laying the first pheromone.
 
 ![Forty seconds: the first thread](docs/images/01-searching.png)
 
 By **5 minutes** that thread has become a road — in fact two of them, which is
-the frame [above](#what-emerges). The total is 34 506 and the population has
-grown from 150 to 263: the first turn of the loop that drives everything after
+the frame [above](#what-emerges). The total is 73 282 and the population has
+grown from 150 to 267: the first turn of the loop that drives everything after
 it, where food comes in, workers are made, and more workers thicken the trail.
 
 Everything in the pictures above grew from those first ants, by the ants' own
@@ -98,17 +139,49 @@ stronger is stronger.
 
 ## How it ends
 
-The source in this scenario is finite, and an hour is long enough to empty it.
-What follows is not scripted either. The source shrinks as it is eaten — its
-collision circle with it, so a dwindling pile physically supports fewer feeding
-ants and the queue behind it lengthens. Then the crop stops filling, foragers
-come home with nothing, and the nest's stock runs down.
+The source in this scenario is finite, and it runs out after **24 minutes**.
+What happens over the next six is the part worth watching.
 
-What the colony does next is the part worth watching. As the larder empties, the
+### The road outlives the source
+
+At the moment the source empties, the trail is at full strength — 113 163 units
+— and the colony is still pouring ants onto it.
+
+![The source has just run out](docs/images/09-abandoned.png)
+
+Following a trail and depositing on one are **separate rules**. An ant follows
+whatever pheromone is in front of it; an ant deposits only when it is carrying
+food. So the traffic continues and the renewal stops, and evaporation starts
+taking the road out from under the ants still walking it.
+
+**Two minutes later** the trail is down to 15 470 — 86% gone — and the ants are
+still packed along the line where it was, including a knot where the food used
+to be. Not one of them is orange, because there is nothing left to carry.
+
+![Two minutes on: walking a road that is dissolving](docs/images/10-fading.png)
+
+**Six minutes** and it is 283, from 113 163. The structure is simply gone, and
+with it every trace of where the food had been. The colony disperses back into
+the random walk it started with — and the red ants are the ones that no longer
+have the reserve to try again.
+
+![Six minutes on: nothing left](docs/images/11-collapsed.png)
+
+The population is *rising* through all three frames — 733, 761, 787 — because
+the colony is still converting its stored food into workers while its road
+dissolves. It is at its largest a few minutes after it has already lost.
+
+That is evaporation doing the job it exists for. It is the only mechanism by
+which a colony can forget, and without it these ants would walk to an empty
+patch of ground for ever.
+
+### And then the colony
+
+As the larder runs down, the
 ants' **urge to forage rises**: departures get more frequent and foragers push
 deeper into their own reserve before turning back. The nest empties itself out
-of doors — at one point 595 of 655 ants are outside at once — they search, they
-find nothing, and they come home spent. By 60 minutes the population is **0**,
+of doors — at one point **589 of 667 ants are outside at once** — they search,
+they find nothing, and they come home spent. By 60 minutes the population is **0**,
 the trail has evaporated to **nothing at all**, and there is no pheromone left
 anywhere to say a road was ever there.
 
@@ -118,10 +191,6 @@ anywhere to say a road was ever there.
 — they came home to die. Nothing removes them, because nothing in the colony
 knows how yet: necrophoresis is a later milestone, and until it exists the dead
 stay where they fell.*
-
-That is evaporation earning its place in the model. It is the only mechanism by
-which a colony can forget, and without it the trail to an exhausted source would
-persist for ever and the ants would keep walking to nothing.
 
 Every image here is generated by `make gallery` from a fixed seed, so the
 documentation cannot drift away from what the simulation does.
@@ -135,6 +204,9 @@ Ants pinned along all four arena walls. Ants stranded with a full crop and a
 home vector reading zero. A shell of resting ants at a radius nothing explained.
 Newborns filing out to the left in a line. A food source that stayed fat and
 green while the colony starved next to it.
+
+The two below are the best of them, and neither left a mark on any number the
+program was printing at the time.
 
 The best of them is this one. **The colony could starve with the door shut.**
 
@@ -165,6 +237,40 @@ Exhausted ants are now drawn **red**, which is the other half of the fix: a nest
 filling with spent ants had been indistinguishable on screen from a nest full of
 ants declining to leave — and was read as exactly that, by a human watching.
 That is the whole argument for the window in one sentence.
+
+### Ants that left the nest backwards
+
+The eighth one, found the same way: ants returning from the food would set off
+again and wander off with no apparent plan.
+
+They were not wandering. Departure never set a heading, so an ant left with the
+heading it arrived on — and a returning ant steers *at* the nest, so that
+heading pointed **inward**. Every departing ant walked out through the entrance
+and straight on, away from everything it knew. Measured over 613 departures on
+an established trail:
+
+| | before | after |
+|---|---|---|
+| left within 15° of the source | **0.0%** | **34.3%** |
+| left more than 150° away | 36.9% | 2.4% |
+
+Not one ant in 613 left towards the food it had just come back from. "No plan"
+was generous; it was the worst available direction, chosen systematically.
+
+Each ant now remembers one bearing and sets off along it, scattered by about
+29°. The bearing is read off the ant's **own path integrator** at the moment it
+leaves a source — the home vector points from ant to nest, so its reverse is the
+nest→food bearing as that ant believes it. Nothing global is consulted. Only a
+trip that actually brought food back overwrites it, and a newborn's is random,
+which is what keeps the naive ants exploring.
+
+Fixing it exposed a bug of a rarer kind. The scatter was drawn from the same RNG
+stream as the *decision* to leave — and an ant only leaves when that draw comes
+out below 0.005. The normal draw is Box-Muller, `z = √(−2 ln u₁)·cos(2πu₂)`, and
+it reuses that same `u₁`: conditioning on `u₁ < 0.005` forces `√(−2 ln u₁)` above
+3.2 every single time. Every ant left on a wild angle, deterministically. The
+draws look independent and are not — which is the one way a counter-based RNG
+can still catch you out.
 
 ## Running it
 

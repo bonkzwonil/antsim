@@ -484,6 +484,27 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; than the span the antennae sample, so an ant could
                     ;; straddle a trail with a sensor either side of it
                     ;; and read nothing at all.
+                    ;;
+                    ;; MOVED is the step the ant *attempted*, read before
+                    ;; BODIES-RESOLVE! has pushed it back out of whatever
+                    ;; it walked into — deliberately, and note that this
+                    ;; is the opposite choice from path integration, which
+                    ;; uses actual net displacement (see
+                    ;; PATH-INTEGRATION-STEP!).  Both are right, for
+                    ;; different reasons.  Path integration is about where
+                    ;; the ant *is*, so it must use where it got to.
+                    ;; Deposition is about walking effort — an ant shoving
+                    ;; against a crowd is still walking, gaster still
+                    ;; touching down — so it uses what the ant tried to
+                    ;; do.
+                    ;;
+                    ;; The visible consequence is at a bottleneck, where
+                    ;; laden ants queue: they keep marking while barely
+                    ;; advancing, so the congested spot is laid down more
+                    ;; heavily than open trail, and that mark recruits
+                    ;; more ants into the queue.  Congestion and
+                    ;; recruitment are separate rules that know nothing
+                    ;; about each other, and the geometry closes the loop.
                     (let ((moved (sqrt (+ (* (- x2 x) (- x2 x))
                                           (* (- y2 y) (- y2 y))))))
                       (declare (type f32 moved))

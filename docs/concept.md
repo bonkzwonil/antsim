@@ -215,6 +215,16 @@ Both halves of that are load-bearing, and M1 had neither:
 - **By distance, not per tick.** A laden ant walks slower than an unladen
   one, so a per-tick deposit lays a *heavier* line for the same journey —
   trail strength would encode walking speed rather than traffic.
+  The distance counted is the step the ant **attempts**, read before
+  collision resolution pushes it back — the opposite choice from path
+  integration, which uses actual net displacement, and both are right.
+  Path integration is about where the ant *is*; deposition is about
+  walking effort, and an ant shoving against a crowd is still walking.
+  The consequence is visible at a bottleneck: queued laden ants keep
+  marking while barely advancing, so a congested spot is laid down more
+  heavily than open trail, and that mark recruits more ants into the
+  queue. Congestion and recruitment know nothing about each other; the
+  geometry closes the loop.
 - **As a spreading packet, not a single cell.** A one-cell mark is
   narrower than the span the antennae sample, so an ant could straddle its
   own trail with a sensor either side of it and read zero on both. The
