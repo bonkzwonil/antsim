@@ -1155,11 +1155,30 @@ C ← min(C, C_max)      <span class="c">; saturation — a real trail is not un
             <thead><tr><th style="width:14%">ε</th><th>Behaviour</th></tr></thead>
             <tbody>
               <tr><td class="num-col">0</td><td>Colonies are blind to each other and merely compete for food.</td></tr>
-              <tr><td class="num-col">small</td><td>The realistic setting. Intercolony trail eavesdropping is documented; ants do read foreign trails, imperfectly.</td></tr>
-              <tr><td class="num-col">1</td><td>One shared field — the colonies' trails genuinely corrupt one another: a strong foreign trail pulls your foragers toward a source someone else is already draining.</td></tr>
+              <tr><td class="num-col"><strong>0.1</strong></td><td><strong>The setting.</strong> Intercolony trail eavesdropping is documented; ants do read foreign trails, imperfectly. The useful range is roughly 0.05–0.2.</td></tr>
+              <tr><td class="num-col">1</td><td>One shared field — the colonies' trails genuinely corrupt one another: a strong foreign trail pulls your foragers toward a source someone else is already draining. Deliberately pathological, and useful precisely because it should visibly break what works at 0.1.</td></tr>
             </tbody>
           </table>
         </div>
+        <p>
+          <strong>Settled: ε is small.</strong> The biology is the weaker argument on
+          its own — eavesdropping is real, but a foreign trail is a <em>cue</em> an ant
+          can exploit, not a <em>signal</em> addressed to it, and colony-specific blends
+          make it both chemically distinguishable and behaviourally discounted. “Some
+          attention, much less than to your own” is ε ≈ 0.1, not ε ≈ 0.5.
+        </p>
+        <p>
+          The decisive reason is what ε does to the choice function. The
+          <code>(k + C)<sup>n</sup></code> nonlinearity amplifies concentration
+          differences, and that amplification <em>is</em> the mechanism behind symmetry
+          breaking. Feeding a foreign field in at anything but a small weight lets a
+          neighbour's trail dominate the weights outright, and the two colonies collapse
+          into one system sharing a de facto global field. What is wanted is
+          <em>perturbation</em>: enough foreign signal to occasionally divert a forager
+          or tip a marginal branch decision, not enough to steer the colony. Small ε
+          makes competition a source of noise and drift rather than a takeover, and
+          keeps each colony's own symmetry breaking legible.
+        </p>
         <p>
           A single coefficient spans the whole range from independence to mutual
           interference, which is the cheapest possible way to make competition
@@ -1551,7 +1570,7 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
     <span class="s">"alarm"</span>:    { <span class="s">"tau_s"</span>: 30,   <span class="s">"diffusion"</span>: 0.02, <span class="s">"max"</span>: 20.0  }
   },
 
-  <span class="s">"choice"</span>: { <span class="s">"n"</span>: 2.0, <span class="s">"k"</span>: 20.0, <span class="s">"eavesdrop"</span>: 0.0 },
+  <span class="s">"choice"</span>: { <span class="s">"n"</span>: 2.0, <span class="s">"k"</span>: 20.0, <span class="s">"eavesdrop"</span>: 0.1 },
 
   <span class="s">"bodies"</span>: { <span class="s">"ant_radius"</span>: 0.0025, <span class="s">"relax_iterations"</span>: 3 },
 
@@ -1692,7 +1711,7 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
           <li><b>Ants are discs; obstacles are polygons</b>
             <div class="alt">One non-overlap rule, Jacobi resolution so determinism survives (§3.11).</div></li>
           <li><b>Trail fields are per colony with an eavesdropping coefficient ε</b>
-            <div class="alt">M1 runs one colony; the indirection is free now and unaddable later (§3.12).</div></li>
+            <div class="alt">M1 runs one colony; the indirection is free now and unaddable later. ε is small — default 0.1: a large ε would let a neighbour's trail dominate the <code>(k&nbsp;+&nbsp;C)<sup>n</sup></code> weights and collapse the colonies into one shared field (§3.12).</div></li>
           <li><b>Repository</b>
             <div class="alt">Initialised and pushed to <code>bonk/antsim</code>, branch <code>concept</code>.</div></li>
         </ol>
