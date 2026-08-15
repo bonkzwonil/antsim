@@ -90,6 +90,9 @@
    ;; render/renderer — the 2D scene (§5.1)
    #:renderer #:make-renderer #:destroy-renderer
    #:upload-field #:upload-bodies #:draw-world #:render-world-png
+   ;; render/hud — screen-space overlay (§5.1)
+   #:hud #:make-hud #:destroy-hud #:hud-reset #:hud-quad #:hud-text
+   #:hud-bar #:hud-draw #:build-font #:*font-3x5*
    ;; live/window — the interactive view (§5.5), system antsim/live
    #:run-live #:live-demo #:live-inspect
    #:*live-speed* #:*live-paused*))
