@@ -18,6 +18,14 @@
 (deftype u8v  () '(simple-array (unsigned-byte 8) (*)))
 (deftype fixv () '(simple-array fixnum (*)))
 
+;;; Grids are bounded so that a cell index is provably a fixnum.  Without
+;;; a bound, SBCL must assume `cy * width` can be a bignum and emits a
+;;; generic multiply — in FIELD-INDEX, which runs several times per ant
+;;; per tick.  65535 cells at the 5 mm resolution of §3.1 is a 327 m
+;;; arena, which is not a limit anyone will meet.
+(deftype grid-dim () '(integer 1 65535))
+(deftype grid-index () '(mod 65536))
+
 (defun mkf32 (n &optional (v 0.0f0))
   (make-array n :element-type 'single-float :initial-element v))
 (defun mku32 (n &optional (v 0))
