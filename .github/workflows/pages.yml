@@ -11,7 +11,7 @@ name: pages
 
 on:
   push:
-    branches: [main, concept]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

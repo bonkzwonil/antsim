@@ -75,6 +75,17 @@ Run them yourself with `make acceptance`. The apparatus is
 [`src/world/bridge.lisp`](src/world/bridge.lisp); the criteria are the papers',
 recorded in [§3.8](docs/concept.md#38-what-must-emerge--the-acceptance-list).
 
+Both also ship as scenario files, so you can watch one instead of reading a
+number:
+
+```sh
+SCENARIO=scenarios/goss-double-bridge.json make live
+```
+
+A test asserts that the files and the Lisp constructors build the same
+apparatus vertex for vertex — otherwise the published result and the thing you
+can look at would be two different experiments with the same name.
+
 ![An established trail between nest and food](docs/images/03-trail.png)
 
 *Twenty simulated minutes. The nest is the disc at the bottom, the food source
@@ -336,11 +347,19 @@ checkout, so a clone builds where it stands with no setup.
 
 ```sh
 make test              # core suite: RNG, pool, geometry, fields, ants
+make acceptance        # the §3.8 experiments: both bridges, several seeds
 make live              # the interactive window
 make gallery           # regenerate the images above
 make test-render       # renderer suite, on the GPU
 make test-render-mesa  # the same suite in software — no GPU needed
+
+SCENARIO=scenarios/deneubourg-binary-bridge.json make live
 ```
+
+Scenarios are JSON ([§6](docs/concept.md#6-the-scenario-file)) and validation is
+strict: an unknown key is an error and the message names the path, because a
+silently-defaulted typo produces a run that looks plausible and answers a
+different question than the one you asked.
 
 GPU targets wrap the command in a `guix shell`; see [the design
 document](docs/concept.md#46-building-and-running) for why, and for what to do

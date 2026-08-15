@@ -76,7 +76,13 @@
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+
    #:+ant-dead+
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
+   ;; scenario — the JSON format (§6); defined in antsim/scenario
+   #:scenario #:scenario-name #:scenario-world #:scenario-colonies
+   #:scenario-foods #:scenario-seed #:scenario-duration #:scenario-params
+   #:load-scenario #:load-scenario-string #:with-scenario-params
+   #:scenario-error #:scenario-error-path #:scenario-error-detail
    ;; world/bridge — the §3.8 apparatus
+   #:add-bridge!
    #:bridge #:make-bridge-world #:binary-bridge #:double-bridge
    #:bridge-world #:bridge-colony #:bridge-wall-y #:bridge-gaps
    #:bridge-counts #:bridge-lengths

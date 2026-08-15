@@ -1164,6 +1164,55 @@ afternoon.
 The bridge experiments ship as scenarios, which means the acceptance tests
 of §3.8 are *literally the published experiments run as data files*.
 
+### 6.1 Obstacle primitives, and the `bridge`
+
+An obstacle is one of `polygon`, `rect`, or `bridge`.
+
+```json
+{ "bridge": { "y_lo": 0.20, "y_hi": 0.40, "corridor_width": 0.06,
+              "arms": [ { "bottom": 0.28, "top": 0.28 },
+                        { "bottom": 0.36, "top": 0.60 } ] } }
+```
+
+A bridge is a band from `y_lo` to `y_hi` that is solid everywhere except
+for one corridor per arm. Each arm gives its centre line where it leaves
+the lower chamber and where it enters the upper one; an arm whose `bottom`
+and `top` differ is slanted, and therefore longer, **without the fork
+moving** — which is exactly what the unequal-arm experiment needs. The one
+above is Goss's double bridge.
+
+It is a primitive rather than three polygons for a reason that is not
+convenience. The solid parts are the *complement* of the corridors, and
+their coordinates are all derived from four numbers; written out by hand
+they are unreadable and easy to get wrong in the single way that matters —
+an extra way through the band that nobody notices. The ants find it, the
+traffic splits three ways, and the science gets blamed for a hole in the
+wall. That is not hypothetical: the first version of the apparatus had a
+different geometric mistake and produced a flat 51/49 result that looked
+exactly like the choice function failing.
+
+The primitive expands by calling the same `add-bridge!` the Lisp
+constructors use, and a test asserts that the shipped files and the Lisp
+constructors produce identical geometry, vertex for vertex. A bridge that
+meant one thing in JSON and another in an acceptance run would make the
+published result and the thing anyone can look at two different
+experiments with the same name.
+
+### 6.2 Strictness
+
+An unknown key is an error, a key of the wrong type is an error, and the
+message names the full path — `world.heigth`, not "invalid scenario".
+
+Keys that §6 documents but the loader does not implement yet are reported
+*differently* from typos, because the two need different answers: a typo
+is a mistake in the file, and a deferred key is a mistake in the author's
+expectations of the program. Telling them apart is most of what makes an
+error message worth reading.
+
+Deferred so far: `clock`, `species`, `bodies`, and the per-colony
+`brood_per_stock` / `max_age_s`, all of which are global parameters at
+M1's cut.
+
 ## 7. Milestones
 
 Deliberately shaped like waldameisen's: each milestone ends in something

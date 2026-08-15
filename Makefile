@@ -90,10 +90,12 @@ smoke:
 ## in the bottom-right corner; `h` hides that legend.
 ##   wheel zoom (cursor-anchored) · right-drag pan · left-click inspect
 ##   space pause · +/- time compression · home frame all · q or escape quit
+##   SCENARIO=scenarios/goss-double-bridge.json make live   opens a file
 live:
 	$(WIN) sh -c 'LD_LIBRARY_PATH=$$GUIX_ENVIRONMENT/lib exec $(SBCL) \
 	  --eval "(ql:quickload :antsim/live :silent t)" \
-	  --eval "(ant:live-demo)" --quit'
+	  --eval "$(if $(SCENARIO),(ant:live-scenario \"$(SCENARIO)\"),(ant:live-demo))" \
+	  --quit'
 
 ## gallery — regenerate the README's images from a known scenario.  Every
 ## picture in the documentation comes from here rather than a screenshot,

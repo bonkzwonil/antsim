@@ -1,0 +1,86 @@
+# The same suites as .github/workflows/tests.yml, on the canonical remote.
+#
+# This is the one that gates day-to-day work: routine pushes go here, and
+# the GitHub copy only fires on the manual release mirror.  Both exist
+# because neither alone covers both remotes, and a test that only runs
+# where the code rarely lands is not a test anybody relies on.
+#
+# Needs a registered Actions runner with a container image that has curl
+# and a package manager; the default `node:20-bookworm` image does. If no
+# runner is registered this file is inert, which costs nothing.
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: docker
+    container:
+      image: node:20-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SBCL
+        run: apt-get update && apt-get install -y sbcl curl
+
+      - name: Cache Quicklisp
+        id: ql-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/quicklisp
+          key: quicklisp-linux-v1
+
+      - name: Install Quicklisp
+        if: steps.ql-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+          sbcl --non-interactive \
+            --load /tmp/quicklisp.lisp \
+            --eval '(quicklisp-quickstart:install)' \
+            --eval '(ql-util:without-prompting (ql:add-to-init-file))'
+
+      - name: Core suite
+        run: make test
+
+      # Deneubourg's binary bridge and Goss's double bridge, as
+      # experiments, with the papers' own criteria (§3.8).
+      - name: Acceptance experiments (§3.8)
+        run: make acceptance
+
+  render:
+    runs-on: docker
+    container:
+      image: node:20-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SBCL and Mesa
+        run: |
+          apt-get update
+          apt-get install -y sbcl curl libgl1 libegl1 libgbm1 \
+                             libglx-mesa0 mesa-utils
+
+      - name: Cache Quicklisp
+        id: ql-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/quicklisp
+          key: quicklisp-linux-v1
+
+      - name: Install Quicklisp
+        if: steps.ql-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+          sbcl --non-interactive \
+            --load /tmp/quicklisp.lisp \
+            --eval '(quicklisp-quickstart:install)' \
+            --eval '(ql-util:without-prompting (ql:add-to-init-file))'
+
+      - name: Renderer suite (software rasteriser)
+        run: make test-render-ci

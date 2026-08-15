@@ -439,6 +439,29 @@ Returns the world, so a session can keep poking at it afterwards."
         (setf *live-world* nil *live-renderer* nil *live-hud* nil))))
   w)
 
+(defun live-scenario (path &key (width 1100) (height 800))
+  "Open the window on a scenario file (§6).
+
+The playground half of the scenario format.  A format whose only consumer
+is a headless test is a format nobody will notice is wrong; being able to
+watch a file run is how a scenario gets debugged, and it is why the
+bridge apparatus is worth having as a file at all rather than only as a
+Lisp constructor.
+
+The scenario's parameter overrides are bound around the whole run, not
+just around loading — a file that sets tau and then runs under the
+default tau would be a particularly quiet lie."
+  (let ((s (load-scenario path)))
+    (format t "~&~a: ~,2f x ~,2f m, ~d colon~:@p, ~d source~:p, seed ~d~%"
+            (scenario-name s)
+            (world-width (scenario-world s)) (world-height (scenario-world s))
+            (length (scenario-colonies s)) (length (scenario-foods s))
+            (scenario-seed s))
+    (with-scenario-params (s)
+      (run-live (scenario-world s) :width width :height height
+                                   :title (format nil "antsim — ~a"
+                                                  (scenario-name s))))))
+
 (defun live-demo (&key (width 1100) (height 800))
   "The scenario the M2 gallery renders, but watchable.  A single colony,
 one food source, one obstacle — enough to see a trail form, thicken and

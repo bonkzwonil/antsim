@@ -54,6 +54,51 @@ were written."
            (sqrt (+ (* (- x1 x0) (- x1 x0)) (* (- y1 y0) (- y1 y0))))))
     (+ (d nx ny bx by) (d bx by tx ty) (d tx ty fx fy))))
 
+(defun add-bridge! (w &key (y-lo 0.20f0) (y-hi 0.40f0)
+                           (corridor-width 0.06f0)
+                           bottoms tops)
+  "Add the solid parts of a bridge to W: a band from Y-LO to Y-HI that is
+solid everywhere except for one corridor per arm.
+
+BOTTOMS and TOPS give each arm's centre line where it leaves the lower
+chamber and where it enters the upper one, left to right.  An arm whose
+bottom and top differ is slanted, and therefore longer, without the fork
+moving — which is exactly what an unequal-arm bridge needs.
+
+Built as the **complement of the corridors**, never as a list of solid
+pieces given by hand.  Authoring the solid parts directly is how a bridge
+ends up with a third way through that nobody notices; the ants find it,
+the traffic splits three ways, and the science gets blamed for a hole in
+the wall.
+
+This is the one implementation.  MAKE-BRIDGE-WORLD calls it, and so does
+the `bridge` primitive in the scenario format (§6) — a bridge that meant
+something different in JSON than it does in Lisp would be a very quiet
+way to invalidate an acceptance result."
+  (declare (type world w) (type f32 y-lo y-hi corridor-width))
+  (assert (= (length bottoms) (length tops)) ()
+          "a bridge needs the same number of bottom and top mouths")
+  (assert (>= (length bottoms) 2) ()
+          "a bridge needs at least two arms; got ~d" (length bottoms))
+  (let ((h (* 0.5f0 corridor-width))
+        (width (world-width w)))
+    ;; everything left of the first arm
+    (add-obstacle w (list 0.0f0 y-lo
+                          (- (first bottoms) h) y-lo
+                          (- (first tops) h) y-hi
+                          0.0f0 y-hi))
+    ;; an island between each adjacent pair
+    (loop for (b0 b1) on bottoms
+          for (t0 t1) on tops
+          while b1
+          do (add-obstacle w (list (+ b0 h) y-lo  (- b1 h) y-lo
+                                   (- t1 h) y-hi  (+ t0 h) y-hi)))
+    ;; and everything right of the last
+    (add-obstacle w (list (+ (car (last bottoms)) h) y-lo
+                          width y-lo  width y-hi
+                          (+ (car (last tops)) h) y-hi)))
+  (values))
+
 (defun make-bridge-world (&key (width 0.70f0) (height 0.60f0)
                                ;; corridor mouths: x of each arm's centre
                                ;; line where it leaves the nest chamber
@@ -97,16 +142,9 @@ would put a starvation transient on top of the measurement."
          (h (* 0.5f0 corridor-width))
          (b0 (float (first bottoms) 1.0f0)) (b1 (float (second bottoms) 1.0f0))
          (t0 (float (first tops) 1.0f0))    (t1 (float (second tops) 1.0f0)))
-    ;; Three polygons close the band: everything left of arm 0, the island
-    ;; between the arms, and everything right of arm 1.  Built as the
-    ;; complement of the corridors rather than as segments given by hand —
-    ;; authoring the solid parts directly is how a bridge ends up with a
-    ;; third way through that nobody notices, and then the science gets
-    ;; blamed for a hole in the wall.
-    (add-obstacle w (list 0.0f0 y-lo  (- b0 h) y-lo  (- t0 h) y-hi  0.0f0 y-hi))
-    (add-obstacle w (list (+ b0 h) y-lo  (- b1 h) y-lo
-                          (- t1 h) y-hi  (+ t0 h) y-hi))
-    (add-obstacle w (list (+ b1 h) y-lo  width y-lo  width y-hi  (+ t1 h) y-hi))
+    (declare (ignorable h))
+    (add-bridge! w :y-lo y-lo :y-hi y-hi :corridor-width corridor-width
+                   :bottoms (list b0 b1) :tops (list t0 t1))
     ;; walls before the colony: MAKE-COLONY rasterizes what is already
     ;; there into the new field's blocked mask (see ADD-OBSTACLE)
     (let ((c (add-colony w :name "home" :nest-x nest-x :nest-y nest-y
