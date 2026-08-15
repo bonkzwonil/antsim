@@ -17,7 +17,12 @@
   ((:file "package")
    (:file "util")
    (:file "rng")
-   (:file "pool"))
+   (:file "pool")
+   (:file "params")
+   (:module "world"
+    :serial t
+    :components ((:file "geom")
+                 (:file "grid"))))
   :in-order-to ((test-op (test-op "antsim/test"))))
 
 (defsystem "antsim/render"
@@ -40,7 +45,8 @@
   :depends-on ("antsim" "fiveam")
   :serial t
   :pathname "tests"
-  :components ((:file "suite"))
+  :components ((:file "suite")
+               (:file "world"))
   :perform (test-op (o c)
              (symbol-call :fiveam :run!
                           (find-symbol (string :antsim) :antsim/test))))
