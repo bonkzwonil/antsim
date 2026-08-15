@@ -14,7 +14,7 @@
    #:mkf32 #:mku32 #:mku16 #:mku8 #:mkfix
    #:clampf #:lerpf #:sqf
    ;; rng — counter-based, no global state (§4.4)
-   #:hash32 #:rnd-u32 #:rnd01 #:+default-seed+
+   #:hash32 #:rnd-u32 #:rnd01 #:rnd-normal #:+default-seed+
    ;; pool — persistent workers (§4.5)
    #:pool #:make-worker-pool #:pool-run #:pool-shutdown #:pool-n
    ;; params — the Lasius niger set (§3.1); all rebindable, see params.lisp
@@ -39,6 +39,36 @@
    #:field-index #:field-at #:field-blocked-p #:field-deposit! #:field-step!
    #:field-total #:field-max #:field-rasterize-polygon!
    #:field-cell-x #:field-cell-y #:field-tau #:field-cap
+   ;; world/bodies — the one non-overlap rule (§3.11)
+   #:bodies #:make-bodies #:bodies-alloc #:bodies-free! #:bodies-resolve!
+   #:bodies-become-corpse! #:bodies-rebuild-hash!
+   #:bodies-n #:bodies-capacity #:bodies-x #:bodies-y #:bodies-r
+   #:bodies-kind #:bodies-hash #:bodies-nfree
+   #:body-kind-blocking-p #:body-kind-movable-p
+   #:+body-ant+ #:+body-corpse+ #:+body-food+ #:+body-nest+ #:+body-free+
+   #:*leave-probability* #:*nest-feed-rate*
+   ;; world/scene — what a scenario names (§6)
+   #:food #:food-x #:food-y #:food-r #:food-amount #:food-initial
+   #:food-quality #:food-renew #:food-empty-p #:food-body
+   #:colony #:colony-id #:colony-name #:colony-field #:colony-stock
+   #:colony-population #:colony-capacity #:colony-born #:colony-died
+   #:colony-nest-x #:colony-nest-y #:colony-nest-r #:colony-alive-p
+   #:world #:make-world #:world-width #:world-height #:world-bodies
+   #:world-ants #:world-colonies #:world-foods #:world-obstacles
+   #:world-tick #:world-seed #:world-seconds #:world-food-at
+   #:add-obstacle #:add-food #:add-colony
+   ;; ant/state — the ant table (§3.5)
+   #:ants #:make-ants #:ants-n #:ants-live #:ants-capacity #:ant-live-p
+   #:ants-id #:ants-body #:ants-colony #:ants-state #:ants-heading
+   #:ants-crop #:ants-load-quality #:ants-energy #:ants-age
+   #:ants-hvx #:ants-hvy #:ants-px #:ants-py #:ants-count-state
+   #:path-integration-step!
+   #:spawn-ant #:kill-ant
+   #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+
+   #:+ant-dead+
+   ;; ant/step — the tick (§3.2-§3.5, §4.3)
+   #:wrap-angle #:angle-toward #:sense-at #:choose-turn
+   #:world-step! #:world-run! #:colony-step! #:world-seed-population!
    ;; render/png (antsim/render)
    #:write-png #:crc32 #:adler32
    ;; render/egl

@@ -26,7 +26,12 @@
   (verts (mkf32 0) :type f32v)          ; x0 y0 x1 y1 ...
   (n 0 :type fixnum)                    ; vertex count
   (min-x 0.0f0 :type f32) (min-y 0.0f0 :type f32)
-  (max-x 0.0f0 :type f32) (max-y 0.0f0 :type f32))
+  (max-x 0.0f0 :type f32) (max-y 0.0f0 :type f32)
+  ;; Vertex mean, used only as a fallback outward direction when a disc
+  ;; sits exactly on an edge and the closest point gives no direction at
+  ;; all.  Not the true centroid, and it does not need to be: it only has
+  ;; to point outward reliably enough to make progress.
+  (cen-x 0.0f0 :type f32) (cen-y 0.0f0 :type f32))
 
 (defun make-polygon (coords)
   "COORDS is a flat sequence x0 y0 x1 y1 ... of at least three points."
@@ -35,13 +40,16 @@
     (assert (>= n 3) (coords) "A polygon needs at least 3 vertices, got ~d." n)
     (map-into v (lambda (c) (float c 1.0f0)) coords)
     (let ((min-x (aref v 0)) (max-x (aref v 0))
-          (min-y (aref v 1)) (max-y (aref v 1)))
+          (min-y (aref v 1)) (max-y (aref v 1))
+          (sx 0.0f0) (sy 0.0f0))
       (dotimes (i n)
         (let ((x (aref v (* 2 i))) (y (aref v (1+ (* 2 i)))))
           (setf min-x (min min-x x) max-x (max max-x x)
-                min-y (min min-y y) max-y (max max-y y))))
+                min-y (min min-y y) max-y (max max-y y))
+          (incf sx x) (incf sy y)))
       (%make-polygon :verts v :n n
-                     :min-x min-x :min-y min-y :max-x max-x :max-y max-y))))
+                     :min-x min-x :min-y min-y :max-x max-x :max-y max-y
+                     :cen-x (/ sx n) :cen-y (/ sy n)))))
 
 (defun point-in-polygon-p (poly x y)
   "Crossing-number test.  Points exactly on an edge are not guaranteed
@@ -99,6 +107,8 @@ Values: cx, cy, squared distance."
           (setf j i))))
     (values bx by best)))
 
+(declaim (ftype (function (polygon f32 f32 f32) (values f32 f32))
+                disc-polygon-correction))
 (defun disc-polygon-correction (poly x y r)
   "How far a disc at (X, Y) with radius R must move to leave POLY.
 Values: dx, dy — zero when there is no overlap.
@@ -119,23 +129,37 @@ two."
     (let ((inside (point-in-polygon-p poly x y))
           (d (sqrt (max d2 0.0f0))))
       (declare (type f32 d))
-      (cond
-        (inside
-         ;; (cx,cy) is on the boundary and (x,y) is within, so the way out
-         ;; is *toward* the closest point and then clear of it by R.
-         (if (< d 1.0f-7)
-             ;; sitting exactly on an edge: any consistent direction will
-             ;; do, and consistency is what determinism needs
-             (values 0.0f0 (+ r *relax-slop*))
-             (let ((s (/ (+ d r) d)))
-               (values (* (- cx x) s) (* (- cy y) s)))))
-        ((< d r)
-         ;; outside but touching: push away from the boundary point
-         (if (< d 1.0f-7)
-             (values 0.0f0 0.0f0)
-             (let ((s (/ (- r d) d)))
-               (values (* (- x cx) s) (* (- y cy) s)))))
-        (t (values 0.0f0 0.0f0))))))
+      ;; Both pushes clear the boundary by an extra *relax-slop*.  Landing
+      ;; a disc *exactly* on an edge is the failure this avoids: the
+      ;; crossing test is then ambiguous, the closest point gives no
+      ;; direction, and the disc oscillates on the boundary for ever
+      ;; instead of leaving it.  Observed, not hypothetical.
+      (let ((slop *relax-slop*))
+        (cond
+          ((< d 1.0f-7)
+           ;; Degenerate: sitting on an edge or on a vertex, so the
+           ;; closest point yields no direction.  Fall back to "away from
+           ;; the middle of the polygon", which always makes progress and
+           ;; is a pure function of the geometry, so it stays reproducible.
+           (if inside
+               (let* ((ex (- x (polygon-cen-x poly)))
+                      (ey (- y (polygon-cen-y poly)))
+                      (el (sqrt (+ (* ex ex) (* ey ey)))))
+                 (if (< el 1.0f-7)
+                     (values 0.0f0 (+ r slop))
+                     (let ((s (/ (+ r slop) el)))
+                       (values (* ex s) (* ey s)))))
+               (values 0.0f0 0.0f0)))
+          (inside
+           ;; (cx,cy) is on the boundary and (x,y) is within it, so the way
+           ;; out is *toward* the closest point and then clear of it by R.
+           (let ((s (/ (+ d r slop) d)))
+             (values (* (- cx x) s) (* (- cy y) s))))
+          ((< d r)
+           ;; outside but touching: push away from the boundary point
+           (let ((s (/ (+ (- r d) slop) d)))
+             (values (* (- x cx) s) (* (- y cy) s))))
+          (t (values 0.0f0 0.0f0)))))))
 
 ;;; --------------------------------------------------------------------
 ;;; Spatial hash (§4.2)
@@ -223,18 +247,31 @@ so callers still test the real distance.  Broad phase only."
         (rr (gensym "R")) (lo-x (gensym)) (hi-x (gensym))
         (lo-y (gensym)) (hi-y (gensym)) (bx (gensym)) (by (gensym))
         (b (gensym)) (k (gensym)))
+    ;; Bounds are clamped in float space before the FLOOR, for the reason
+    ;; given in world/grid.lisp: flooring an unclamped coordinate conses a
+    ;; bignum and defeats fixnum arithmetic through the whole loop body.
     `(let* ((,ss ,s) (,xx ,x) (,yy ,y) (,rr ,radius)
-            (,lo-x (max 0 (floor (* (- ,xx ,rr (shash-origin-x ,ss))
-                                    (shash-inv-cell ,ss)))))
-            (,hi-x (min (1- (shash-w ,ss))
-                        (floor (* (+ (- ,xx (shash-origin-x ,ss)) ,rr)
-                                  (shash-inv-cell ,ss)))))
-            (,lo-y (max 0 (floor (* (- ,yy ,rr (shash-origin-y ,ss))
-                                    (shash-inv-cell ,ss)))))
-            (,hi-y (min (1- (shash-h ,ss))
-                        (floor (* (+ (- ,yy (shash-origin-y ,ss)) ,rr)
-                                  (shash-inv-cell ,ss))))))
-       (declare (type fixnum ,lo-x ,hi-x ,lo-y ,hi-y))
+            (,lo-x (the grid-index
+                        (floor (clampf (* (- ,xx ,rr (shash-origin-x ,ss))
+                                          (shash-inv-cell ,ss))
+                                       0.0f0
+                                       (float (1- (shash-w ,ss)) 1.0f0)))))
+            (,hi-x (the grid-index
+                        (floor (clampf (* (+ (- ,xx (shash-origin-x ,ss)) ,rr)
+                                          (shash-inv-cell ,ss))
+                                       0.0f0
+                                       (float (1- (shash-w ,ss)) 1.0f0)))))
+            (,lo-y (the grid-index
+                        (floor (clampf (* (- ,yy ,rr (shash-origin-y ,ss))
+                                          (shash-inv-cell ,ss))
+                                       0.0f0
+                                       (float (1- (shash-h ,ss)) 1.0f0)))))
+            (,hi-y (the grid-index
+                        (floor (clampf (* (+ (- ,yy (shash-origin-y ,ss)) ,rr)
+                                          (shash-inv-cell ,ss))
+                                       0.0f0
+                                       (float (1- (shash-h ,ss)) 1.0f0))))))
+       (declare (type grid-index ,lo-x ,hi-x ,lo-y ,hi-y))
        (loop for ,by of-type fixnum from ,lo-y to ,hi-y do
          (loop for ,bx of-type fixnum from ,lo-x to ,hi-x do
            (let ((,b (+ ,bx (* ,by (shash-w ,ss)))))

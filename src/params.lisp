@@ -53,16 +53,55 @@ one-cell wall, and deposition never skips a cell.")
 the ratio matters more than the value, because it is what makes a long
 arm cost more than a short one on the return leg as well as the outbound.")
 
-(defparameter *turn-sigma* 0.35f0
+(defparameter *turn-sigma* 0.05f0
   "Standard deviation of the per-tick heading noise, radians.  [cal]
 §3.9 replaces the wrapped Cauchy of §3.2 with a Gaussian: same
 locally-straight, globally-diffusive path, and the tail shape is a
-refinement rather than a mechanism.  0.35 rad per 50 ms gives a path that
-is straight over a few centimetres and diffusive over the arena.")
+refinement rather than a mechanism.
 
-(defparameter *sensor-offset* 0.006f0
-  "How far ahead of the ant the antennal sample is taken, metres.  [scale]
-Just beyond the head of a 4 mm ant.")
+The value is set by the *persistence length* it implies, which is the
+only property of a correlated random walk that matters here: for a step
+s and per-step angular sd sigma, L_p is about 2s/sigma^2.  With s = 1 mm
+per tick, sigma together with *turn-rate* gives L_p on the order of
+20 cm — the right scale for an ant searching a 1 m arena.
+
+The first value tried was 0.35, which gives L_p = 1.6 cm.  Ants with a
+path that tortuous never found a food source 40 cm away at all, the
+colony burned its stock on fruitless trips, and the run died out.  That
+looked like a broken foraging model and was in fact a walk with the
+wrong correlation length.")
+
+(defparameter *turn-rate* 0.08f0
+  "Heading change per tick toward the antennal sample the choice function
+picked, radians.  [cal]
+
+Deliberately *not* the same number as *sensor-spread*.  The spread is
+where the antennae are — a real geometric fact about the ant — while
+this is how fast the animal can turn.  Conflating them, which is the
+obvious first implementation, makes an ant snap through 30 degrees every
+50 ms: a 20 Hz sequence of large discrete turns, which is both physically
+absurd and destroys the persistence the walk needs.  Sensing wide and
+turning slowly is what real ants do.")
+
+(defparameter *sensor-offset* 0.012f0
+  "How far ahead of the ant the antennal sample is taken, metres.
+
+[scale, adjusted] A real *L. niger* antenna reaches perhaps 3 mm past the
+head, which is where this started — and at that offset the model could
+not discriminate at all.  The three sample points have to land in three
+*different* grid cells, and with a 5 mm cell (§3.1) a 6 mm offset put the
+centre and one flanking sample in the same cell perpetually.
+
+The failure was quiet and exact: the choice function's preference for a
+doubled arm came out at 4/9 with n = 2 instead of 4/6, which is precisely
+what you get when two of the three weights are the doubled one.  Nothing
+errored; the amplification was simply diluted.
+
+12 mm makes the lateral separation about 2.4 cells.  This is the standard
+compromise of a grid-based pheromone model — the sample points stand for
+where the ant is *about to be* rather than where its antennae are — and
+the honest alternative is a finer grid, which §3.1 sizes for other
+reasons.  If the cell size changes, check this again.")
 
 (defparameter *sensor-spread* 0.52f0
   "Half-angle between the left and right antennal samples, radians.
@@ -131,14 +170,20 @@ threshold is a switch, not a taper, and it is its own acceptance row.")
 ;;; Energy, crop, and life (§3.5, §3.10)
 ;;; --------------------------------------------------------------------
 
-(defparameter *energy-drain-walking* 2.2f-5
+(defparameter *energy-drain-walking* 1.2f-4
   "Energy lost per motion tick while walking, as a fraction of full.
-[cal] Full to empty in about 38 minutes of continuous walking, so a
-forager must return; this is what makes energy the return-urge driver
-rather than decoration.")
+[cal] Full to empty in about 7 minutes of continuous walking.
 
-(defparameter *energy-drain-resting* 4.0f-6
-  "Energy lost per motion tick at rest.  [cal] Roughly a fifth of the
+This number sets the length of a *fruitless* search, and that turned out
+to be the thing it controls that matters.  At the first value tried
+(2.2e-5, 38 minutes) the model ran and laid trail, but 152 of 186 ants
+were permanently OUTBOUND: an ant with no food to find kept walking for
+29 simulated minutes before its energy fell far enough to turn it round,
+so the colony had almost no returning traffic and the trail was built by
+a trickle.  Foraging trips have a duration, and it is set here.")
+
+(defparameter *energy-drain-resting* 2.0f-5
+  "Energy lost per motion tick at rest.  [cal] Roughly a sixth of the
 walking cost.")
 
 (defparameter *energy-return-threshold* 0.45f0
@@ -149,6 +194,24 @@ Not a hard switch: see *homing-weight-*, which makes the turn gradual.")
   "Crop filled per motion tick at quality 1.0.  [cal] Two and a half
 seconds to fill at ideal quality; longer at poor food, which is one of
 the ways quality shows up in the foraging rate.")
+
+(defparameter *leave-probability* 0.005f0
+  "Chance per motion tick that a rested ant in the nest sets out.  [cal]
+About one departure every 10 s of simulated time, so a colony's foragers
+trickle out rather than leaving in lockstep — and the trickle is what
+lets a trail build gradually enough for the choice function's
+amplification to have something to amplify.
+
+This is also the whole of M1's task allocation: §3.9 defers response
+thresholds and age polyethism, so there is exactly one task and this
+probability is how an ant decides to do it.")
+
+(defparameter *nest-feed-rate* 0.002f0
+  "Energy per motion tick a resting ant draws from the colony's stock.
+[cal] The nest is a resource rather than a waypoint (§3.5).  M1 has no
+ant-to-ant trophallaxis — §3.9 defers it, because it is the only
+mechanism in the model needing pairwise coupling — so an ant takes from
+the common store directly.")
 
 (defparameter *crop-to-energy* 0.35f0
   "Fraction of a unloaded crop that becomes the ant's own energy.  [cal]
@@ -194,9 +257,24 @@ relative to the trail-following choice.  [cal] Applied as a weight that
 grows as energy falls, so a tired ant curves homeward rather than
 flipping a switch (§3.5).")
 
-(defparameter *nest-arrival-radius* 0.02f0
+(defparameter *nest-arrival-radius* 0.06f0
   "How close an ant must get to the nest centre to unload, metres.
-[cal] Larger than the nest disc so that homing does not have to be exact.")
+[cal] Must be comfortably larger than the nest disc *and* than the queue
+that forms around it.
+
+Set equal to the nest radius at first, and the result was a colony that
+died in its own doorway.  A returning cohort of a hundred ants cannot
+physically fit inside a 2 cm circle — a hundred 2.5 mm discs need about
+1.6x that area — so the non-overlap rule (§3.11) held them in a ring
+outside it, no ant ever satisfied the arrival test, and they starved
+while touching home.  The diagnostic signature was the mean distance of
+returning ants sitting flat at 0.35 m and rising, when it should have
+been falling.
+
+The congestion itself is correct and worth keeping: real nest entrances
+produce measurable traffic jams (§3.11), and the queue is emergent rather
+than modelled.  What was wrong was requiring an ant to reach the *centre*
+of a crowd it is part of.")
 
 ;;; --------------------------------------------------------------------
 ;;; Bodies (§3.11)
@@ -224,12 +302,13 @@ relaxation from chasing floating-point noise forever.")
 (declaim (type f32
                *cell-size* *motion-dt* *pheromone-dt* *colony-dt*
                *ant-radius* *walk-speed* *walk-speed-laden* *turn-sigma*
-               *sensor-offset* *sensor-spread*
+               *sensor-offset* *sensor-spread* *turn-rate*
                *choice-n* *choice-k* *choice-eavesdrop*
                *trail-tau* *trail-cap* *trail-deposit*
                *trail-quality-threshold*
                *energy-drain-walking* *energy-drain-resting*
                *energy-return-threshold* *crop-fill-rate* *crop-to-energy*
+               *leave-probability* *nest-feed-rate*
                *brood-per-stock* *nest-upkeep*
                *pi-noise* *homing-weight-low-energy* *nest-arrival-radius*
                *relax-slop*))
