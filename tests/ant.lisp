@@ -272,6 +272,97 @@ re-explore."
             "trail is ~,0f, down from a peak of ~,0f — less decay than one ~
              hour of evaporation should give" now peak)))))
 
+;;; --------------------------------------------------- foraging urgency
+
+(defun %nest-energies! (w value)
+  "Put every resting ant at exactly VALUE energy, so a departure test can
+vary one thing at a time."
+  (let ((a (ant:world-ants w)))
+    (dotimes (i (ant:ants-n a))
+      (when (ant:ant-live-p a i)
+        (setf (aref (ant:ants-energy a) i) value)))))
+
+(test an-empty-larder-sends-under-fuelled-ants-out
+  "The colony must not be able to starve with the door shut.
+
+This is a regression test for a deadlock, and the deadlock was real: a
+departure needed energy, energy came from the nest's stock, and the stock
+came from departures.  When a source ran dry those three closed into a
+ring — every ant came home, dropped below the departure threshold, could
+not be fed, and lay in the nest until it died of old age without one of
+them ever going out to look.  Measured at the time: 499 ants in the nest,
+0 outbound, for the rest of the run.
+
+The pair is the point.  Both colonies hold ants at exactly the same
+energy — 0.30, under the well-fed departure threshold — and differ only
+in what is in the larder.  So it is not the ants' own reserves doing the
+work in either case, and the two runs cannot both be explained by
+starvation.
+
+Note what an ant reads here, because it matters that this is not
+telepathy: it is fed from the stock while it rests, and being given
+nothing is a local fact about its own body.  No ant consults the colony's
+food supply, and none of this tells an ant anything about food it has not
+visited."
+  (flet ((departures (stock ticks)
+           (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0
+                                     :capacity 400))
+                  (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.20f0
+                                       :capacity 300 :stock stock)))
+             (ant:world-seed-population! w c 60)
+             (%nest-energies! w 0.30f0)
+             (ant:world-run! w ticks)
+             (values (ant:ants-count-state (ant:world-ants w)
+                                           ant:+ant-outbound+)
+                     c))))
+    ;; 60 ticks: short enough that a fed colony cannot climb back over the
+    ;; well-fed threshold within the run, so the two cases stay separated
+    ;; by the larder alone.
+    (multiple-value-bind (hungry hc) (departures 0.0f0 60)
+      (multiple-value-bind (fed fc) (departures 400.0f0 60)
+        (is (> (ant:colony-forage-urgency hc) 0.9f0)
+            "an empty larder should read as maximum urgency, got ~,2f"
+            (ant:colony-forage-urgency hc))
+        (is (< (ant:colony-forage-urgency fc) 0.1f0)
+            "a full larder should read as no urgency, got ~,2f"
+            (ant:colony-forage-urgency fc))
+        (is (> hungry 20)
+            "only ~d of 60 ants left a nest with an empty larder — the ~
+             colony is starving indoors" hungry)
+        (is (< fed hungry)
+            "a fed colony sent out ~d and a starving one ~d; hunger is ~
+             not raising the departure rate" fed hungry)))))
+
+(test hunger-lowers-both-energy-thresholds-together
+  "The bar for setting out and the bar for giving up are one number.
+
+They have to move together.  Lowering only the first would push a
+starving ant out of the nest and turn it round on the very next tick,
+which is the same deadlock standing in a different place."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 200))
+         (full (ant:add-colony w :nest-x 0.10f0 :nest-y 0.10f0
+                                 :stock 400.0f0))
+         (empty (ant:add-colony w :nest-x 0.30f0 :nest-y 0.30f0
+                                  :stock 0.0f0)))
+    (ant:world-seed-population! w full 40)
+    (ant:world-seed-population! w empty 40)
+    (is (< (ant:colony-energy-threshold empty)
+           (ant:colony-energy-threshold full))
+        "a hungry colony's foragers should push deeper into reserve ~
+         (~,3f) than a fed colony's (~,3f)"
+        (ant:colony-energy-threshold empty)
+        (ant:colony-energy-threshold full))
+    (is (> (ant:colony-leave-probability empty)
+           (* 2.0f0 (ant:colony-leave-probability full)))
+        "hunger barely changed the departure rate: ~,4f vs ~,4f"
+        (ant:colony-leave-probability empty)
+        (ant:colony-leave-probability full))
+    ;; and the fed colony must be left exactly where it was
+    (is (< (abs (- (ant:colony-energy-threshold full)
+                   ant:*energy-return-threshold*))
+           0.02f0)
+        "a fed colony's threshold drifted from the calibrated value")))
+
 ;;; ------------------------------------------------------ determinism
 
 (test a-run-is-reproducible

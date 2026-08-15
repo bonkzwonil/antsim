@@ -99,6 +99,7 @@ initial condition rather than merely a convenient one."
                  ;; pass reads a displacement from the origin
                  (aref (ants-px a) i) sx
                  (aref (ants-py a) i) sy
+                 (aref (ants-trailed a) i) 0.0f0
                  ;; and the home vector is the way back from where it
                  ;; actually is, which is not quite the nest centre
                  (aref (ants-hvx a) i) (- (colony-nest-x c) sx)
@@ -280,9 +281,15 @@ switch into and no switching logic to get wrong (§3.5)."
                (when (and (> want 0.0f0) (> (colony-stock c) want))
                  (decf (colony-stock c) want)
                  (incf (aref (ants-energy a) i) want)))
-             (when (and (> (aref (ants-energy a) i) *energy-return-threshold*)
+             ;; Whether to set out, and the bar for doing so, both move
+             ;; with how hungry the colony is (COLONY-FORAGE-URGENCY).  A
+             ;; nest with a full larder trickles foragers out; one with an
+             ;; empty larder turns itself out of doors, and accepts ants
+             ;; with far less in reserve, because the alternative is to
+             ;; lie down and starve with the door shut.
+             (when (and (> (aref (ants-energy a) i) (colony-energy-threshold c))
                         (< (rnd01 id tick +stream-leave+ seed)
-                           *leave-probability*))
+                           (colony-leave-probability c)))
                (setf (aref (ants-state a) i) +ant-outbound+
                      ;; Set the home vector to the *actual* way back, not
                      ;; to zero.
@@ -353,14 +360,18 @@ switch into and no switching logic to get wrong (§3.5)."
                ;; homing urge: total for a returning ant, and growing as
                ;; energy falls for an outbound one (§3.5)
                (let* ((hv-len (sqrt (+ (* hvx hvx) (* hvy hvy))))
+                      ;; against the colony's threshold, so the urge to
+                      ;; turn back grows from the same point at which the
+                      ;; ant would actually give up
+                      (ethr (colony-energy-threshold c))
                       (urge (if returning
                                 1.0f0
                                 (* *homing-weight-low-energy*
                                    (max 0.0f0
-                                        (/ (- *energy-return-threshold*
+                                        (/ (- ethr
                                               (aref (ants-energy a) i))
-                                           *energy-return-threshold*))))))
-                 (declare (type f32 hv-len urge))
+                                           (max 1.0f-6 ethr)))))))
+                 (declare (type f32 hv-len urge ethr))
                  (when (and (> hv-len 1.0f-4) (> urge 0.0f0))
                    (setf heading
                          (angle-toward heading (atan hvy hvx)
@@ -400,12 +411,38 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; below the threshold (§3.3).  That switch is its own
                     ;; acceptance row: poor food is exploited but never
                     ;; recruited to.
-                    (when (and (> (aref (ants-crop a) i) 0.0f0)
-                               (>= (aref (ants-load-quality a) i)
-                                   *trail-quality-threshold*))
-                      (field-deposit! (colony-field c) x2 y2
-                                      (* *trail-deposit*
-                                         (aref (ants-load-quality a) i))))
+                    ;;
+                    ;; Laid as discrete packets a fixed *distance* apart,
+                    ;; not as a mark per tick in the nearest cell.  Both
+                    ;; halves of that matter.  By distance, because a
+                    ;; laden ant walks slower and a per-tick deposit would
+                    ;; therefore lay a heavier line for the same journey —
+                    ;; strength would encode speed rather than traffic.
+                    ;; As packets, because a one-cell mark is narrower
+                    ;; than the span the antennae sample, so an ant could
+                    ;; straddle a trail with a sensor either side of it
+                    ;; and read nothing at all.
+                    (let ((moved (sqrt (+ (* (- x2 x) (- x2 x))
+                                          (* (- y2 y) (- y2 y))))))
+                      (declare (type f32 moved))
+                      (incf (aref (ants-trailed a) i) moved)
+                      (when (and (> (aref (ants-crop a) i) 0.0f0)
+                                 (>= (aref (ants-load-quality a) i)
+                                     *trail-quality-threshold*)
+                                 (>= (aref (ants-trailed a) i)
+                                     *trail-packet-spacing*))
+                        ;; The packet carries what the ant would have laid
+                        ;; over the distance it stands for, so the pheromone
+                        ;; unit — and with it every ratio calibrated against
+                        ;; *choice-k* — is untouched by the spacing.
+                        (let ((n (aref (ants-trailed a) i)))
+                          (declare (type f32 n))
+                          (setf (aref (ants-trailed a) i) 0.0f0)
+                          (field-deposit-packet!
+                           (colony-field c) x2 y2
+                           (* (trail-deposit-rate)
+                              (aref (ants-load-quality a) i)
+                              (/ n (* *walk-speed-laden* *motion-dt*)))))))
                     ;; home?
                     (let ((ddx (- x2 (colony-nest-x c)))
                           (ddy (- y2 (colony-nest-y c))))
@@ -433,10 +470,13 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; forager turning for home on the last 22% of its
                     ;; reserve, which a winding return path through a
                     ;; crowd does not reliably cover.
+                    ;; The give-up threshold is the colony's, not the
+                    ;; constant: a forager from a hungry nest pushes
+                    ;; deeper into its reserve before turning back.
                     (cond ((world-food-at w x2 y2)
                            (setf (aref (ants-state a) i) +ant-at-food+))
                           ((< (aref (ants-energy a) i)
-                              *energy-return-threshold*)
+                              (colony-energy-threshold c))
                            (setf (aref (ants-state a) i)
                                  +ant-returning+))))
                    ))               ; cond H, let G

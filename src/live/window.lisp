@@ -20,10 +20,22 @@
 (defvar *live-view* nil)
 (defvar *live-renderer* nil)
 (defvar *live-paused* nil)
-(defvar *live-speed* 1.0f0
+(defvar *live-speed* 4.0f0
   "Time compression: simulated seconds per real second.  §4.3 wants 1x,
 100x and as-fast-as-possible from the same code, so this is a multiplier
-on the clock rather than a different loop.")
+on the clock rather than a different loop.
+
+Opens at 4x rather than 1x.  Real time is the wrong default for watching
+this: the interesting quantities — a trail forming, a source running
+down, a colony growing — move on scales of minutes to an hour, and at 1x
+the first thing a new watcher sees is several minutes of ants wandering
+in silence.  The clock is still exact at any multiplier; only the
+starting point moved.")
+
+(defvar *live-keyhelp* t
+  "Whether the key legend is drawn.  On by default: the controls are not
+guessable, and a window that does not say what it responds to is a window
+most people will only pan around in.")
 (defvar *live-hud* nil)
 (defvar *live-selected* nil
   "Slot of the inspected ant, or NIL.  Held with its id so the panel can
@@ -73,6 +85,7 @@ otherwise silently swap the readout for a different individual.")
       ;; here, because this callback reports characters rather than key
       ;; positions.
       ((#\q #\Q) (glfw:set-window-should-close))
+      ((#\h #\H #\?) (setf *live-keyhelp* (not *live-keyhelp*)))
       (t nil))))
 
 (glfw:def-key-callback live-key (window key scancode action mods)
@@ -159,6 +172,49 @@ that makes the state machine observable while it is being calibrated."
     (3 (values 1.00f0 0.72f0 0.30f0))
     (t (values 0.62f0 0.68f0 0.78f0))))
 
+(defparameter *live-keys*
+  '(("+ -"   "SPEED")
+    ("SPACE" "PAUSE")
+    ("HOME"  "FIT")
+    ("WHEEL" "ZOOM")
+    ("DRAG"  "PAN")
+    ("CLICK" "INSPECT")
+    ("H"     "HIDE")
+    ("Q"     "QUIT"))
+  "The key legend, in the order it is drawn.  Kept as data rather than a
+run of HUD-TEXT calls so the panel can size itself to its contents — the
+font is fixed-width, so the widest row *is* the panel width, and a legend
+that has to be re-measured by hand every time a line changes is a legend
+that will eventually be clipped.")
+
+(defun live-draw-keyhelp (h vw vh)
+  "The key legend, pinned to the bottom-right corner (§5.1).
+
+Bottom-right because the top edge is the counter strip and the top-left
+is where the inspector panel opens; this is the one corner nothing else
+competes for, at any window size."
+  (declare (type hud h))
+  (let* ((s 2.0f0)
+         (adv (* 4.0f0 s))               ; the font's fixed advance
+         (line 13.0f0)
+         (pad 9.0f0)
+         (gap 10.0f0)
+         (kw (* adv (reduce #'max *live-keys* :key (lambda (r) (length (first r))))))
+         (aw (* adv (reduce #'max *live-keys* :key (lambda (r) (length (second r))))))
+         (pw (+ pad kw gap aw pad))
+         (ph (+ pad (* line (length *live-keys*)) pad))
+         (px (- vw pw 10.0f0))
+         (py (- vh ph 10.0f0)))
+    (hud-quad h px py pw ph 0.04 0.045 0.055 0.80)
+    (hud-quad h px py 3.0 ph 0.55 0.86 1.00 0.55)
+    (loop for (key action) in *live-keys*
+          for row from 0
+          for y = (+ py pad (* row line))
+          do (hud-text h (+ px pad) y key
+                       :scale s :r 0.90 :g 0.76 :b 0.50)
+             (hud-text h (+ px pad kw gap) y action
+                       :scale s :r 0.60 :g 0.66 :b 0.74))))
+
 (defun live-draw-hud (h w vw vh fps)
   "Counters along the top, and the selected ant's state readout (§5.1)."
   (declare (type hud h) (type world w))
@@ -194,7 +250,7 @@ that makes the state machine observable while it is being calibrated."
       (when (and i (ant-live-p a i)
                  (= (aref (ants-id a) i) *live-selected-id*))
         (let* ((px 10.0f0) (py 38.0f0)
-               (pw 210.0f0) (ph 128.0f0)
+               (pw 210.0f0) (ph 142.0f0)
                (st (aref (ants-state a) i))
                (tx (+ px 10.0f0))
                (ty (+ py 10.0f0)))
@@ -228,6 +284,26 @@ that makes the state machine observable while it is being calibrated."
                       (format nil "HOME ~,1FCM"
                               (* 100.0 (sqrt (+ (* hx hx) (* hy hy)))))
                       :scale s :r 0.60 :g 0.66 :b 0.74))
+          ;; Can this ant set out at all?
+          ;;
+          ;; The energy bar alone does not answer that, because the bar
+          ;; the ant is measured against moves: the threshold falls as
+          ;; the colony gets hungry (COLONY-ENERGY-THRESHOLD).  Reading
+          ;; the bar without knowing where the line sits is what made a
+          ;; nest full of exhausted ants look like a nest full of ants
+          ;; refusing to leave.  So the panel states the verdict and the
+          ;; number it was reached against.
+          (let* ((cc (aref (coerce (world-colonies w) 'vector)
+                           (aref (ants-colony a) i)))
+                 (gate (colony-energy-threshold cc))
+                 (ablep (> (aref (ants-energy a) i) gate)))
+            (hud-text h tx (+ ty (* 6 line))
+                      (format nil "~:[SPENT~;READY~] NEEDS ~,2F"
+                              ablep gate)
+                      :scale s
+                      :r (if ablep 0.60 0.95)
+                      :g (if ablep 0.80 0.30)
+                      :b (if ablep 0.55 0.26)))
           ;; and mark it on the map, or a panel about an ant you cannot
           ;; find is only half an answer
           (let ((bi (aref (ants-body a) i)))
@@ -236,7 +312,11 @@ that makes the state machine observable while it is being calibrated."
                                     (aref (bodies-x b) bi)
                                     (aref (bodies-y b) bi))
               (hud-quad h (- sx 9) (- sy 1) 18 2 1.0 1.0 1.0 0.85)
-              (hud-quad h (- sx 1) (- sy 9) 2 18 1.0 1.0 1.0 0.85)))))))
+              (hud-quad h (- sx 1) (- sy 9) 2 18 1.0 1.0 1.0 0.85))))))
+
+    ;; --- key legend ---------------------------------------------------
+    (when *live-keyhelp*
+      (live-draw-keyhelp h vw vh)))
   (hud-draw h vw vh))
 
 (defun live-title (w fps)

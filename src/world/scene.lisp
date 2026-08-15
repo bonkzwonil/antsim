@@ -78,6 +78,50 @@ of the geometry for free rather than needing a rule of its own."
   (declare (type colony c))
   (plusp (colony-population c)))
 
+(defun colony-forage-urgency (c)
+  "How hungry the colony is, 0.0 (full larder) to 1.0 (empty), from the
+stock it holds per living worker (§3.5).
+
+This is the model's whole account of why a colony forages harder when it
+is short of food, and it is deliberately the *only* thing that reads the
+stock as a colony-wide quantity — an individual ant never does.  An ant
+learns the same fact locally and honestly: it asks the stock for energy
+while it rests, and being given none is what tells it the larder is
+empty.  Nothing here lets an ant know about food it has not visited.
+
+Leaving this out deadlocked the colony outright.  Setting out needed
+energy, energy came from the stock, and the stock came from ants setting
+out; when the source ran dry those three closed into a ring, and every
+ant lay down in the nest and starved without one of them going to look.
+Extinction is a legitimate outcome (§3.10) — dying in bed with the door
+shut is not."
+  (declare (type colony c))
+  (let ((pop (max 1 (colony-population c))))
+    (- 1.0f0
+       (clampf (/ (/ (colony-stock c) (float pop 1.0f0))
+                  (max 1.0f-6 *forage-ration*))
+               0.0f0 1.0f0))))
+
+(defun colony-leave-probability (c)
+  "Chance per tick that a rested ant sets out, raised as the larder empties."
+  (declare (type colony c))
+  (* *leave-probability*
+     (+ 1.0f0 (* (colony-forage-urgency c)
+                 (- *forage-urgency-gain* 1.0f0)))))
+
+(defun colony-energy-threshold (c)
+  "The energy an ant needs to set out — and, for one already out, the
+energy at which it gives up and turns for home.
+
+Deliberately one number for both.  They are the two ends of the same
+decision, and moving only the first would push a starving ant out of the
+nest and turn it round on the very next tick: the same deadlock in a
+different place."
+  (declare (type colony c))
+  (* *energy-return-threshold*
+     (- 1.0f0 (* (colony-forage-urgency c)
+                 (- 1.0f0 *desperate-energy-fraction*)))))
+
 ;;; --------------------------------------------------------------------
 ;;; World
 ;;; --------------------------------------------------------------------

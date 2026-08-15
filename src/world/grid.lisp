@@ -28,7 +28,7 @@
 
 (defun make-field (&key width height (cell *cell-size*)
                         (origin-x 0.0f0) (origin-y 0.0f0)
-                        (tau *trail-tau*) (cap *trail-cap*))
+                        (tau (trail-tau)) (cap *trail-cap*))
   "A field covering WIDTH x HEIGHT metres, at CELL resolution."
   (let* ((w (max 1 (round width cell)))
          (h (max 1 (round height cell))))
@@ -93,6 +93,81 @@ this in place would be faster and would silently destroy determinism."
            (optimize (speed 3) (safety 0)))
   (incf (aref (the f32v (field-deposit f)) (field-index f x y)) amount)
   (values))
+
+(defconstant +packet-span+ 15
+  "Widest packet the stack buffer allows, in cells.  At the default 5 mm
+cell that is a 7.5 cm radius, far beyond anything an ant lays.")
+
+(defun field-deposit-packet! (f x y amount
+                              &key (radius *trail-packet-radius*)
+                                   (falloff *trail-packet-falloff*))
+  "Splat AMOUNT around a world position as one pheromone packet (§3.3).
+
+The weight of a cell falls as exp(-d/falloff) with distance from the
+packet's centre and is cut off at RADIUS.  That is what a droplet
+actually looks like: a concentrated spot with a soft edge, not a painted
+square.
+
+Two properties are worth stating because both are load-bearing:
+
+  * The weights are **normalised over the cells that actually take the
+    deposit**, so a packet carries the same total wherever it lands.
+    Without that, a packet at the arena edge or beside a wall would
+    quietly lose the fraction of itself that fell outside, and trails
+    would thin exactly where geometry funnels the traffic that makes
+    them.
+  * Blocked cells are excluded before normalising, not zeroed afterwards.
+    FIELD-STEP! forces them to zero either way, so including them would
+    be a silent leak of the same kind, along every wall.
+
+Like FIELD-DEPOSIT!, this writes only to the deposit buffer, so any two
+packets commute and the ant loop stays order-independent (§4.2)."
+  (declare (type field f) (type f32 x y amount radius falloff)
+           (optimize (speed 3) (safety 0)))
+  (let* ((cell (field-cell f))
+         (ox (field-origin-x f))
+         (oy (field-origin-y f))
+         (blk (the u8v (field-blocked f)))
+         (dep (the f32v (field-deposit f)))
+         (fw (field-w f))
+         (i0 (field-cell-x f (- x radius))) (i1 (field-cell-x f (+ x radius)))
+         (j0 (field-cell-y f (- y radius))) (j1 (field-cell-y f (+ y radius)))
+         (span (1+ (- i1 i0)))
+         (inv-falloff (/ 1.0f0 (max 1.0f-6 falloff)))
+         (r2 (* radius radius))
+         (total 0.0f0)
+         (wbuf (make-array (* +packet-span+ +packet-span+)
+                           :element-type 'single-float
+                           :initial-element 0.0f0)))
+    (declare (dynamic-extent wbuf) (type f32 total)
+             (type (simple-array single-float (*)) wbuf))
+    (when (or (> span +packet-span+) (> (1+ (- j1 j0)) +packet-span+))
+      ;; A radius this large is a misconfiguration rather than a case to
+      ;; handle: fall back to the single cell instead of overrunning.
+      (field-deposit! f x y amount)
+      (return-from field-deposit-packet! (values)))
+    (loop for j of-type fixnum from j0 to j1 do
+      (let ((dy (- (+ oy (* (+ (float j 1.0f0) 0.5f0) cell)) y)))
+        (declare (type f32 dy))
+        (loop for i of-type fixnum from i0 to i1 do
+          (let* ((dx (- (+ ox (* (+ (float i 1.0f0) 0.5f0) cell)) x))
+                 (d2 (+ (* dx dx) (* dy dy))))
+            (declare (type f32 dx d2))
+            (when (and (<= d2 r2) (/= 1 (aref blk (+ i (* j fw)))))
+              (let ((wgt (exp (* (- (sqrt d2)) inv-falloff))))
+                (declare (type f32 wgt))
+                (setf (aref wbuf (+ (- i i0) (* (- j j0) +packet-span+))) wgt)
+                (incf total wgt)))))))
+    (when (> total 0.0f0)
+      (let ((k (/ amount total)))
+        (declare (type f32 k))
+        (loop for j of-type fixnum from j0 to j1 do
+          (loop for i of-type fixnum from i0 to i1 do
+            (let ((wgt (aref wbuf (+ (- i i0) (* (- j j0) +packet-span+)))))
+              (declare (type f32 wgt))
+              (when (> wgt 0.0f0)
+                (incf (aref dep (+ i (* j fw))) (* k wgt))))))))
+    (values)))
 
 (defun field-step! (f &optional (dt *pheromone-dt*))
   "One tick of the pheromone clock (§3.3):

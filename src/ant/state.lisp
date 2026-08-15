@@ -51,6 +51,14 @@
   ;; has had its say.  See PATH-INTEGRATION-STEP! for why that matters.
   (px nil :type (or null f32v))
   (py nil :type (or null f32v))
+  ;; Distance walked since this ant last put its gaster down (§3.3).  A
+  ;; trail is a row of discrete packets, not a painted stripe, so an ant
+  ;; has to remember how far it has come since the last one — laying by
+  ;; distance rather than per tick also keeps the trail's strength
+  ;; independent of walking speed, which a per-tick deposit does not: a
+  ;; laden ant walks slower and would otherwise lay a heavier line for
+  ;; the same journey.
+  (trailed nil :type (or null f32v))
   (free nil :type (or null fixv))
   (nfree 0 :type fixnum))
 
@@ -63,6 +71,7 @@
               :energy (mkf32 capacity) :age (mku32 capacity)
               :hvx (mkf32 capacity) :hvy (mkf32 capacity)
               :px (mkf32 capacity) :py (mkf32 capacity)
+              :trailed (mkf32 capacity)
               :free (mkfix capacity)))
 
 (declaim (inline ant-live-p))

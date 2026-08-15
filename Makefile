@@ -76,7 +76,8 @@ smoke:
 	  --eval '(ql:quickload :antsim/render :silent t)' \
 	  --eval '(ant:m0-smoke :path #p"$(SMOKE_PNG)")'
 
-## live — the interactive window (§5.5).
+## live — the interactive window (§5.5).  The window itself lists its keys
+## in the bottom-right corner; `h` hides that legend.
 ##   wheel zoom (cursor-anchored) · right-drag pan · left-click inspect
 ##   space pause · +/- time compression · home frame all · q or escape quit
 live:
