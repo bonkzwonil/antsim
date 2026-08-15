@@ -1,0 +1,60 @@
+# Publishes docs/ to GitHub Pages.
+#
+# Inert until this repository has a GitHub remote — the canonical remote is
+# the Gitea instance, and Gitea has no Pages equivalent.  Kept here the same
+# way waldameisen keeps .github/workflows/tests.yml: ready if the repo is
+# ever mirrored, costing nothing while it is not.
+#
+# Enable at: Settings -> Pages -> Source: GitHub Actions.
+
+name: pages
+
+on:
+  push:
+    branches: [main, concept]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; never cancel a run that is mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # docs/index.html is generated from docs/concept.html and committed, so
+      # the two can drift.  Regenerate and diff rather than trusting them.
+      - name: Install SBCL
+        run: sudo apt-get update && sudo apt-get install -y sbcl
+
+      - name: Check docs/index.html is current
+        run: |
+          make page
+          if ! git diff --quiet -- docs/index.html; then
+            echo "::error::docs/index.html is stale. Run 'make page' and commit."
+            git diff -- docs/index.html
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
