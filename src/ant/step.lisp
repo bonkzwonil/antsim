@@ -69,27 +69,40 @@ initial condition rather than merely a convenient one."
          (b (world-bodies w))
          (i (ants-alloc a)))
     (when i
-      (let ((bi (bodies-alloc b (colony-nest-x c) (colony-nest-y c)
-                              *ant-radius* +body-ant+)))
+      ;; Scattered across the nest disc rather than all on its centre.
+      ;; Spawning every worker at one point leaves the collision solver
+      ;; with a pile of exactly concentric discs — a degenerate case it
+      ;; can only resolve by tie-break, and one that a colony hits on
+      ;; every single birth.  SQRT of the radial draw keeps the scatter
+      ;; uniform over the disc rather than bunched at the middle.
+      (let* ((id (colony-next-id c))
+             (seed (world-seed w))
+             (ang (* 6.2831855f0 (rnd01 id 0 92 seed)))
+             (rad (* (colony-nest-r c) (sqrt (rnd01 id 0 93 seed))))
+             (sx (+ (colony-nest-x c) (* rad (cos ang))))
+             (sy (+ (colony-nest-y c) (* rad (sin ang))))
+             (bi (bodies-alloc b sx sy *ant-radius* +body-ant+)))
         (cond
           ((null bi) (ants-free! a i) nil)
           (t
-           (setf (aref (ants-id a) i) (colony-next-id c)
+           (setf (aref (ants-id a) i) id
                  (aref (ants-body a) i) bi
                  (aref (ants-colony a) i) (colony-id c)
                  (aref (ants-state a) i) +ant-in-nest+
                  (aref (ants-heading a) i)
-                 (* 6.2831855f0 (rnd01 (colony-next-id c) 0 91 (world-seed w)))
+                 (* 6.2831855f0 (rnd01 id 0 91 seed))
                  (aref (ants-crop a) i) 0.0f0
                  (aref (ants-load-quality a) i) 0.0f0
                  (aref (ants-energy a) i) 1.0f0
                  (aref (ants-age a) i) 0
-                 (aref (ants-hvx a) i) 0.0f0
-                 (aref (ants-hvy a) i) 0.0f0
                  ;; must match the body, or the first path-integration
                  ;; pass reads a displacement from the origin
-                 (aref (ants-px a) i) (colony-nest-x c)
-                 (aref (ants-py a) i) (colony-nest-y c))
+                 (aref (ants-px a) i) sx
+                 (aref (ants-py a) i) sy
+                 ;; and the home vector is the way back from where it
+                 ;; actually is, which is not quite the nest centre
+                 (aref (ants-hvx a) i) (- (colony-nest-x c) sx)
+                 (aref (ants-hvy a) i) (- (colony-nest-y c) sy))
            (incf (colony-next-id c))
            (incf (colony-population c))
            (incf (colony-born c))

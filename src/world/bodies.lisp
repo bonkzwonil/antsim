@@ -183,11 +183,27 @@ row measures."
                                   (if (> d 1.0f-7)
                                       (setf dx (* (/ ex d) mag)
                                             dy (* (/ ey d) mag))
-                                      ;; exactly concentric: separate along
-                                      ;; a direction fixed by index, so the
-                                      ;; outcome stays reproducible
-                                      (setf dx (if (< i jj) mag (- mag))
-                                            dy 0.0f0))))))))))))
+                                      ;; Exactly concentric, so the centre
+                                      ;; difference gives no direction.
+                                      ;; Pick one from a hash of the pair:
+                                      ;; reproducible, and — the part that
+                                      ;; matters — *isotropic*.
+                                      ;;
+                                      ;; This used to separate along the x
+                                      ;; axis alone, which was invisible
+                                      ;; until newborns arrived: they all
+                                      ;; spawn on the nest centre, so every
+                                      ;; pair of them was concentric, and a
+                                      ;; newborn's index is higher than its
+                                      ;; neighbours' — so all of them were
+                                      ;; pushed the *same* way and shot out
+                                      ;; of the nest in a line to the left.
+                                      (let* ((ang (* 6.2831855f0
+                                                     (rnd01 (min i jj)
+                                                            (max i jj) 77)))
+                                             (sgn (if (< i jj) 1.0f0 -1.0f0)))
+                                        (setf dx (* sgn mag (cos ang))
+                                              dy (* sgn mag (sin ang)))))))))))))))
               ;; NOTE the loop above assigns rather than accumulates: each
               ;; body resolves its single *deepest* overlap per iteration.
               ;; That is max projection, and it is chosen for one property
