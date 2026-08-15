@@ -81,4 +81,15 @@
    #:bind-offscreen #:read-offscreen #:capture-offscreen
    #:compile-shader #:link-program
    ;; render/smoke — the M0 acceptance frame
-   #:draw-smoke-frame #:render-smoke-png #:m0-smoke))
+   #:draw-smoke-frame #:render-smoke-png #:m0-smoke
+   ;; render/view — the ortho camera (§5.5)
+   #:view #:make-view #:view-fit #:view-cx #:view-cy #:view-span
+   #:view-vw #:view-vh #:view-span-y #:view-bounds
+   #:view-world->screen #:view-screen->world
+   #:view-zoom-at! #:view-pan-pixels!
+   ;; render/renderer — the 2D scene (§5.1)
+   #:renderer #:make-renderer #:destroy-renderer
+   #:upload-field #:upload-bodies #:draw-world #:render-world-png
+   ;; live/window — the interactive view (§5.5), system antsim/live
+   #:run-live #:live-demo #:live-inspect
+   #:*live-speed* #:*live-paused*))

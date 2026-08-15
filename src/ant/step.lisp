@@ -290,6 +290,18 @@ switch into and no switching logic to get wrong (§3.5)."
                       (nx (clampf (+ x dx) 0.0f0 wid))
                       (ny (clampf (+ y dy) 0.0f0 hei)))
                  (declare (type f32 speed dx dy nx ny))
+                 ;; Reflect off the arena edge rather than merely clamping.
+                 ;; Clamping alone leaves an ant pressed against the wall
+                 ;; with a heading that still points into it, so it walks
+                 ;; on the spot until something else turns it.  The first
+                 ;; rendered frame showed the result at a glance: every
+                 ;; one of the four borders was lined with stuck ants,
+                 ;; which no summary statistic had made visible.
+                 (when (/= nx (+ x dx))
+                   (setf heading (wrap-angle (- 3.1415927f0 heading))))
+                 (when (/= ny (+ y dy))
+                   (setf heading (wrap-angle (- heading))))
+                 (setf (aref (ants-heading a) i) heading)
                  ;; Path integration happens in PATH-INTEGRATION-STEP!,
                  ;; after collision resolution — see the note there.
                  (setf (aref bxs bi) nx (aref bys bi) ny))

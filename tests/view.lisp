@@ -1,0 +1,140 @@
+;;;; tests/view.lisp — the camera and the 2D scene renderer (§5.1, §5.5).
+;;;;
+;;;; The camera tests need no GL at all — it is arithmetic — but they live
+;;;; in the render suite because VIEW ships with antsim/render.
+
+(in-package #:antsim/render-test)
+
+(in-suite render)
+
+;;; ------------------------------------------------------------ camera
+
+(test view-screen-world-round-trip
+  (let ((v (ant:make-view :cx 0.4f0 :cy 0.3f0 :span 0.8f0 :vw 800 :vh 600)))
+    (dolist (p '((0.0 0.0) (400.0 300.0) (799.0 599.0) (123.0 456.0)))
+      (destructuring-bind (px py) p
+        (let ((px (float px 1.0f0)) (py (float py 1.0f0)))
+          (multiple-value-bind (wx wy) (ant:view-screen->world v px py)
+            (multiple-value-bind (bx by) (ant:view-world->screen v wx wy)
+              (is (< (abs (- bx px)) 1e-3) "x ~a -> ~a" px bx)
+              (is (< (abs (- by py)) 1e-3) "y ~a -> ~a" py by))))))))
+
+(test view-centre-maps-to-viewport-centre
+  (let ((v (ant:make-view :cx 0.4f0 :cy 0.3f0 :span 0.8f0 :vw 800 :vh 600)))
+    (multiple-value-bind (sx sy) (ant:view-world->screen v 0.4f0 0.3f0)
+      (is (< (abs (- sx 400.0f0)) 1e-3))
+      (is (< (abs (- sy 300.0f0)) 1e-3)))))
+
+(test view-y-axis-points-up
+  "World y is up and screen y is down.  Getting this backwards flips the
+whole scene, which is obvious in a picture and invisible in a number."
+  (let ((v (ant:make-view :cx 0.5f0 :cy 0.5f0 :span 1.0f0 :vw 800 :vh 600)))
+    (multiple-value-bind (sx1 sy1) (ant:view-world->screen v 0.5f0 0.6f0)
+      (declare (ignore sx1))
+      (multiple-value-bind (sx2 sy2) (ant:view-world->screen v 0.5f0 0.4f0)
+        (declare (ignore sx2))
+        (is (< sy1 sy2) "higher world y should be nearer the top")))))
+
+(test view-zoom-is-anchored-at-the-cursor
+  "§5.5 calls this out because scaling about the screen centre feels
+wrong the instant anyone uses it: the world point under the pointer must
+stay under the pointer."
+  (let ((v (ant:make-view :cx 0.5f0 :cy 0.5f0 :span 1.0f0 :vw 800 :vh 600)))
+    (dolist (p '((100.0 120.0) (650.0 480.0) (400.0 300.0)))
+      (destructuring-bind (px py) p
+        (let* ((px (float px 1.0f0)) (py (float py 1.0f0)))
+          (multiple-value-bind (wx wy) (ant:view-screen->world v px py)
+            (ant:view-zoom-at! v px py 1.35f0)
+            (multiple-value-bind (ax ay) (ant:view-screen->world v px py)
+              (is (< (abs (- ax wx)) 1e-4)
+                  "the world point under the cursor moved in x: ~a -> ~a" wx ax)
+              (is (< (abs (- ay wy)) 1e-4)
+                  "the world point under the cursor moved in y: ~a -> ~a" wy ay))))))))
+
+(test view-zoom-changes-the-span
+  (let ((v (ant:make-view :span 1.0f0)))
+    (ant:view-zoom-at! v 400.0f0 300.0f0 2.0f0)
+    (is (< (abs (- (ant:view-span v) 0.5f0)) 1e-5))
+    (ant:view-zoom-at! v 400.0f0 300.0f0 0.5f0)
+    (is (< (abs (- (ant:view-span v) 1.0f0)) 1e-5))))
+
+(test view-pan-moves-the-world-with-the-drag
+  (let* ((v (ant:make-view :cx 0.5f0 :cy 0.5f0 :span 1.0f0 :vw 800 :vh 600)))
+    (multiple-value-bind (wx wy) (ant:view-screen->world v 400.0f0 300.0f0)
+      (ant:view-pan-pixels! v 80.0f0 0.0f0)
+      (multiple-value-bind (ax ay) (ant:view-screen->world v 480.0f0 300.0f0)
+        ;; dragging right by 80 px should bring the same world point under
+        ;; a pointer that also moved right by 80 px
+        (is (< (abs (- ax wx)) 1e-4))
+        (is (< (abs (- ay wy)) 1e-4))))))
+
+(test view-fit-frames-the-whole-world
+  (let* ((w (ant:make-world :width 0.8f0 :height 0.4f0 :capacity 8))
+         (v (ant:view-fit w :vw 800 :vh 600)))
+    (multiple-value-bind (x0 y0 x1 y1) (ant:view-bounds v)
+      (is (<= x0 0.0f0)) (is (>= x1 0.8f0))
+      (is (<= y0 0.0f0)) (is (>= y1 0.4f0)))))
+
+;;; ------------------------------------------------------ the renderer
+
+(test scene-renders-a-world
+  "A world with a nest, food, an obstacle and a colony must produce a
+frame with real structure in it — not a flat fill, and not a black frame."
+  (with-gl-or-skip
+    (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 400))
+           (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.08f0
+                                :stock 300.0f0)))
+      (ant:add-food w 0.20f0 0.26f0 0.025f0 3000.0f0 :quality 1.0f0)
+      (ant:add-obstacle w '(0.05 0.14 0.14 0.14 0.14 0.17 0.05 0.17))
+      (ant:world-seed-population! w c 60)
+      (ant:world-run! w 4000)
+      (is (> (ant:field-total (ant:colony-field c)) 0.0d0)
+          "no trail was laid, so the frame would not test the field layer")
+      ;; RENDER-WORLD-PNG is the whole headless path in one call: it makes
+      ;; its own context, renderer and target.  SCENE-FRAME-HAS-STRUCTURE
+      ;; below is what checks the pixels.
+      (let ((path (test-png-path "scene.png")))
+        (ant:render-world-png w path :width 320 :height 320)
+        (multiple-value-bind (pw ph depth ctype) (decode-png-header path)
+          (is (= pw 320))
+          (is (= ph 320))
+          (is (= depth 8))
+          (is (= ctype 2)))))))
+
+(test scene-frame-has-structure
+  "Read the frame back and require it to contain a range of values: a
+renderer that silently drew nothing still produces a valid PNG."
+  (with-gl-or-skip
+    (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 400))
+           (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.08f0
+                                :stock 300.0f0)))
+      (ant:add-food w 0.20f0 0.26f0 0.025f0 3000.0f0 :quality 1.0f0)
+      (ant:world-seed-population! w c 60)
+      (ant:world-run! w 4000)
+      (ant:with-headless-gl (ctx :width 320 :height 320)
+        (let ((o (ant:make-offscreen 320 320))
+              (r (ant:make-renderer
+                  :field-width (ant:field-w (ant:colony-field c))
+                  :field-height (ant:field-h (ant:colony-field c))
+                  :body-capacity 512)))
+          (unwind-protect
+               (progn
+                 (ant:bind-offscreen o)
+                 (gl:clear-color 0.02 0.022 0.025 1.0)
+                 (gl:clear :color-buffer-bit)
+                 (ant:draw-world r w (ant:view-fit w :vw 320 :vh 320))
+                 (gl:finish)
+                 (ant:capture-offscreen o (test-png-path "scene-frame.png"))
+                 (let* ((px (ant:read-offscreen o))
+                        (distinct (make-hash-table :test #'eql))
+                        (bright 0))
+                   (dotimes (i (floor (length px) 3))
+                     (setf (gethash (aref px (* i 3)) distinct) t)
+                     (when (> (aref px (* i 3)) 120) (incf bright)))
+                   (is (> (hash-table-count distinct) 16)
+                       "only ~d distinct red values — the scene is flat"
+                       (hash-table-count distinct))
+                   (is (> bright 20)
+                       "nothing bright: the trail and bodies did not draw")))
+            (ant:destroy-renderer r)
+            (ant:destroy-offscreen o)))))))

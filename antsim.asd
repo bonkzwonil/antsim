@@ -45,8 +45,21 @@
   :components ((:file "png")
                (:file "egl")
                (:file "offscreen")
-               (:file "smoke"))
+               (:file "smoke")
+               (:file "view")
+               (:file "shaders")
+               (:file "renderer"))
   :in-order-to ((test-op (test-op "antsim/render-test"))))
+
+(defsystem "antsim/live"
+  :description "Interactive window: GLFW, ortho camera, zoom and pan (§5.5)."
+  ;; The same preload as the headless path, and for the same reason: the
+  ;; window's GL and the process's GL have to be one implementation (§5.4).
+  :defsystem-depends-on ("antsim-gl-preload")
+  :depends-on ("antsim/render" "cl-glfw3")
+  :serial t
+  :pathname "src/live"
+  :components ((:file "window")))
 
 (defsystem "antsim/test"
   :description "Test suite for the antsim core.  No GPU required."
@@ -66,7 +79,8 @@
   :depends-on ("antsim/render" "fiveam")
   :serial t
   :pathname "tests"
-  :components ((:file "render"))
+  :components ((:file "render")
+               (:file "view"))
   :perform (test-op (o c)
              (symbol-call :fiveam :run!
                           (find-symbol (string :render) :antsim/render-test))))

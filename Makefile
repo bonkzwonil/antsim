@@ -18,6 +18,12 @@ GPU := guix shell nvda@580 --
 # LIBGL_ALWAYS_SOFTWARE then keeps Mesa off any hardware path.
 MESA := guix shell mesa -- env LIBGL_ALWAYS_SOFTWARE=1
 
+# The live window needs GLFW *and* the driver in the same profile, and it
+# needs LD_LIBRARY_PATH set INSIDE that profile — $GUIX_ENVIRONMENT does
+# not exist until the shell has been entered, so setting it on the outside
+# silently expands to nothing.  Hence `sh -c` rather than `env`.
+WIN := guix shell glfw nvda@580 --
+
 SMOKE_PNG ?= out/m0-smoke.png
 
 # Make the systems findable without symlinking into ~/quicklisp/local-projects:
@@ -26,7 +32,7 @@ SMOKE_PNG ?= out/m0-smoke.png
 export CL_SOURCE_REGISTRY := $(CURDIR):
 
 .PHONY: all test test-render test-render-mesa test-render-ci test-render-bare \
-        smoke smoke-mesa repl page clean
+        smoke smoke-mesa live repl page clean
 
 all: test
 
@@ -69,6 +75,14 @@ smoke:
 	$(GPU) $(SBCL) --non-interactive \
 	  --eval '(ql:quickload :antsim/render :silent t)' \
 	  --eval '(ant:m0-smoke :path #p"$(SMOKE_PNG)")'
+
+## live — the interactive window (§5.5).
+##   wheel zoom (cursor-anchored) · right-drag pan · left-click inspect
+##   space pause · +/- time compression · home frame all · escape quit
+live:
+	$(WIN) sh -c 'LD_LIBRARY_PATH=$$GUIX_ENVIRONMENT/lib exec $(SBCL) \
+	  --eval "(ql:quickload :antsim/live :silent t)" \
+	  --eval "(ant:live-demo)" --quit'
 
 ## smoke-mesa — the same frame in software, for comparing the two stacks.
 smoke-mesa:
