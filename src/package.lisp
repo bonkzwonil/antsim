@@ -31,6 +31,7 @@
    #:*energy-return-threshold* #:*crop-fill-rate* #:*crop-to-energy*
    #:*max-age-ticks* #:*brood-per-stock* #:*nest-upkeep*
    #:*pi-noise* #:*homing-weight-low-energy* #:*nest-arrival-radius*
+   #:*nest-exit-scatter*
    #:*relax-iterations* #:*relax-slop*
    ;; world/geom — polygons and the broad phase (§3.7, §4.2)
    #:polygon #:make-polygon #:polygon-n #:polygon-verts
@@ -69,6 +70,7 @@
    #:ants-id #:ants-body #:ants-colony #:ants-state #:ants-heading
    #:ants-crop #:ants-load-quality #:ants-energy #:ants-age
    #:ants-hvx #:ants-hvy #:ants-px #:ants-py #:ants-count-state
+   #:ants-trailed #:ants-exit
    #:path-integration-step!
    #:spawn-ant #:kill-ant
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+

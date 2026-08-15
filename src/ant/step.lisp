@@ -16,6 +16,20 @@
 (defconstant +stream-turn+ 2)
 (defconstant +stream-leave+ 3)
 (defconstant +stream-pi+ 4)
+(defconstant +stream-exit+ 5
+  "Scatter on the bearing an ant sets off from the nest.
+
+Its own stream, and it has to be.  The first version drew this from
++STREAM-LEAVE+, which is the stream the *decision* to leave was just
+taken from — and a departure only happens when that draw came out below
+*leave-probability*, about 0.005.  RND-NORMAL is Box-Muller, so it feeds
+that same u1 into sqrt(-2 ln u1): conditioning on u1 < 0.005 forces the
+magnitude above 3.2 sigma every single time.  Every ant left on a wild
+angle, deterministically.
+
+Reusing a stream after conditioning on it is the one way a counter-based
+RNG can still surprise you, because the draws look independent and are
+not.  One stream, one question.")
 
 (declaim (inline wrap-angle angle-toward choice-weight))
 
@@ -100,6 +114,11 @@ initial condition rather than merely a convenient one."
                  (aref (ants-px a) i) sx
                  (aref (ants-py a) i) sy
                  (aref (ants-trailed a) i) 0.0f0
+                 ;; A newborn has no route to be faithful to, so its exit
+                 ;; bearing is simply random — which is what makes the
+                 ;; naive ants the colony's explorers (§3.4).
+                 (aref (ants-exit a) i)
+                 (* 6.2831855f0 (rnd01 id 0 93 seed))
                  ;; and the home vector is the way back from where it
                  ;; actually is, which is not quite the nest centre
                  (aref (ants-hvx a) i) (- (colony-nest-x c) sx)
@@ -291,6 +310,26 @@ switch into and no switching logic to get wrong (§3.5)."
                         (< (rnd01 id tick +stream-leave+ seed)
                            (colony-leave-probability c)))
                (setf (aref (ants-state a) i) +ant-outbound+
+                     ;; Set off along the bearing this ant came home on,
+                     ;; scattered (§3.4).
+                     ;;
+                     ;; Departure used not to set a heading at all, and
+                     ;; the omission was not neutral — it was close to
+                     ;; the worst possible choice.  A returning ant
+                     ;; steers *at* the nest, so the heading it carried
+                     ;; into the nest pointed inward; keeping it meant
+                     ;; the ant walked out through the entrance and
+                     ;; straight on, away from everything it knew.
+                     ;; Measured over 613 departures on an established
+                     ;; trail: 65% left within 30 degrees of exactly
+                     ;; opposite the source, and not one of them left
+                     ;; towards it.  Reported from the window as ants
+                     ;; "wandering off with no plan", which was generous.
+                     (aref (ants-heading a) i)
+                     (wrap-angle
+                      (+ (aref (ants-exit a) i)
+                         (* *nest-exit-scatter*
+                            (rnd-normal id tick +stream-exit+ seed))))
                      ;; Set the home vector to the *actual* way back, not
                      ;; to zero.
                      ;;
@@ -325,6 +364,29 @@ switch into and no switching logic to get wrong (§3.5)."
                     (setf (aref (ants-load-quality a) i) (food-quality f))
                     (when (or (>= (aref (ants-crop a) i) 0.999f0)
                               (food-empty-p f))
+                      ;; Remember where this source lies *from the nest*,
+                      ;; so the ant can set off towards it again next
+                      ;; time (§3.4).  The home vector points from the
+                      ;; ant to the nest, so its reverse is exactly the
+                      ;; nest-to-food bearing the ant's own path
+                      ;; integrator believes in — no new sense and no new
+                      ;; state, just a reading of something it already
+                      ;; maintains.
+                      ;;
+                      ;; Taken here rather than at the nest door, and the
+                      ;; difference is not small.  The first attempt used
+                      ;; the bearing at which the ant crossed the arrival
+                      ;; radius, which sounds equivalent and is not: the
+                      ;; entrance is packed with resting ants, so an
+                      ;; arriving forager slides around the cluster and
+                      ;; comes in tangentially.  Measured, that put
+                      ;; departures at a peak of about 1.5 rad off the
+                      ;; source — perpendicular to it — because the crowd,
+                      ;; not the route, was setting the angle.
+                      (when (> (aref (ants-crop a) i) 0.0f0)
+                        (setf (aref (ants-exit a) i)
+                              (atan (- (aref (ants-hvy a) i))
+                                    (- (aref (ants-hvx a) i)))))
                       (setf (aref (ants-state a) i) +ant-returning+)))))))
 
             ;; --- OUTBOUND and RETURNING ----------------------------

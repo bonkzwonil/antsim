@@ -72,10 +72,49 @@ one obstacle across part of the route."
     ;; Detail: mid-route traffic, outbound pale and laden returners warm.
     (gallery-shot w "05-traffic" :width 360 :height 360
                                  :cx 0.33f0 :cy 0.30f0 :span 0.18f0)
+    ;; Detail: the obstacle's right-hand end, where the route has to
+    ;; squeeze past it.  Nothing in the model knows about bottlenecks;
+    ;; this is the non-overlap rule and the deposition rule feeding each
+    ;; other, and it is the most interesting picture in the set.
+    (gallery-shot w "07-jam" :width 360 :height 360
+                             :cx 0.30f0 :cy 0.225f0 :span 0.13f0)
+    ;; Detail: the source itself, where arriving ants compete for an edge
+    ;; that gets shorter as the pile goes down.
+    (gallery-shot w "08-crowd" :width 360 :height 360
+                               :cx 0.34f0 :cy 0.43f0 :span 0.13f0)
+    ;; The collapse, in three frames.
+    ;;
+    ;; This is the §3.8 trail-death row as a picture, and the reason it
+    ;; needs three frames rather than a before and an after is that the
+    ;; interesting part is in between: the colony goes on *using* a trail
+    ;; it is no longer reinforcing.  Ants keep walking a route to a source
+    ;; that is gone, because following and depositing are separate rules —
+    ;; deposition needs a full crop and there is nothing left to fill it.
+    ;; So the road stops being renewed while the traffic on it continues,
+    ;; and evaporation takes it out from under them.
+    (let ((f (first (world-foods w))))
+      ;; run on until the source is actually empty rather than guessing a
+      ;; time, so the frames stay on the event if anything is recalibrated
+      (loop repeat 60
+            until (food-empty-p f)
+            do (world-run! w 1200))
+      (gallery-shot w "09-abandoned")
+      (format t "~&  source empty at ~,0f s: pop ~d, trail ~,0f~%"
+              (world-seconds w) (colony-population c)
+              (field-total (colony-field c)))
+      (world-run! w (* 1200 2))
+      (gallery-shot w "10-fading")
+      (format t "~&  +2 min: pop ~d, trail ~,0f~%"
+              (colony-population c) (field-total (colony-field c)))
+      (world-run! w (* 1200 4))
+      (gallery-shot w "11-collapsed")
+      (format t "~&  +6 min: pop ~d, trail ~,0f~%"
+              (colony-population c) (field-total (colony-field c))))
     ;; Aftermath: with the source finite, an hour is long enough to exhaust
     ;; it and starve the colony.  Two §3.8 rows in one frame — trail death
     ;; and colony extinction — and the honest end of this scenario.
-    (world-run! w (* 1200 40))
+    (loop until (>= (world-seconds w) 3600.0f0)
+          do (world-run! w 1200))
     (gallery-shot w "06-aftermath")
     (format t "~&  60 min: pop ~d, trail ~,0f, stock ~,0f~%"
             (colony-population c) (field-total (colony-field c))

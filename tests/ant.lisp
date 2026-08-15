@@ -363,6 +363,92 @@ which is the same deadlock standing in a different place."
            0.02f0)
         "a fed colony's threshold drifted from the calibrated value")))
 
+;;; ---------------------------------------------------- route fidelity
+
+(test an-ant-leaves-the-nest-the-way-it-came-in
+  "§3.4 route fidelity, and a regression test for its absence.
+
+Departure used not to set a heading at all.  That is not a neutral
+omission: a returning ant steers *at* the nest, so the heading it carries
+in points inward, and keeping it sent the ant out through the entrance
+and straight on — away from everything it knew.  Measured on an
+established trail before the fix, 65% of departures left within 30
+degrees of exactly opposite the source and not one left towards it.  It
+showed up in the window as ants wandering off with no plan.
+
+Here every resting ant is given the same remembered bearing, so the only
+question the test asks is whether departure honours it."
+  (let* ((w (ant:make-world :width 0.6f0 :height 0.6f0 :capacity 400))
+         (c (ant:add-colony w :nest-x 0.30f0 :nest-y 0.30f0
+                              :capacity 300 :stock 900.0f0))
+         (target 1.2f0)                     ; the bearing they all "came in" on
+         (a (ant:world-ants w))
+         (deviations '()))
+    (ant:world-seed-population! w c 80)
+    (dotimes (i (ant:ants-n a))
+      (when (ant:ant-live-p a i)
+        (setf (aref (ant:ants-exit a) i) target
+              (aref (ant:ants-energy a) i) 1.0f0)))
+    ;; step one tick at a time so a departure can be caught at the moment
+    ;; it happens — a heading read later has already been turned by the
+    ;; walk itself
+    (let ((was (make-array (ant:ants-n a) :element-type '(unsigned-byte 8))))
+      (dotimes (i (ant:ants-n a))
+        (setf (aref was i) (aref (ant:ants-state a) i)))
+      (dotimes (tick 600)
+        (ant:world-step! w)
+        (dotimes (i (length was))
+          (when (and (ant:ant-live-p a i)
+                     (= (aref was i) ant:+ant-in-nest+)
+                     (= (aref (ant:ants-state a) i) ant:+ant-outbound+))
+            (push (abs (ant:wrap-angle
+                        (- (aref (ant:ants-heading a) i) target)))
+                  deviations))
+          (setf (aref was i) (aref (ant:ants-state a) i)))))
+    (is (> (length deviations) 20)
+        "only ~d ants left the nest — nothing to measure"
+        (length deviations))
+    (let ((mean (/ (reduce #'+ deviations) (max 1 (length deviations)))))
+      (is (< mean (* 2.0f0 ant:*nest-exit-scatter*))
+          "departures sat ~,2f rad off the remembered bearing on average, ~
+           against a scatter of ~,2f — the bearing is not being honoured"
+          mean ant:*nest-exit-scatter*)
+      ;; and specifically not the old failure, which was the opposite way
+      (is (< (count-if (lambda (d) (> d 2.0f0)) deviations)
+             (floor (length deviations) 10))
+          "~d of ~d departures left more than 115 degrees off the ~
+           remembered bearing"
+          (count-if (lambda (d) (> d 2.0f0)) deviations)
+          (length deviations)))))
+
+(test only-a-paying-trip-overwrites-the-remembered-route
+  "A forager that comes home empty keeps the bearing it had.
+
+Otherwise a failed trip would overwrite a good route with a bad one, and
+— worse — an ant that has never succeeded would stop exploring, because
+its random birth bearing is exactly what makes the naive ants the
+colony's explorers."
+  (let* ((w (ant:make-world :width 0.6f0 :height 0.6f0 :capacity 200))
+         (c (ant:add-colony w :nest-x 0.30f0 :nest-y 0.30f0
+                              :capacity 100 :stock 200.0f0))
+         (a (ant:world-ants w)))
+    ;; no food anywhere, so every trip that ends at home ended empty
+    (ant:world-seed-population! w c 40)
+    (let ((before (make-array (ant:ants-n a) :element-type 'single-float)))
+      (dotimes (i (ant:ants-n a))
+        (setf (aref before i) (aref (ant:ants-exit a) i)))
+      (ant:world-run! w 6000)
+      (let ((changed 0) (checked 0))
+        (dotimes (i (length before))
+          (when (ant:ant-live-p a i)
+            (incf checked)
+            (unless (= (aref before i) (aref (ant:ants-exit a) i))
+              (incf changed))))
+        (is (> checked 10) "no ants survived to check")
+        (is (zerop changed)
+            "~d of ~d ants rewrote their remembered route without ever ~
+             bringing anything home" changed checked)))))
+
 ;;; ------------------------------------------------------ determinism
 
 (test a-run-is-reproducible

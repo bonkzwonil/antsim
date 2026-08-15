@@ -284,9 +284,41 @@ navigation systems in parallel and weights them by confidence:
 2. **Trail following.** §3.3. Used when trail concentration exceeds the
    detection threshold.
 3. **Landmark / route memory.** A learned association between a remembered
-   view and a direction. This is the *Formica* mode; keep it as a stub in
-   the first version (a per-ant memory of the last successful food bearing)
-   and expand later.
+   view and a direction. This is the *Formica* mode; the first version
+   keeps the stub — a per-ant memory of the last successful food bearing —
+   and expands later.
+
+   **Built, as the stub.** Each ant carries one bearing, and sets off from
+   the nest along it. It is read straight off the ant's own path
+   integrator at the moment it leaves a source: the home vector points
+   from the ant to the nest, so its reverse is the nest→food bearing *as
+   that ant believes it*. Nothing global is consulted, and no new sense is
+   added — this is a reading of state the ant already maintains.
+
+   Three details are load-bearing:
+
+   - **Only a paying trip overwrites it.** An ant that comes home empty
+     keeps what it had, so a failed excursion cannot replace a good route
+     with a bad one.
+   - **A newborn's bearing is random**, which is what makes the naive ants
+     the colony's explorers. Together with `*nest-exit-scatter*` (≈29°),
+     that is the whole of what stops fidelity from closing the colony's
+     eyes to a source appearing somewhere new.
+   - **It is taken at the source, not at the nest door.** The first
+     attempt used the bearing at which the ant crossed the arrival radius,
+     which sounds equivalent and is not: the entrance is packed with
+     resting ants, so an arriving forager slides around the cluster and
+     comes in tangentially. Measured, that put departures at a peak of
+     about 1.5 rad off the source — *perpendicular* to it — because the
+     crowd, not the route, was setting the angle.
+
+   Before any of this existed, departure set no heading at all. That is
+   not a neutral omission: a returning ant steers *at* the nest, so the
+   heading it carries in points inward, and keeping it walked the ant out
+   through the entrance and straight on. Measured over 613 departures on
+   an established trail, **65% left within 30° of exactly opposite the
+   source and not one left towards it**. With the memory in place, 34%
+   leave within 15° of it and 2.4% away from it.
 
 Weighting these is where personality comes from. An ant with a strong home
 vector and a weak trail ignores the trail. This is observed and it is what
@@ -1182,6 +1214,21 @@ there was a window to see them in.
   had been indistinguishable from a nest full of ants declining to leave,
   and it was read as exactly that — by a human watching, which is the
   point.
+- **Departure set no heading at all**, so an ant left the nest pointing
+  the way it came in — *inward* — and walked out the far side. 65% of
+  departures set off within 30° of exactly opposite the source they had
+  just returned from. Fixed with the route-memory stub §3.4 had always
+  called for.
+
+Fixing that last one turned up a bug of a different kind, worth recording
+because it is the one way a counter-based RNG can still surprise you. The
+exit scatter was drawn from the same stream as the decision to leave — and
+a departure only happens when *that* draw comes out under
+`*leave-probability*` ≈ 0.005. `rnd-normal` is Box-Muller, so it feeds
+that same `u₁` into `√(−2 ln u₁)`: conditioning on `u₁ < 0.005` forces the
+magnitude above 3.2σ every single time, and every ant left on a wild angle
+deterministically. The draws look independent and are not. **One stream,
+one question.**
 
 The lesson is the same one M2 was justified by, and it keeps holding: the
 renderer earns its early place because *the model's failures are shaped
