@@ -164,6 +164,16 @@ every line that reads a pheromone."
             (incf foreign v))))
     (+ own (* *choice-eavesdrop* foreign))))
 
+(declaim (inline blocked-factor))
+(defun blocked-factor (f x y avoid)
+  "1.0 where an antenna is over open ground, (1 - AVOID) where it is over
+terrain.  At AVOID = 1 a walled direction is never chosen; at 0 this is
+exactly the behaviour before ants could feel walls at all, which is what
+makes the change measurable rather than merely asserted."
+  (declare (type field f) (type f32 x y avoid)
+           (optimize (speed 3) (safety 0)))
+  (if (field-blocked-p f x y) (- 1.0f0 avoid) 1.0f0))
+
 (defun choose-turn (w colony-id id tick x y heading)
   "Sample three headings through the antennae and pick one, with the
 Deneubourg weighting
@@ -194,10 +204,44 @@ switch into and no switching logic to get wrong (§3.5)."
          (cc (sense-at w colony-id (+ x (* off (cos heading)))
                        (+ y (* off (sin heading)))))
          (cr (sense-at w colony-id (+ x (* off (cos hr))) (+ y (* off (sin hr)))))
-         (wl (choice-weight (+ k cl) n))
-         (wc (choice-weight (+ k cc) n))
-         (wr (choice-weight (+ k cr) n))
-         (total (+ wl wc wr))
+         ;; Feel for terrain with the same three antennal points (§3.2).
+         ;;
+         ;; An ant that cannot tell a wall is there until it has walked
+         ;; into it does two wrong things at once.  It keeps choosing the
+         ;; heading that put it there, so it presses against the surface
+         ;; tick after tick; and because the collision pass only removes
+         ;; the component *into* the wall, what survives is the component
+         ;; *along* it — so it slides, deposits while sliding (deposition
+         ;; counts attempted motion), and lays a trail down the wall that
+         ;; then recruits others onto the same surface.  A route bent
+         ;; along an obstacle edge, with corpses on it, is what that looks
+         ;; like from the window.
+         ;;
+         ;; So a direction whose sample point is inside terrain is simply
+         ;; not chosen.  The mask is already there — the field carries it
+         ;; for §3.3, since a blocked cell cannot hold pheromone — and the
+         ;; sample points are already computed, so this costs three array
+         ;; reads and no new sense.  It is also the right mechanism:
+         ;; antennal contact is how a real ant learns a wall is in front
+         ;; of it, and thigmotaxis is a documented behaviour rather than a
+         ;; convenience.
+         (fld (colony-field (nth colony-id (world-colonies w))))
+         (avoid *obstacle-avoidance*)
+         (bl (blocked-factor fld (+ x (* off (cos hl))) (+ y (* off (sin hl)))
+                             avoid))
+         (bc (blocked-factor fld (+ x (* off (cos heading)))
+                             (+ y (* off (sin heading))) avoid))
+         (br (blocked-factor fld (+ x (* off (cos hr))) (+ y (* off (sin hr)))
+                             avoid))
+         (wl (* bl (choice-weight (+ k cl) n)))
+         (wc (* bc (choice-weight (+ k cc) n)))
+         (wr (* br (choice-weight (+ k cr) n)))
+         ;; All three walled in — a corner.  Fall back to the unweighted
+         ;; choice rather than dividing by zero; the collision pass will
+         ;; get the ant out, and refusing to choose at all would freeze it.
+         (total (if (> (+ wl wc wr) 1.0f-12)
+                    (+ wl wc wr)
+                    (progn (setf wl 1.0f0 wc 1.0f0 wr 1.0f0) 3.0f0)))
          (u (* (rnd01 id tick +stream-choice+ (world-seed w)) total)))
     (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u))
     ;; Second value: how strongly this ant can smell a trail at all,
@@ -426,6 +470,32 @@ switch into and no switching logic to get wrong (§3.5)."
                       ;; turn back grows from the same point at which the
                       ;; ant would actually give up
                       (ethr (colony-energy-threshold c))
+                      ;; Total for a returning ant, and deliberately so.
+                      ;;
+                      ;; The home vector is a *vector*, not a path: it
+                      ;; cannot route around anything, so a laden ant
+                      ;; steers into whatever stands between it and the
+                      ;; nest and slides along it.  That is visible in the
+                      ;; window as a trail bent along an obstacle's edge
+                      ;; and ants dying on it, and the obvious fix is to
+                      ;; let the trail override the bearing — follow the
+                      ;; road out, which is what a real forager has and
+                      ;; what §3.4 describes.
+                      ;;
+                      ;; Measured, that fix is a regression.  Scaling the
+                      ;; urge down by trail strength (suppression 0.9)
+                      ;; delivered 262 units of food against 367 over four
+                      ;; seeds — 29% *less*.  An ant that meanders along a
+                      ;; trail takes longer to get home than one that
+                      ;; drives at the bearing, and the collision pass
+                      ;; already slides it around obstacles eventually.
+                      ;; The detour is real; it is cheaper than the
+                      ;; alternative tried here.
+                      ;;
+                      ;; Left as it is, with the flaw recorded rather than
+                      ;; traded for a worse one.  A proper fix is route
+                      ;; memory — the path walked out, not the trail field
+                      ;; — which is §3.4's landmark system and is not M1.
                       (urge (if returning
                                 1.0f0
                                 (* *homing-weight-low-energy*

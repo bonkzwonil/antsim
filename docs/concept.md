@@ -124,6 +124,28 @@ path is locally straight and globally diffusive.
 - **Thigmotaxis**: ants preferentially follow edges and walls. Real, and it
   makes obstacles interesting rather than merely blocking — a wall becomes a
   route.
+
+  **Built, and the reason it had to be is the opposite of what this bullet
+  suggests.** The model had *too much* wall-following, not too little, and
+  none of it was written. An ant that could not feel terrain kept choosing
+  the heading that had put it against a wall; the collision pass removes
+  only the component *into* the surface, so what survived was the component
+  *along* it. The ant slid down the wall, deposited while sliding (deposition
+  counts attempted motion, §3.3), and the mark recruited others onto the
+  same surface. The result was a route bent along an obstacle edge with
+  corpses on it — emergent thigmotaxis of the worst kind, and one that
+  strangled foraging.
+
+  The fix is antennal: the three sample points the choice function already
+  computes are also tested against the field's terrain mask — which already
+  exists, because a blocked cell cannot hold pheromone — and a direction
+  whose antenna is inside terrain is not chosen. Three array reads, no new
+  sense, and it is the mechanism a real ant uses to discover a wall is in
+  front of it.
+
+  Measured on the double bridge over four seeds: **571 units of food
+  delivered against 367**, +55%, with the population up 28% and deaths down
+  11%. Both §3.8 bridge rows are unaffected.
 - **U-turns.** An ant that loses a trail it was following performs a
   characteristic U-turn and casts about, rather than continuing. This is
   observed in *L. niger* and is a large part of why trails are stable: the

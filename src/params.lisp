@@ -329,6 +329,27 @@ probability is how an ant decides to do it.
 It is the *rested* rate: see *forage-ration*, which raises it as the
 colony's larder runs down.")
 
+(defparameter *obstacle-avoidance* 1.0f0
+  "How strongly an antenna over terrain vetoes that direction, 0..1 (§3.2).
+
+At 1.0 an ant never *chooses* to turn into a wall it can feel; at 0.0 it
+cannot feel walls at all, which is how this model behaved before and is
+what makes the difference measurable rather than asserted.
+
+The failure it fixes is not the collision — the collision pass is fine —
+it is what the collision pass leaves behind.  Removing only the component
+into a wall leaves the component along it, so a blind ant pressed against
+a surface slides down it, and because deposition counts attempted motion
+it marks the surface while sliding.  The mark then recruits others onto
+the same wall.  What that produces is a route bent along an obstacle edge
+with corpses on it, which is exactly what the window showed, and it is a
+wall-following behaviour nobody wrote.
+
+Antennal contact is how a real ant learns a wall is in front of it, and
+the sample points and the terrain mask both already exist — the field
+carries the mask because a blocked cell cannot hold pheromone (§3.3).  So
+this costs three array reads and adds no new sense.")
+
 (defparameter *nest-exit-scatter* 0.5f0
   "Spread, radians, on the bearing an ant sets off from the nest (§3.4).
 
@@ -519,7 +540,7 @@ relaxation from chasing floating-point noise forever.")
                *desperate-energy-fraction*
                *brood-per-stock* *nest-upkeep*
                *pi-noise* *homing-weight-low-energy* *nest-arrival-radius*
-               *nest-exit-scatter*
+               *nest-exit-scatter* *obstacle-avoidance*
                *relax-slop*))
 
 (declaim (type fixnum *max-age-ticks* *relax-iterations*))

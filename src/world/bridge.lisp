@@ -214,7 +214,24 @@ The corridors are 0.04 m rather than 0.06 for a geometric reason: at 0.06
 the slant correction widens the long arm's mouth until the island between
 the two is 3 mm, thinner than an ant.  Narrowing both keeps the fork tight
 — the mouths adjacent, which is what makes this a fork at all — while
-leaving an island a body can actually be stopped by."
+leaving an island a body can actually be stopped by.
+
+Three alternatives were measured before settling here, because narrowing
+the corridors was suspected of starving the colony by congestion:
+
+  arms apart, 0.06     ratio 1.64   short won 6/6 at 0.61-0.72   0/6 alive
+  slant to 0.52, 0.06  ratio 1.41   short won 6/6 at 0.69-0.72   2/6 alive
+  slant to 0.48, 0.06  ratio 1.28   short won 6/6 at 0.55-0.71   1/6 alive
+  this one, 0.04       ratio 1.73   short won 6/6 at 0.69-0.79   1/6 alive
+
+The colony dies on this bridge in nearly every variant, so its fate is
+not a property of the corridors: the round trip is simply expensive
+relative to what one crop delivers, and no arrangement of the arms
+changes that.  Since survival does not distinguish them, the strongest
+length ratio wins, which is the quantity the experiment is about.  If a
+long-lived colony is wanted here the lever is the scenario's economics —
+a shorter trip, richer food, or fewer starting workers — not the
+geometry."
   (make-bridge-world :tops '(0.28f0 0.60f0) :corridor-width 0.04f0
                      :seed seed :start start))
 

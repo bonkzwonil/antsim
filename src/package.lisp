@@ -31,7 +31,7 @@
    #:*energy-return-threshold* #:*crop-fill-rate* #:*crop-to-energy*
    #:*max-age-ticks* #:*brood-per-stock* #:*nest-upkeep*
    #:*pi-noise* #:*homing-weight-low-energy* #:*nest-arrival-radius*
-   #:*nest-exit-scatter*
+   #:*nest-exit-scatter* #:*obstacle-avoidance*
    #:*relax-iterations* #:*relax-slop*
    ;; world/geom — polygons and the broad phase (§3.7, §4.2)
    #:polygon #:make-polygon #:polygon-n #:polygon-verts
