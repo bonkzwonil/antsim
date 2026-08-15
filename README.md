@@ -562,6 +562,31 @@ C_effective(cell) = C_own(cell) + ε · Σ C_foreign(cell)
   another: a strong foreign trail pulls your foragers toward a source
   someone else is already draining.
 
+**Settled: ε is small — default 0.1, and the interesting range is roughly
+0.05–0.2.** Two reasons, and the second is the one that decides it.
+
+The biology is the weaker argument on its own: eavesdropping is real but
+it is not nestmate-grade information. A foreign trail is a *cue* an ant
+can exploit, not a *signal* addressed to it, and colony-specific blends
+mean a foreign trail is both chemically distinguishable and behaviourally
+discounted. "Some attention, much less than to your own" is ε ≈ 0.1, not
+ε ≈ 0.5.
+
+The decisive reason is what ε does to the choice function. §3.3's
+nonlinearity means the model amplifies concentration differences — that
+amplification is the entire mechanism behind symmetry breaking. Feeding a
+foreign field in at anything but a small weight lets a neighbour's trail
+dominate the `(k + C)ⁿ` weights outright, and the two colonies collapse
+into one system sharing a de facto global field. What is wanted is
+*perturbation*: enough foreign signal to occasionally divert a forager or
+tip a marginal branch decision, not enough to steer the colony. ε small
+is what makes competition a source of noise and drift rather than a
+takeover, and it keeps each colony's own symmetry breaking legible.
+
+So ε is a small nudge by design, and ε = 1 stays available as the
+deliberately pathological setting — useful precisely because it should
+visibly break the thing that works at 0.1.
+
 A single coefficient spans the whole range from independence to mutual
 interference, which is the cheapest possible way to make competition
 interesting. Memory is one field per colony — 640 kB at 400², so a handful
@@ -710,9 +735,12 @@ pointing at the checkout, so nothing needs to be symlinked into
 
 ```
 make test              core suite: RNG, pool, util.  no GPU, no graphics
-make test-render       renderer suite, under the guix GPU shell
-make test-render-ci    the same without the GPU shell — GL tests skip
+make test-render       renderer suite on the GPU (guix shell nvda@580)
+make test-render-mesa  the same suite in software on llvmpipe — no GPU
+make test-render-ci    alias for test-render-mesa
+make test-render-bare  no wrapper; GL tests skip if the host has no GL
 make smoke             M0 end to end: headless frame → out/m0-smoke.png
+make smoke-mesa        the same frame in software, for comparing stacks
 make repl              a REPL with antsim loaded
 make page              regenerate docs/index.html from docs/concept.html
 ```
@@ -725,6 +753,26 @@ wrong libGL wins.
 
 If a render comes back black, run `nvidia-smi` *inside* that shell before
 suspecting the renderer.
+
+**A test environment does not need a GPU, and should not skip.** Mesa's
+llvmpipe provides a genuine 4.5 core context in software (measured: `4.5
+(Core Profile) Mesa 26.0.2`, GLSL 4.50), so `make test-render-mesa` runs
+the whole render suite — 36 checks, nothing skipped — on a machine with no
+graphics hardware at all. It is much slower, which is irrelevant for a
+handful of small frames. Skipping is therefore a signal that the
+environment is *misconfigured*, not that the machine is modest, and the
+suite prints which GL stack it actually used so a log can be read later.
+
+The software path found a bug the GPU path could not: SBCL unmasks
+floating-point traps, llvmpipe's JIT raises invalid and divide-by-zero as
+a matter of course, and the process died on SIGFPE mid-draw. NVIDIA never
+trips them. `with-headless-gl` now masks traps for the extent of GL work
+and leaves the simulation's own traps alone — the sim *wants* to hear
+about a NaN.
+
+Render tests keep their frames in `out/tests/` rather than deleting them.
+When a render test fails the first question is what it looked like, and an
+unlinked temporary file cannot answer it.
 
 ## 5. Rendering
 
@@ -903,7 +951,7 @@ dependency) into plain structs, so the core never sees a parser.
     "alarm":   { "tau_s": 30,   "diffusion": 0.02, "max": 20.0  }
   },
 
-  "choice": { "n": 2.0, "k": 20.0, "eavesdrop": 0.0 },
+  "choice": { "n": 2.0, "k": 20.0, "eavesdrop": 0.1 },
 
   "bodies": { "ant_radius": 0.0025, "relax_iterations": 3 },
 
@@ -958,10 +1006,11 @@ verifiable, and the risky spikes come early.
 targets. A headless context comes up and writes a non-black PNG. *Proves
 the toolchain before any design is committed to it.*
 
-Verified: core suite 40 141 checks green with no GPU; render suite 35
-checks green on GL 4.5.0 core / NVIDIA 580.159.04 / RTX 3070, drawing a
-real GLSL 450 frame into an FBO and encoding it. `make smoke` writes
-`out/m0-smoke.png`.
+Verified: core suite 40 141 checks green with no GPU; render suite 36
+checks green on **both** backends — GL 4.5.0 core / NVIDIA 580.159.04 /
+RTX 3070, and Mesa 26.0.2 llvmpipe in software — drawing a real GLSL 450
+frame into an FBO and encoding it, with nothing skipped on either.
+`make smoke` writes `out/m0-smoke.png`.
 
 Two things came out of building it rather than planning it. The RNG grew a
 `seed` argument, because §3.8's symmetry-breaking result is a claim about a
@@ -971,6 +1020,12 @@ special is thread-local in SBCL, so workers would silently keep the global
 value and every replicate would come out identical. And the mixer had a
 fixed point: `hash32(0) = 0`, so ant 0 on tick 0 drew exactly `0.0`. Both
 are pinned by tests now.
+
+A third came out of running the suite in software: SBCL's unmasked
+floating-point traps killed the process on SIGFPE inside llvmpipe's
+rasteriser. The GPU path never trips them, so only the Mesa run could
+have found it — which is an argument for the software target beyond
+"CI has no GPU".
 
 **M1 — the core simulation, no renderer.** Exactly the §3.9 cut and nothing
 past it: the ant and body tables, CRW movement, disc collision with Jacobi
@@ -1051,7 +1106,10 @@ in M1, the work itself is not scheduled.
    Jacobi resolution so determinism survives.
 7. **Trail fields are per colony with an eavesdropping coefficient ε**
    (§3.12). M1 runs one colony; the indirection is free now and
-   unaddable later.
+   unaddable later. **ε is small — default 0.1.** A large ε would let a
+   neighbour's trail dominate the `(k + C)ⁿ` weights and collapse the
+   colonies into one shared field; small ε perturbs without steering,
+   which is the behaviour worth having.
 8. **Repository** — initialised, pushed to `bonk/antsim`, branch `concept`.
 
 ### Still open

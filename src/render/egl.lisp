@@ -166,15 +166,34 @@ make-current — all real drawing goes to framebuffer objects."
   (%egl-terminate (gl-context-display c))
   (values))
 
+(defmacro with-gl-traps-masked (&body body)
+  "Run BODY with floating-point traps masked.
+
+SBCL unmasks :invalid, :divide-by-zero and :overflow, which is the right
+default for numeric code — the simulation *wants* to hear about a NaN.
+Foreign renderers do not share that opinion.  Mesa's llvmpipe raises
+invalid and divide-by-zero routinely inside its JIT-compiled rasteriser,
+and with SBCL's mask in force the process dies on SIGFPE mid-draw.
+
+This was invisible on the NVIDIA path, which never trips them: the
+software backend is what exposed it.  Masking is scoped to GL work only,
+so the simulation keeps its traps."
+  `(sb-int:with-float-traps-masked (:invalid :divide-by-zero :overflow
+                                    :underflow :inexact)
+     ,@body))
+
 (defmacro with-headless-gl ((var &key (width 1280) (height 800)) &body body)
   "Run BODY with a current headless GL context bound to VAR.
 VAR is declared ignorable, so callers that only want the context as a
 side effect need not declare anything (BODY sits inside a PROGN, where a
-caller's own DECLARE would be invalid)."
-  `(let ((,var (make-headless-context :width ,width :height ,height)))
-     (declare (ignorable ,var))
-     (unwind-protect (progn ,@body)
-       (destroy-gl-context ,var))))
+caller's own DECLARE would be invalid).
+
+Float traps are masked for the whole extent — see WITH-GL-TRAPS-MASKED."
+  `(with-gl-traps-masked
+     (let ((,var (make-headless-context :width ,width :height ,height)))
+       (declare (ignorable ,var))
+       (unwind-protect (progn ,@body)
+         (destroy-gl-context ,var)))))
 
 (defun gl-info ()
   "Version, renderer, vendor and GLSL version of the current context.

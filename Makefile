@@ -8,6 +8,16 @@ SBCL := sbcl --dynamic-space-size $(HEAP) --noinform --disable-debugger
 # the renderer — see src/render/preload.lisp.
 GPU := guix shell nvda@580 --
 
+# Software rendering, for machines with no GPU.  Mesa's llvmpipe gives a
+# real 4.5 core context (measured: "4.5 (Core Profile) Mesa 26.0.2",
+# GLSL 4.50), so the render suite runs in full rather than skipping.
+# It is slow, which does not matter for a handful of small frames.
+#
+# The preload searches $GUIX_ENVIRONMENT/lib first, so entering a mesa
+# profile is by itself enough to win over an NVIDIA system profile;
+# LIBGL_ALWAYS_SOFTWARE then keeps Mesa off any hardware path.
+MESA := guix shell mesa -- env LIBGL_ALWAYS_SOFTWARE=1
+
 SMOKE_PNG ?= out/m0-smoke.png
 
 # Make the systems findable without symlinking into ~/quicklisp/local-projects:
@@ -15,7 +25,8 @@ SMOKE_PNG ?= out/m0-smoke.png
 # append its default configuration, so Quicklisp's own dists still resolve.
 export CL_SOURCE_REGISTRY := $(CURDIR):
 
-.PHONY: all test test-render test-render-ci smoke repl page clean
+.PHONY: all test test-render test-render-mesa test-render-ci test-render-bare \
+        smoke smoke-mesa repl page clean
 
 all: test
 
@@ -32,14 +43,23 @@ test-render:
 	  --eval '(ql:quickload :antsim/render-test :silent t)' \
 	  --eval '(uiop:quit (if (fiveam:run! (quote antsim/render-test::render)) 0 1))'
 
-## test-render-ci — same suite without the guix/GPU wrapper, for machines
-## with no driver: the PNG tests run and the GL tests SKIP rather than
-## fail, so a green run here does NOT by itself mean the renderer works.
-##
-## On a host that already has the driver in its system profile this still
-## reaches the GPU and really does verify it — check the suite's output
-## for "Skip: 0" before reading a pass as proof of anything.
-test-render-ci:
+## test-render-mesa — the same suite in software on llvmpipe.  Needs no
+## GPU and skips nothing, so this is what a test environment should run.
+## Slow, and that is fine.
+test-render-mesa:
+	$(MESA) $(SBCL) --non-interactive \
+	  --eval '(ql:quickload :antsim/render-test :silent t)' \
+	  --eval '(uiop:quit (if (fiveam:run! (quote antsim/render-test::render)) 0 1))'
+
+## test-render-ci — alias for the software run.  CI has no GPU, and a
+## suite that silently skips its GL tests is worse than one that is slow.
+test-render-ci: test-render-mesa
+
+## test-render-bare — no wrapper at all: whatever GL the host happens to
+## have.  GL tests SKIP if it has none, so a green run here proves only
+## the PNG writer.  The suite prints the backend it used; read that line
+## before reading the result.
+test-render-bare:
 	$(SBCL) --non-interactive \
 	  --eval '(ql:quickload :antsim/render-test :silent t)' \
 	  --eval '(uiop:quit (if (fiveam:run! (quote antsim/render-test::render)) 0 1))'
@@ -49,6 +69,12 @@ smoke:
 	$(GPU) $(SBCL) --non-interactive \
 	  --eval '(ql:quickload :antsim/render :silent t)' \
 	  --eval '(ant:m0-smoke :path #p"$(SMOKE_PNG)")'
+
+## smoke-mesa — the same frame in software, for comparing the two stacks.
+smoke-mesa:
+	$(MESA) $(SBCL) --non-interactive \
+	  --eval '(ql:quickload :antsim/render :silent t)' \
+	  --eval '(ant:m0-smoke :path #p"out/m0-smoke-mesa.png")'
 
 repl:
 	sbcl --dynamic-space-size $(HEAP) \

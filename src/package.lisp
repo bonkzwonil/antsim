@@ -21,7 +21,8 @@
    #:write-png #:crc32 #:adler32
    ;; render/egl
    #:gl-context #:make-headless-context #:destroy-gl-context
-   #:with-headless-gl #:gl-info #:gl-context-width #:gl-context-height
+   #:with-headless-gl #:with-gl-traps-masked #:gl-info
+   #:gl-context-width #:gl-context-height
    ;; render/offscreen
    #:offscreen #:make-offscreen #:destroy-offscreen #:with-offscreen
    #:offscreen-fbo #:offscreen-width #:offscreen-height

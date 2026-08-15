@@ -3,11 +3,16 @@
 ;;;; Split from the core suite because these need cl-opengl loaded, and
 ;;;; the GL ones need a driver.  The PNG tests do not, and run anywhere.
 ;;;;
-;;;; GL tests *skip* rather than fail when no context can be created, so
-;;;; the suite stays useful on a machine without a GPU.  The consequence
-;;;; is that a green run here does not by itself mean the renderer was
-;;;; verified — `make test-render` (which wraps the guix GPU shell) is
-;;;; what proves that, and it says so in its own output.
+;;;; Skipping is the last resort, not the plan.  Mesa's llvmpipe provides
+;;;; a 4.5 core context in software, so `make test-render-mesa` runs this
+;;;; entire suite on a machine with no GPU at all — slowly, which does not
+;;;; matter for a few small frames.  A skip therefore means the
+;;;; environment is misconfigured, not that the machine is modest.
+;;;;
+;;;; Which GL actually ran is printed when the suite loads, because "the
+;;;; render tests passed" is not a useful statement on its own: passing on
+;;;; llvmpipe and passing on the RTX 3070 are different claims, and a log
+;;;; that does not say which one it made cannot be read later.
 
 (defpackage #:antsim/render-test
   (:use #:cl #:fiveam)
@@ -18,8 +23,14 @@
 (def-suite render)
 (in-suite render)
 
+;;; Frames the tests draw are kept rather than deleted.  This is a
+;;; graphics project: when a render test fails, the first question is
+;;; always "what did it look like?", and a temporary file that has already
+;;; been unlinked cannot answer it.  They are small, and out/ is ignored.
+(defparameter *test-output-directory* #p"out/tests/")
+
 (defun test-png-path (name)
-  (merge-pathnames name (uiop:temporary-directory)))
+  (merge-pathnames name (ensure-directories-exist *test-output-directory*)))
 
 ;;; ------------------------------------------------------------------ PNG
 
@@ -47,8 +58,7 @@
       (is (= rw w))
       (is (= rh h))
       (is (= depth 8))
-      (is (= ctype 2)))                 ; 2 = truecolour RGB
-    (delete-file path)))
+      (is (= ctype 2)))))               ; 2 = truecolour RGB
 
 (test png-crc-and-adler-known-values
   "CRC32 and Adler32 against published test vectors.  A wrong checksum
@@ -65,22 +75,46 @@ produces a file that looks fine until something else tries to read it."
     (ant:write-png path px w h :channels 4)
     (multiple-value-bind (rw rh depth ctype) (decode-png-header path)
       (declare (ignore rw rh depth))
-      (is (= ctype 6)))                 ; 6 = truecolour + alpha
-    (delete-file path)))
+      (is (= ctype 6)))))               ; 6 = truecolour + alpha
 
 ;;; ------------------------------------------------------------------- GL
 
+(defvar *gl-backend* nil
+  "GL-INFO from a probe context, or NIL if none could be created.")
+
 (defvar *gl-available*
   (handler-case
-      (let ((c (ant:make-headless-context :width 32 :height 32)))
-        (ant:destroy-gl-context c)
-        t)
+      (ant:with-gl-traps-masked
+        (let ((c (ant:make-headless-context :width 32 :height 32)))
+          (unwind-protect (setf *gl-backend* (ant:gl-info))
+            (ant:destroy-gl-context c))
+          t))
     (error () nil)))
+
+(test gl-backend-is-reported
+  "Not an assertion about the renderer — it prints which GL stack the run
+actually used.  \"The render tests passed\" is not a useful statement on
+its own: passing on llvmpipe and passing on an RTX 3070 are different
+claims, and a log that does not say which one it made cannot be read
+later.  It reports at *run* time rather than load time because
+`ql:quickload :silent t` discards anything printed while loading."
+  (if *gl-available*
+      (progn
+        (format t "~&;; GL backend: ~a | ~a | ~a~%"
+                (getf *gl-backend* :version)
+                (getf *gl-backend* :renderer)
+                (getf *gl-backend* :vendor))
+        (is-true (stringp (getf *gl-backend* :version))))
+      (progn
+        (format t "~&;; GL backend: NONE — the GL tests below will skip. ~
+                   `make test-render-mesa` runs them in software.~%")
+        (skip "no GL backend to report"))))
 
 (defmacro with-gl-or-skip (&body body)
   `(if *gl-available*
        (progn ,@body)
-       (skip "No GL context available (run under: guix shell nvda@580 -- ...)")))
+       (skip "No GL context available.  `make test-render-mesa` runs this ~
+              suite in software (llvmpipe) and needs no GPU.")))
 
 (test gl-context-is-4.5-core
   (with-gl-or-skip
@@ -142,6 +176,8 @@ above black, many distinct luminances, and both dark and bright pixels."
     (ant:with-headless-gl (c :width 240 :height 150)
       (ant:with-offscreen (o 240 150)
         (ant:draw-smoke-frame o)
+        ;; kept on disk so a failure can be looked at, not just read about
+        (ant:capture-offscreen o (test-png-path "smoke-frame-judged.png"))
         (let* ((px (ant:read-offscreen o))
                (n (floor (length px) 3))
                (sum 0) (distinct (make-hash-table :test #'eql))
@@ -174,8 +210,7 @@ above black, many distinct luminances, and both dark and bright pixels."
           (is (= ctype 2)))
         (is (> (with-open-file (s path :element-type '(unsigned-byte 8))
                  (file-length s))
-               1000))
-        (delete-file path)))))
+               1000))))))
 
 (test smoke-frame-is-deterministic
   "Two draws of the same frame must be byte-identical.  Nothing in the
