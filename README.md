@@ -299,7 +299,7 @@ real time starts with several minutes of ants wandering in silence.
 |---|---|
 | mouse wheel | zoom, anchored at the cursor |
 | right-drag | pan |
-| left-click | inspect an ant — state, energy, crop, age, distance home, and whether it has the reserve to set out |
+| left-click | inspect an ant — state, energy, crop, age, distance home, and whether it has the reserve to set out. The ant is marked on the map by a pulsing pink reticle |
 | `space` | pause |
 | `+` / `-` | time compression, halving and doubling |
 | `home` | frame the whole world |

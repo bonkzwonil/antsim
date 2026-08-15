@@ -215,6 +215,32 @@ competes for, at any window size."
              (hud-text h (+ px pad kw gap) y action
                        :scale s :r 0.60 :g 0.66 :b 0.74))))
 
+(defun live-draw-marker (h sx sy)
+  "Mark the inspected ant: four pink arms around it, pulsing.
+
+An ant is a disc four pixels across in a field of several hundred of
+them, so the marker has to win on every channel at once — size, hue and
+motion.  The first version was a small white cross, and white is the
+colour of an *ordinary outbound ant*: it read as one more ant.  Pink is
+the only hue nothing in the simulation uses, so it cannot be mistaken for
+state.
+
+Four arms with a gap rather than a cross, because a cross drawn over a
+4-pixel disc hides the thing it is pointing at.
+
+The pulse runs on GLFW's clock rather than the simulation's, so it keeps
+blinking while the world is paused — which is exactly when someone is
+most likely to be hunting for the ant they just clicked."
+  (declare (type hud h))
+  (let* ((tsec (glfw:get-time))
+         (pulse (+ 0.45f0 (* 0.55f0 (abs (sin (* 3.6f0 tsec))))))
+         (arm 16.0f0) (gap 7.0f0) (th 3.0f0) (half (* 0.5f0 th))
+         (r 1.0f0) (g 0.24f0) (b 0.78f0))
+    (hud-quad h (- sx gap arm) (- sy half) arm th r g b pulse)
+    (hud-quad h (+ sx gap)     (- sy half) arm th r g b pulse)
+    (hud-quad h (- sx half) (- sy gap arm) th arm r g b pulse)
+    (hud-quad h (- sx half) (+ sy gap)     th arm r g b pulse)))
+
 (defun live-draw-hud (h w vw vh fps)
   "Counters along the top, and the selected ant's state readout (§5.1)."
   (declare (type hud h) (type world w))
@@ -311,8 +337,7 @@ competes for, at any window size."
                 (view-world->screen *live-view*
                                     (aref (bodies-x b) bi)
                                     (aref (bodies-y b) bi))
-              (hud-quad h (- sx 9) (- sy 1) 18 2 1.0 1.0 1.0 0.85)
-              (hud-quad h (- sx 1) (- sy 9) 2 18 1.0 1.0 1.0 0.85))))))
+              (live-draw-marker h sx sy))))))
 
     ;; --- key legend ---------------------------------------------------
     (when *live-keyhelp*

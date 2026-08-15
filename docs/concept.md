@@ -1049,7 +1049,7 @@ world has to be decided in advance to see it.
 | mouse wheel | zoom, anchored at the cursor — the world point under the pointer stays under it |
 | right-drag | pan |
 | `space` / `+` / `-` | pause, and time compression up/down |
-| left-click an ant | inspect: state, energy, crop, age, home vector, and whether it has the reserve to set out |
+| left-click an ant | inspect: state, energy, crop, age, home vector, and whether it has the reserve to set out — the ant is marked on the map by a pulsing pink reticle |
 | `home` | frame the whole world |
 | `h` / `?` | hide or show the key legend |
 | `q` / `escape` | quit |
