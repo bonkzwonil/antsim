@@ -605,9 +605,9 @@ before ordinary dependencies — and it has to run before `cl-opengl` binds a
 libGL. This is not stylistic; see §5.4.
 
 ```
-src/package.lisp        the ANTSIM package (nickname AS)
+src/package.lisp        the ANTSIM package (nickname ANT)
 src/util.lisp           specialized array types + constructors   [from wa]
-src/rng.lisp            counter-based RNG keyed on (id, tick)    [from wa]
+src/rng.lisp            counter-based RNG, (id, tick, stream, seed)
 src/pool.lisp           persistent worker pool                   [from wa]
 src/world/grid.lisp     pheromone fields, decay, diffusion, deposit buffers
 src/world/geom.lisp     polygons, rasterization, collision, spatial hash
@@ -622,6 +622,8 @@ src/scenario/json.lisp  scenario load/validate
 src/render/preload.lisp driver libGL, before cl-opengl            [from wa]
 src/render/png.lisp     dependency-free PNG writer                [from wa]
 src/render/egl.lisp     headless GL 4.5 core context              [from wa]
+src/render/offscreen.lisp FBO target, shader compile/link, capture
+src/render/smoke.lisp   the M0 acceptance frame — deleted at M2
 src/render/shaders.lisp GLSL: field, geometry, instanced ants
 src/render/antmesh.lisp the 2D ant vector model + gait rig
 src/render/view.lisp    ortho camera, layers, the frame
@@ -699,6 +701,30 @@ pheromone tick. Ant–ant interactions (trophallaxis, collision) are the only
 coupling; handle them by making them symmetric and resolving them in a
 second, single-threaded pass over a preallocated contact list — cheap,
 because contacts are rare.
+
+### 4.6 Building and running
+
+SBCL 2.6.4 with Quicklisp. The Makefile exports `CL_SOURCE_REGISTRY`
+pointing at the checkout, so nothing needs to be symlinked into
+`~/quicklisp/local-projects` — a clone builds where it stands.
+
+```
+make test              core suite: RNG, pool, util.  no GPU, no graphics
+make test-render       renderer suite, under the guix GPU shell
+make test-render-ci    the same without the GPU shell — GL tests skip
+make smoke             M0 end to end: headless frame → out/m0-smoke.png
+make repl              a REPL with antsim loaded
+make page              regenerate docs/index.html from docs/concept.html
+```
+
+GPU targets wrap the command in `guix shell nvda@580 --`, which is how the
+driver gets onto the loader path. A host that already carries the driver in
+its system profile does not need the wrapper — but the wrapper is what makes
+the result reproducible across hosts, and §5.4 is what happens when the
+wrong libGL wins.
+
+If a render comes back black, run `nvidia-smi` *inside* that shell before
+suspecting the renderer.
 
 ## 5. Rendering
 
@@ -927,10 +953,24 @@ of §3.8 are *literally the published experiments run as data files*.
 Deliberately shaped like waldameisen's: each milestone ends in something
 verifiable, and the risky spikes come early.
 
-**M0 — the stack stands up.** ASDF systems, package, `util`/`rng`/`pool`
-carried over, FiveAM wired, Makefile with the guix GPU targets. A headless
-context comes up and writes a non-black PNG. *Proves the toolchain before
-any design is committed to it.*
+**M0 — the stack stands up. ✅ done.** ASDF systems, package,
+`util`/`rng`/`pool` carried over, FiveAM wired, Makefile with the guix GPU
+targets. A headless context comes up and writes a non-black PNG. *Proves
+the toolchain before any design is committed to it.*
+
+Verified: core suite 40 141 checks green with no GPU; render suite 35
+checks green on GL 4.5.0 core / NVIDIA 580.159.04 / RTX 3070, drawing a
+real GLSL 450 frame into an FBO and encoding it. `make smoke` writes
+`out/m0-smoke.png`.
+
+Two things came out of building it rather than planning it. The RNG grew a
+`seed` argument, because §3.8's symmetry-breaking result is a claim about a
+*distribution over runs* and needs independent replicates of one scenario —
+and it is an argument rather than a special variable because a `let`-bound
+special is thread-local in SBCL, so workers would silently keep the global
+value and every replicate would come out identical. And the mixer had a
+fixed point: `hash32(0) = 0`, so ant 0 on tick 0 drew exactly `0.0`. Both
+are pinned by tests now.
 
 **M1 — the core simulation, no renderer.** Exactly the §3.9 cut and nothing
 past it: the ant and body tables, CRW movement, disc collision with Jacobi

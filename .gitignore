@@ -4,3 +4,9 @@
 *~
 .#*
 /docs/*.tmp
+
+# Local working rules — names private infrastructure, must not be published.
+/CLAUDE.md
+
+# Render output from `make smoke` / the test suites.
+/out/
