@@ -59,6 +59,22 @@
   ;; laden ant walks slower and would otherwise lay a heavier line for
   ;; the same journey.
   (trailed nil :type (or null f32v))
+  ;; Stride phase, 0..1 through one alternating-tripod cycle (§5.2).
+  ;;
+  ;; Display state, and the only piece of it the ant table carries.  It is
+  ;; here rather than in the renderer because it is a *history* — φ
+  ;; advances with the distance this ant has walked, and nothing a frame
+  ;; can see says how far that is.
+  ;;
+  ;; Distance and not time, which is the whole point.  During stance a
+  ;; foot is planted in world space and slides backward through the body
+  ;; frame at exactly the rate the body slides forward; tie φ to the clock
+  ;; instead and a stalled ant treadmills on the spot while a fast one
+  ;; skates.  Closed over actual net displacement (PATH-INTEGRATION-STEP!)
+  ;; rather than the attempted step, for the same reason the home vector
+  ;; is: an ant shoving against a crowd is not covering ground, and its
+  ;; feet should say so.
+  (gait nil :type (or null f32v))
   ;; The bearing this ant sets off on when it next leaves the nest (§3.4).
   ;;
   ;; Route fidelity: an ant that came home from a source remembers roughly
@@ -116,6 +132,7 @@
               :hvx (mkf32 capacity) :hvy (mkf32 capacity)
               :px (mkf32 capacity) :py (mkf32 capacity)
               :trailed (mkf32 capacity)
+              :gait (mkf32 capacity)
               :exit (mkf32 capacity)
               :smelled (mkf32 capacity) :cast (mku8 capacity)
               :resolve (mkf32 capacity) :waited (mku32 capacity)

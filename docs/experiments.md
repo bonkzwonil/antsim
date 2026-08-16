@@ -525,7 +525,73 @@ Worth stating as a rule, since it has now bitten twice: **a negative
 result has a shelf life.** It is a fact about the model it was measured
 on, and this model has changed twice since.
 
+### Individual walking speed (§3.1) — shipped
+
+Every ant in the colony walked at exactly `*walk-speed*`. §3.1 quotes a
+*range* — 1–3 cm/s — and the model had been taking its midpoint and
+handing the same number to every worker, which is the one claim in the
+movement model that nothing in the literature supports. `*speed-spread*`
+gives each ant a lifelong multiplier drawn uniformly from 1 ± 0.10, from
+its id and the world seed only, on its own stream (`ANT-PACE`, the same
+construction as `ANT-HANDEDNESS`).
+
+The question that had to be answered before it could ship is whether it
+moves the two published rows. Both bridges, **sixteen seeds each**, the
+acceptance protocol (fixed colony, six minutes to commit, six minutes
+measured), and the only difference between the columns is the parameter:
+
+| row | spread | mean busiest arm | worst replicate | winners |
+|---|---|---|---|---|
+| binary | 0.00 | 0.947 | 0.623 | 9 / 7 |
+| binary | **0.10** | 0.944 | 0.668 | 9 / 7 |
+| double | 0.00 | 0.798 | 0.706 | 16 / 16 short |
+| double | **0.10** | **0.814** | 0.672 | 16 / 16 short |
+
+Nothing moved that the rows are about. The binary bridge commits just as
+hard and still splits its choice 9/7 across seeds; the double bridge's
+short arm still wins **every** replicate, and its mean share went *up* by
+1.6 points, which is inside the spread of the distribution and is
+reported as "not worse" rather than as an improvement.
+
+Individual seeds do reshuffle, and they have to: this changes every
+trajectory. That is the reason the comparison is sixteen seeds per cell
+and stated as an aggregate — a per-seed diff between the columns would
+have looked alarming and meant nothing.
+
+Two things recorded rather than fixed:
+
+- **A brisk ant is very slightly the fitter forager.** Energy drains per
+  tick, not per metre (§3.5), so 10% more speed is 10% more range for the
+  same fuel. At this width it is inside the noise of a foraging trip.
+  Removing it means making metabolism speed-dependent, which is a real
+  mechanism and a separate one.
+- **The spread is a tenth, not the quoted range.** 1 to 3 cm/s is a
+  factor of three, and a factor of three between individuals would be two
+  castes rather than variation; the published range is across studies,
+  colonies and temperatures at least as much as across workers of one
+  nest.
+
+`*speed-spread*` has an exact off position — at 0 the multiplier is
+`1.0f0` and the previous model is restored bit for bit, which is what
+made the table above a controlled comparison and is asserted by a test.
+
+**Noticed while measuring, and not caused by this change:** the per-seed
+tables in the README no longer reproduce. They were written at `d6b0035`
+and there have been roughly a dozen model commits since — antennal wall
+sensing, the colony demography, the queen calibration, the bridge width
+fix, the meal fix — any of which moves individual trajectories. The
+*claims* those tables support all still hold, and the acceptance rows
+assert them over seeds rather than per seed, which is why nothing caught
+it. They are owed a regeneration under a stated protocol, which is a job
+of its own and is on the list below.
+
 ## On the list, not yet measured
+
+- **The README's per-seed bridge tables.** Stale since `d6b0035` (see
+  above). The fix is not to re-run them but to decide first *which*
+  protocol they are published under and to generate them from it, the way
+  the gallery images are generated, so they cannot drift again.
+
 
 - **Lane formation at pinch points.** Two streams meeting head-on at a
   corner block each other; the pile does not resolve because the

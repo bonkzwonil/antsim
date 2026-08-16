@@ -20,6 +20,8 @@
    ;; params — the Lasius niger set (§3.1); all rebindable, see params.lisp
    #:*cell-size* #:*motion-dt* #:*pheromone-dt* #:*colony-dt*
    #:*ant-radius* #:*walk-speed* #:*walk-speed-laden* #:*turn-sigma*
+   #:*speed-spread*
+   #:*gait-stride* #:*ant-disc-pixels* #:*ant-detail-pixels*
    #:*sensor-offset* #:*sensor-spread*
    #:*choice-n* #:*choice-k* #:*choice-eavesdrop*
    #:*trail-tau* #:*trail-cap* #:*trail-deposit* #:*trail-quality-threshold*
@@ -82,7 +84,8 @@
    #:ants-id #:ants-body #:ants-colony #:ants-state #:ants-heading
    #:ants-crop #:ants-load-quality #:ants-energy #:ants-age
    #:ants-hvx #:ants-hvy #:ants-px #:ants-py #:ants-count-state
-   #:ants-trailed #:ants-exit #:ants-smelled #:ants-cast #:ants-resolve #:ants-waited
+   #:ants-trailed #:ants-exit #:ants-smelled #:ants-cast #:ants-resolve
+   #:ants-gait #:ants-waited
    #:path-integration-step!
    #:spawn-ant #:kill-ant
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+
@@ -102,6 +105,7 @@
    #:bridge-share #:bridge-winner
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
+   #:ant-handedness #:ant-pace
    #:world-step! #:world-run! #:colony-step! #:colony-feed! #:world-seed-population!
    ;; render/png (antsim/render)
    #:write-png #:crc32 #:adler32
@@ -112,8 +116,16 @@
    ;; render/offscreen
    #:offscreen #:make-offscreen #:destroy-offscreen #:with-offscreen
    #:offscreen-fbo #:offscreen-width #:offscreen-height
+   #:offscreen-samples #:offscreen-resolve-fbo #:resolve-offscreen
+   #:*msaa-samples*
    #:bind-offscreen #:read-offscreen #:capture-offscreen
    #:compile-shader #:link-program
+   ;; render/antmesh — the articulated ant (§5.2)
+   #:ant-mesh #:build-ant-mesh #:ant-mesh-verts #:ant-mesh-index
+   #:ant-mesh-nvert #:ant-mesh-nindex
+   #:ant-mesh-under-count #:ant-mesh-body-count
+   #:+ant-vertex-floats+ #:*legs*
+   #:*ant-vertex-glsl* #:*ant-fragment-glsl* #:build-ant-vertex-glsl
    ;; render/smoke — the M0 acceptance frame
    #:draw-smoke-frame #:render-smoke-png #:m0-smoke
    ;; render/view — the ortho camera (§5.5)
@@ -123,12 +135,14 @@
    #:view-zoom-at! #:view-pan-pixels!
    ;; render/renderer — the 2D scene (§5.1)
    #:renderer #:make-renderer #:destroy-renderer
-   #:upload-field #:upload-bodies #:draw-world #:render-world-png
+   #:upload-field #:upload-bodies #:upload-ants #:draw-world
+   #:ant-display-state #:ant-display-flick #:render-world-png
    ;; render/hud — screen-space overlay (§5.1)
    #:hud #:make-hud #:destroy-hud #:hud-reset #:hud-quad #:hud-text
    #:hud-bar #:hud-draw #:build-font #:*font-3x5*
    ;; render/gallery — the README images (§7, M2)
-   #:render-gallery #:gallery-world #:gallery-shot #:*gallery-directory*
+   #:render-gallery #:gallery-world #:gallery-shot #:gallery-traffic-x
+   #:*gallery-directory*
    ;; live/window — the interactive view (§5.5), system antsim/live
    #:run-live #:live-demo #:live-scenario #:live-inspect
    #:*live-speed* #:*live-paused*))

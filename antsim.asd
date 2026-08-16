@@ -8,7 +8,7 @@
 (defsystem "antsim"
   :description "A 2D ant colony simulation on real behavioural science — numeric core."
   :author "Mathias Menzel-Nielsen"
-  :version "0.2.1"        ; milestone M2.1
+  :version "0.3.0"        ; milestone M3, first half — the vector ant
   :depends-on ()                        ; core stays dependency-free (sb-thread only)
   :serial t
   :pathname "src"
@@ -59,6 +59,10 @@
                (:file "offscreen")
                (:file "smoke")
                (:file "view")
+               ;; Before the shaders, and it has to be: the ant's vertex
+               ;; program is *generated* from the skeleton in here (§5.2),
+               ;; so that the mesh and the articulation cannot drift apart.
+               (:file "antmesh")
                (:file "shaders")
                (:file "renderer")
                (:file "hud")

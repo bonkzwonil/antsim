@@ -51,6 +51,27 @@ mechanism is defensible.
 | `*trail-follow-threshold*` / `*trail-memory-decay*` | 0.5 / 0.93 | the two-level trigger the U-turn needs; one level fires on any faint mark and cost 28% |
 | `*uturn-ticks*` / `*uturn-cast-gain*` | 40 / 3.0 | how long the casting lasts and how wide it sweeps |
 
+## The walk itself (§3.1, §3.2)
+
+| parameter | default | off | what it does |
+|---|---|---|---|
+| `*walk-speed*` / `*walk-speed-laden*` | 0.02 / 0.015 | | m/s, free and carrying. The *ratio* is what makes a long arm cost more on the return leg, so they move together or not at all |
+| `*speed-spread*` | 0.10 | **0.0 = one speed for all** | how much individuals differ, as a fraction either side of nominal, fixed for life. §3.1 quotes a *range* and the model used to hand every worker its midpoint. Measured over 16 seeds on both bridges: neither §3.8 row moves |
+| `*turn-sigma*` | 0.05 | | per-tick heading noise. Set equal to the nest radius once and the colony died in its own doorway |
+| `*ant-radius*` | 0.0025 | | the collision disc of §3.11 — physics only. §5.2 draws something else entirely |
+
+## Drawing the ant (§5.2)
+
+Display only. Nothing in the model reads any of these, and changing one
+cannot change a result — which is the point of listing them apart.
+
+| parameter | default | off | what it does |
+|---|---|---|---|
+| `*gait-stride*` | 0.003 | | metres per tripod cycle. **Not free**: the foot is planted in world space, so this sets the drawn sweep of the legs *and* the step rate together, and the two cannot be tuned apart |
+| `*ant-disc-pixels*` | 4.0 | large = always discs | below this on-screen radius an ant is the plain disc of §3.11. Keeps every published figure drawn by the shader that drew it |
+| `*ant-detail-pixels*` | 5.5 | large = never legs | above this it gets legs, antennae, mandibles and payload |
+| `*msaa-samples*` | 4 | 0 = off | samples per pixel on every render target. The vector ant needs it — a leg is drawn a pixel and a quarter wide — and it fixed the obstacle edges as a side effect |
+
 ## Colony demography (§3.10)
 
 | parameter | default | off | what it does |
@@ -61,14 +82,14 @@ mechanism is defensible.
 | ⬥ `*brood-reserve-ration*` | **0.0 = off** | | breed from surplus over a per-worker reserve. Measured **best of anything tried** (4929 vs 4778) and off anyway: it needs a colony-wide aggregate |
 | ⬥ `*forager-maturity-ticks*` | **0 = off** | | callow workers do not forage. Real (temporal polyethism) and costs 7% — maturity without nursing is all cost, since young ants here do nothing |
 | ⬥ `*max-age-ticks*` | — | | death by age. Documented as unreachable in practice |
-| `*age-shade-ticks*` | 36000 | | display only: age at which an ant draws as fully mature |
+| `*age-shade-ticks*` | 36000 | | display only: age at which an ant draws as fully mature (see also §5.2 below) |
 
 ## Energy and the nest (§3.5)
 
 | parameter | default | off | what it does |
 |---|---|---|---|
-| `*forager-eats-at-source*` | **t** | nil | an ant standing on food eats. Modest, consistent: ~5–9% fewer deaths in both arms |
-| `*nest-meals-per-tick*` | 2 | 0 = the old trough | hungriest resting ants fed to satiety, bounded per tick. **Modelling, not a fix** — the collapse it addressed was pre-queen and no longer occurs |
+| `*forager-eats-at-source*` | **t** | nil | an ant standing on food eats. Separable from meals and doing a different job: meals decide how many ants can leave at all, this decides whether one that leaves survives the trip. Without it an overloaded colony does not even stabilise (1063 → 378) |
+| `*nest-meals-per-tick*` | 2 | 0 = the old trough | hungriest resting ants fed to satiety, bounded per tick. **Load-bearing under population pressure**: on an overloaded colony the trough locks at 644 ants with 83 able to work and never recovers, meals climb back to 1146 with 807 able (`scenarios/antsim-overload.json`) |
 | `*nest-feed-rate*` | 0.002 | | the old communal sip, used only when meals are off |
 | ⬥ `*forager-expendability*` | **1.0 = off** | | 0.0 means a forager from an empty nest never turns back. Measured harmful: population 626 → 207, deaths 23 → 457, births flat |
 | ⬥ `*resting-ants-block*` | **nil** | t | whether resting ants take part in ant-ant collision. Left switchable on purpose: passing runs smoother, colliding looks better, and nothing in the model ranks those |

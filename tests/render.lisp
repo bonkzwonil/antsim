@@ -77,6 +77,63 @@ produces a file that looks fine until something else tries to read it."
       (declare (ignore rw rh depth))
       (is (= ctype 6)))))               ; 6 = truecolour + alpha
 
+;;; --------------------------------------------------- the ant mesh (§5.2)
+;;;
+;;; No GL needed: the mesh is arithmetic, and the vertex program is
+;;; generated text.  Both can be wrong in ways that are silent on screen —
+;;; an index off the end of the buffer draws whatever is next in memory,
+;;; and a splice that emits nothing compiles into a shader that quietly
+;;; uses zero for every leg.
+
+(test ant-mesh-is-well-formed
+  (let* ((m (ant:build-ant-mesh))
+         (ix (ant:ant-mesh-index m))
+         (nv (ant:ant-mesh-nvert m)))
+    (is (plusp nv))
+    (is (zerop (mod (length ix) 3)) "~d indices is not whole triangles"
+        (length ix))
+    (is (= (length ix) (ant:ant-mesh-nindex m)))
+    (is (= (length (ant:ant-mesh-verts m)) (* nv ant:+ant-vertex-floats+)))
+    (is (every (lambda (i) (< i nv)) ix)
+        "an index points past the end of the vertex buffer")
+    ;; a few dozen triangles, per §5.2 — this is a budget, not a detail
+    (is (< 40 (/ (length ix) 3) 200) "~d triangles" (/ (length ix) 3))))
+
+(test ant-mesh-lod-ranges-partition-the-draw
+  "The simplified body-only ant of §5.2 is a *range* of the full one, not
+a second mesh.  That is what makes it impossible for the two to disagree
+about where the gaster is — and it only holds if the ranges line up."
+  (let* ((m (ant:build-ant-mesh))
+         (under (ant:ant-mesh-under-count m))
+         (body (ant:ant-mesh-body-count m))
+         (total (ant:ant-mesh-nindex m)))
+    (is (plusp under) "nothing is drawn beneath the body — the legs are lost")
+    (is (plusp body))
+    (is (< (+ under body) total) "nothing is drawn over the body")
+    (is (zerop (mod under 3)))
+    (is (zerop (mod body 3)))))
+
+(test ant-vertex-program-carries-the-skeleton
+  "The shader's leg tables are spliced in from antmesh.lisp rather than
+written twice.  If the splice ever emits nothing the shader still
+compiles — every leg simply attaches at the origin — so the joint is
+checked here rather than looked at."
+  (let ((src ant:*ant-vertex-glsl*))
+    (dolist (name '("LEG_HIP" "LEG_FOOT" "LEG_LEN" "LEG_KNEE" "LEG_PHASE"
+                    "ANT_SCAPE" "PETIOLE_X" "GASTER_TIP_X"))
+      (is (search name src) "~a is missing from the generated shader" name))
+    ;; the first leg's hip, as it appears in *LEGS*
+    (let ((hip (format nil "vec2(~,5f, ~,5f)"
+                       (first (first ant:*legs*)) (second (first ant:*legs*)))))
+      (is (search hip src) "~a did not reach the shader" hip))
+    ;; six entries in the table, not one repeated
+    (let* ((at (search "LEG_KNEE" src))
+           (open (position #\( src :start (search "float[6](" src :start2 at)))
+           (close (position #\) src :start open)))
+      (is (= 5 (count #\, src :start open :end close))
+          "LEG_KNEE is not a six-element table: ~a"
+          (subseq src open (1+ close))))))
+
 ;;; ------------------------------------------------------------------- GL
 
 (defvar *gl-backend* nil

@@ -53,6 +53,100 @@ one-cell wall, and deposition never skips a cell.")
 the ratio matters more than the value, because it is what makes a long
 arm cost more than a short one on the return leg as well as the outbound.")
 
+(defparameter *speed-spread* 0.10f0
+  "How much individual ants differ in walking speed, as a fraction either
+side of the colony's nominal speed.  [lit/cal]  0.10 means every ant
+walks somewhere between 90% and 110% of *WALK-SPEED*, fixed for its life
+(ANT-PACE).
+
+Defensible from §3.1 rather than invented: the species figure is a
+*range*, 1-3 cm/s, and the model had been taking the midpoint and
+handing it to every worker identically.  A colony in which every
+individual walks at exactly the same speed is the one claim in the
+movement model that nothing in the literature supports and that a watcher
+notices immediately — a trail of ants in perfect convoy, never
+overtaking, never bunching.
+
+Ten percent and not the full range the source quotes.  Three centimetres
+a second against one is a factor of three, and a factor of three between
+individuals would not be individual variation, it would be two castes;
+the quoted range is across studies, colonies and temperatures at least as
+much as it is across workers of one nest.  A tenth is a width that reads
+as ants rather than as a mixture, and it is small enough that no
+calibrated result moves — which was checked rather than assumed, see
+below.
+
+What it buys, beyond looking right: overtaking.  A single-speed column
+can only ever queue, so every interaction on a trail was a collision
+between equals and every jam dissolved only when its cause did.  With a
+spread there is a fast ant behind a slow one, which is the condition
+every result about lane formation is about — and which M3's second half
+needs to have something to sort.
+
+What it costs, and it is worth being explicit because it is not nothing:
+energy drains per *tick*, not per metre (§3.5), so a brisk ant covers
+more ground for the same fuel and is very slightly the fitter forager.
+At ±10% that is a ±10% edge in range on an individual, which is inside
+the noise of everything else about a foraging trip, and correcting it
+means making metabolism speed-dependent — a real mechanism, and a
+separate one.  Recorded here as a known asymmetry rather than papered
+over.")
+
+(defparameter *gait-stride* 0.003f0
+  "Distance the body advances over one complete tripod cycle, metres
+(§5.2).  [cal]
+
+The one parameter of the walk that is *not* free, because the foot is
+planted in world space: over the half-cycle a leg spends in stance its
+foot must slide backward through the body frame by exactly the distance
+the body slid forward, or the ant moonwalks.  So the stride sets the
+drawn sweep of the legs as well as the step rate, and the two cannot be
+tuned independently — a longer stride is a bigger, slower step, never a
+bigger step at the same rate.
+
+At 3 mm and the free walking speed above the colony steps at about 7 Hz,
+which is at the slow end of what a real ant does (10-20 Hz) and was
+chosen for exactly that reason: the honest rate at this body size is a
+blur, and a blur carries none of the information the gait exists to
+carry.  It is the one place in the renderer where legibility was
+preferred to the measurement, and it is recorded here rather than hidden
+in a shader.
+
+It is also, in the other direction, bounded by the legs: the foot has to
+reach both ends of the stride, so a longer one needs longer links and
+past a point the ant stops looking like an ant.  1.2 ant radii is where
+those two pressures meet.
+
+Nothing in the model reads it — the phase it drives is display state
+(ANTS-GAIT) and no rule branches on it.")
+
+(defparameter *ant-disc-pixels* 4.0f0
+  "Below this on-screen radius, in pixels, an ant is drawn as the plain
+disc of §3.11 rather than the vector body of §5.2 (LOD, §5.2).  [tune]
+
+The lowest of the three tiers, and the one that keeps the published
+figures alone: every whole-arena frame in the README is at about 3 px per
+ant, so those pictures are drawn by exactly the shader that drew them
+before this milestone.  It is also simply the right picture — at three
+pixels the legs are noise, and an analytic circle antialiases better than
+ninety triangles ever will.
+
+Four rather than three and a half, and the half is the whole reason to
+write this down.  The README's hero frame works out at 3.57 px per ant,
+which put it on the wrong side of a knife edge: a picture whose entire
+look flips when someone renders it eight pixels wider is not a figure, it
+is an accident.  The threshold belongs clear of the sizes the
+documentation actually uses, and this is where that is.")
+
+(defparameter *ant-detail-pixels* 5.5f0
+  "Above this on-screen radius, in pixels, an ant gets legs, antennae,
+mandibles and payload; between it and *ANT-DISC-PIXELS* it gets the four
+body segments only (LOD, §5.2).
+
+One mesh, not two.  The index buffer is ordered legs, body, appendages,
+so the simplified ant is a *range* of the full one and the two can never
+disagree about where the gaster is.")
+
 (defparameter *turn-sigma* 0.05f0
   "Standard deviation of the per-tick heading noise, radians.  [cal]
 §3.9 replaces the wrapped Cauchy of §3.2 with a Gaussian: same
@@ -912,6 +1006,8 @@ relaxation from chasing floating-point noise forever.")
 (declaim (type f32
                *cell-size* *motion-dt* *pheromone-dt* *colony-dt*
                *ant-radius* *walk-speed* *walk-speed-laden* *turn-sigma*
+               *speed-spread*
+               *gait-stride* *ant-disc-pixels* *ant-detail-pixels*
                *sensor-offset* *sensor-spread* *turn-rate*
                *trail-turn-gain* *trail-noise-suppression*
                *choice-n* *choice-k* *choice-eavesdrop*

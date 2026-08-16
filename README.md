@@ -9,9 +9,11 @@ collapses onto the short one, because ants that take it get home sooner and lay
 pheromone sooner. Every mark in that picture was deposited by an ant that
 walked there.*
 
-**Version M2.1 · 2026-08-15** — the renderer, the interactive window, and the
-round of corrections that watching it produced. See [where it
-is](#where-it-is) for what that covers and what is next.
+**Version M3 · 2026-08-16** — the ant is an ant now: a real articulated vector
+body on an alternating tripod gait, with antennae that sweep the pheromone field
+they are standing on. That is the first half of M3; the second half, what
+happens when two ants meet, is not built. See [where it is](#where-it-is) for
+what that covers and what is next.
 
 A 2D ant colony simulation built on real behavioural science, in Common Lisp,
 rendered with OpenGL.
@@ -198,6 +200,50 @@ On the surviving road, traffic runs both ways at once.
 
 *Outbound ants are pale, laden returners warm orange, and the few red ones no
 longer have the energy to leave the nest. Zoomed to 18 cm.*
+
+And close enough, an ant is an ant.
+
+![The same road, close enough to see the ants](docs/images/15-vector-ant.png)
+
+*The same stretch of trail at 4.5 cm. Six legs on an alternating tripod, two
+antennae, mandibles, a swollen crop on the ants carrying one, and the pale blue
+dot at a gaster tip is the exact moment a pheromone packet went into the ground.
+Nothing here is a sprite: it is one mesh of ninety-odd triangles, articulated in
+the vertex shader from eight floats per ant.*
+
+The thing worth watching is the **legs**, and specifically that they do not
+slide. The stride phase advances with the **distance an ant has walked**, not
+with the clock, so over the half-cycle a leg spends on the ground its foot slides
+backward through the body exactly as fast as the body slides forward — which
+means the foot is standing still in the world, which is what a foot does. Drive
+the same animation from a timer and every ant moonwalks. It is one divisor, and
+it is the whole difference between an ant that walks and an ant that is dragged.
+
+The rest of what is drawn is mechanism rather than decoration:
+
+- **Antennae sweep, and lean toward what they smell.** Each one samples the
+  pheromone field either side of its own tip and bends toward the stronger, by
+  the same comparison the ant's own choice function makes (§3.4). You can watch
+  an antenna find a trail several ticks before the body turns onto it.
+- **The gaster tips down** at the instant a packet is deposited — a visible event
+  marking an otherwise invisible mechanism — and the mark it leaves is drawn in
+  the trail's own colour.
+- **A full crop is a fat gaster**, because *Lasius* carries liquid and the crop is
+  internal. The bead at the mandibles is the conventional cue; the swelling is
+  the honest one.
+- **Dead ants curl their legs under** and stay where they fell (§3.11), so the
+  approaches to a starving nest fill up with recognisable corpses rather than
+  with grey dots.
+- **No two ants walk at quite the same speed**, so they overtake and bunch
+  instead of moving in convoy. That one is not drawing at all — it is a ±10%
+  lifelong difference between individuals in the model, and the gait follows it
+  for free, because the stride is driven by distance covered.
+
+Zoom out and it all goes away. At about four pixels an ant loses its legs, and
+below that it is the plain disc it always was — the pheromone shader
+antialiases a circle better than ninety triangles ever will, and at three pixels
+the legs are noise. Every whole-arena picture on this page, including the one at
+the top, is drawn by exactly the shader that drew it before the ant had legs.
 
 ### A traffic jam that feeds itself
 
@@ -492,8 +538,78 @@ A few entry points:
 
 ## Where it is
 
-M0 (the toolchain) is done, M2's renderer and window are built, and M2.1 is the
-round of corrections above.
+M0 (the toolchain) is done, M2's renderer and window are built, M2.1 is the
+round of corrections above, and **M3's first half — the vector ant — is
+built**.
+
+**M3 is half done, and the half that is missing is the interesting one.** What
+shipped is §5.2 in full: the three-segment body, six two-link legs solved by
+inverse kinematics in the vertex shader, the alternating tripod driven by
+distance walked, antennae that sweep and read the gradient, mandibles, carried
+payload, the deposit flick, the state tint, corpses, and a three-tier level of
+detail that hands back to the M2 disc when an ant is smaller than four pixels.
+It is one static mesh and eight floats per ant per frame; animating a colony
+rewrites no geometry and makes no GL call in the loop.
+
+What is *not* built is the other half of the milestone: the **encounter event**,
+and the lane formation that would ride on it. Today the broad phase reports
+overlaps to be resolved and nothing else, so two ants meeting head-on push each
+other apart along the line of centres and neither prefers a side — which is why
+the jam at the obstacle above never sorts itself out. Turning that overlap into
+an *encounter* — this ant met that ant, at this bearing — is the expensive part,
+and it is also exactly what the social-information channel of §3.4 will need
+later. It is a milestone's worth of work and it is next.
+
+One thing the visual half changed that is worth recording: the offscreen target
+is **multisampled** now, for every render in the project. A leg is drawn a pixel
+and a quarter wide, and an unsampled pixel-wide diagonal is a staircase; six
+staircases per ant crawling over a still frame is not a gait, it is a shimmer.
+The disc shader antialiased itself analytically and never needed it. It fixed
+the obstacle edges as a side effect, which had had the same jagged diagonal for
+the same reason and had simply been lived with — compare the double bridge's
+sloped arm at the top of this page.
+
+The vector ant moved nothing in the simulation: the only state it added is one
+float per ant, the stride phase, and no rule reads it.
+
+**Ants walk at different speeds now**, which is a model change and is the one
+thing in this milestone that does move trajectories. §3.1 quotes a *range* —
+1–3 cm/s — and every worker had been given its midpoint, which is the one claim
+in the movement model nothing in the literature supports and which reads on
+screen as a column of ants in perfect convoy, never overtaking. Each ant now
+carries a lifelong multiplier drawn uniformly from 1 ± 10%, from its id, on its
+own random stream, exactly the way handedness is drawn.
+
+Measured before it shipped, both bridges, sixteen seeds each, the acceptance
+protocol, the only difference being the parameter:
+
+| row | spread | mean busiest arm | worst replicate | winners |
+|---|---|---|---|---|
+| binary | 0% | 0.947 | 0.623 | 9 / 7 |
+| binary | **±10%** | 0.944 | 0.668 | 9 / 7 |
+| double | 0% | 0.798 | 0.706 | 16 / 16 short |
+| double | **±10%** | **0.814** | 0.672 | 16 / 16 short |
+
+Neither published row moves. The binary bridge commits just as hard and still
+splits its choice 9/7 across seeds; the short arm still wins every single
+replicate of the double bridge, and its mean share went *up* by 1.6 points,
+which is inside the distribution and is reported as "not worse" rather than as
+an improvement. The parameter has an exact off position, which is what made that
+a controlled comparison.
+
+What it buys beyond honesty is **overtaking** — a fast ant behind a slow one is
+the condition every result about lane formation is about, so it is also what
+gives M3's unbuilt second half something to sort.
+
+One thing noticed while measuring and *not* caused by any of this: the per-seed
+tables in the two experiment sections above no longer reproduce. They were
+written a dozen model commits ago — antennal wall sensing, the colony
+demography, the queen calibration, the bridge width fix — and any of those moves
+individual trajectories. Every claim they support still holds, and the
+acceptance rows assert those claims over seeds rather than per seed, which is
+why nothing caught it. Regenerating them from a stated protocol, the way the
+gallery images are generated, is on the list in
+[experiments.md](docs/experiments.md).
 
 **M1's two defining rows now pass** — symmetry breaking and shortest-path
 selection, on the bridge apparatus at the top of this page. M1 is defined to end
