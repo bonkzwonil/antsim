@@ -40,6 +40,13 @@ not.  One stream, one question.")
 Drawn on the ant's id alone, with no tick, so it is a fixed property of
 the individual rather than a per-tick coin flip.")
 
+(defconstant +stream-pace+ 8
+  "How fast this ant walks relative to its colony — see ANT-PACE.
+
+Its own stream, and on the ant's id alone, for the same reason
++STREAM-HAND+ is: a lifelong trait must not be re-rolled every tick, and
+it must not be correlated with anything the ant decides.")
+
 (declaim (inline wrap-angle angle-toward choice-weight))
 
 (defun choice-weight (base n)
@@ -224,6 +231,27 @@ means a colony meeting an obstacle sends ants round both ends instead of
 committing all of them to one."
   (declare (type (unsigned-byte 32) id seed) (optimize (speed 3) (safety 0)))
   (if (< (rnd01 id 0 +stream-hand+ seed) 0.5f0) -1.0f0 1.0f0))
+
+(declaim (inline ant-pace))
+(defun ant-pace (id seed)
+  "This ant's walking speed as a multiple of its colony's, fixed for
+life: 1 +/- *SPEED-SPREAD* (§3.1).
+
+Drawn on the id with no tick, exactly like ANT-HANDEDNESS, and for the
+same two reasons.  It is a property of the individual, so re-rolling it
+every tick would make it noise on the step rather than a trait — and
+noise on the step is something the model already has, in the heading
+(§3.2), where it belongs.  And keeping it off every stream a decision is
+taken from means an ant's pace cannot become correlated with what it
+decides to do.
+
+Uniform rather than normal.  §3.1 gives the species a *range* of 1-3
+cm/s and no distribution, so a range is the honest thing to sample; a
+Gaussian here would be inventing a shape the source does not have, and at
+this width the two are indistinguishable anyway."
+  (declare (type (unsigned-byte 32) id seed) (optimize (speed 3) (safety 0)))
+  (+ (- 1.0f0 *speed-spread*)
+     (* 2.0f0 *speed-spread* (rnd01 id 0 +stream-pace+ seed))))
 
 (defun clear-bearing (f x y bearing prefer off)
   "BEARING if an antenna held that way is over open ground, else the
@@ -719,8 +747,22 @@ switch into and no switching logic to get wrong (§3.5)."
                (setf (aref (ants-heading a) i) heading)
 
                ;; advance
-               (let* ((speed (if (> (aref (ants-crop a) i) 0.0f0)
-                                 *walk-speed-laden* *walk-speed*))
+               ;;
+               ;; The pace is the individual's, not the colony's (§3.1).
+               ;; It multiplies both speeds rather than being added to
+               ;; one, so a fast ant is fast laden and unladen alike and
+               ;; the laden/unladen *ratio* — which is what makes a long
+               ;; arm cost more on the return leg — is untouched.
+               ;;
+               ;; Deposition is deliberately not scaled with it.  A packet
+               ;; carries what the ant would have laid over the distance
+               ;; it stands for (§3.3), so the trail is already per metre
+               ;; rather than per tick, and a brisk ant lays exactly the
+               ;; same road as a slow one — it simply lays it sooner,
+               ;; which is the whole of what the difference should do.
+               (let* ((speed (* (ant-pace id seed)
+                                (if (> (aref (ants-crop a) i) 0.0f0)
+                                    *walk-speed-laden* *walk-speed*)))
                       (dx (* speed dt (cos heading)))
                       (dy (* speed dt (sin heading)))
                       (nx (clampf (+ x dx) 0.0f0 wid))

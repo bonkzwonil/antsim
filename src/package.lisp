@@ -20,6 +20,7 @@
    ;; params — the Lasius niger set (§3.1); all rebindable, see params.lisp
    #:*cell-size* #:*motion-dt* #:*pheromone-dt* #:*colony-dt*
    #:*ant-radius* #:*walk-speed* #:*walk-speed-laden* #:*turn-sigma*
+   #:*speed-spread*
    #:*gait-stride* #:*ant-disc-pixels* #:*ant-detail-pixels*
    #:*sensor-offset* #:*sensor-spread*
    #:*choice-n* #:*choice-k* #:*choice-eavesdrop*
@@ -104,6 +105,7 @@
    #:bridge-share #:bridge-winner
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
+   #:ant-handedness #:ant-pace
    #:world-step! #:world-run! #:colony-step! #:colony-feed! #:world-seed-population!
    ;; render/png (antsim/render)
    #:write-png #:crc32 #:adler32
@@ -139,7 +141,8 @@
    #:hud #:make-hud #:destroy-hud #:hud-reset #:hud-quad #:hud-text
    #:hud-bar #:hud-draw #:build-font #:*font-3x5*
    ;; render/gallery — the README images (§7, M2)
-   #:render-gallery #:gallery-world #:gallery-shot #:*gallery-directory*
+   #:render-gallery #:gallery-world #:gallery-shot #:gallery-traffic-x
+   #:*gallery-directory*
    ;; live/window — the interactive view (§5.5), system antsim/live
    #:run-live #:live-demo #:live-scenario #:live-inspect
    #:*live-speed* #:*live-paused*))

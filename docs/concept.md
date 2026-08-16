@@ -116,6 +116,35 @@ This sets the spatial scale:
 Sub-cell movement per tick matters: it means an ant cannot tunnel through a
 one-cell obstacle wall, and pheromone deposition never skips cells.
 
+**Walking speed is a range, and individuals sit in it.** The row above
+quotes 1–3 cm/s, and the first version of the model took the midpoint and
+gave it to every worker identically — which is not what the row says, and
+is the one claim in the movement model that nothing in the literature
+supports. Each ant now carries a lifelong multiplier, uniform in
+1 ± `*speed-spread*` (0.10), drawn from its id and the world seed on its
+own stream — the same construction as handedness in §3.4, and for the
+same reason: a trait must not be re-rolled every tick, and must not be
+correlated with anything the ant decides.
+
+A tenth rather than the quoted range, because a factor of three between
+individuals would be two castes rather than variation; the published
+range is across studies, colonies and temperatures at least as much as
+across workers of one nest. Measured over sixteen seeds on both bridges
+it moves neither §3.8 row (experiments.md).
+
+What it buys beyond honesty is **overtaking**. A single-speed column can
+only ever queue: every meeting on a trail was between equals, and a jam
+dissolved only when its cause did. A spread puts a fast ant behind a slow
+one, which is the condition every result about lane formation is about —
+so this is also the thing that gives §3.11's traffic rules something to
+sort.
+
+One asymmetry it introduces, recorded rather than hidden: energy drains
+per tick and not per metre (§3.5), so a brisk ant gets more range for the
+same fuel. At ±10% that is inside the noise of a foraging trip, and
+correcting it means making metabolism speed-dependent, which is a real
+mechanism and a separate one.
+
 ### 3.2 Individual movement — the correlated random walk
 
 An ant with no information does not walk randomly in the naive sense. It

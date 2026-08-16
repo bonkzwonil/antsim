@@ -35,6 +35,41 @@ one obstacle across part of the route."
     (format t "~&  ~a~%" (namestring path))
     path))
 
+(defun gallery-traffic-x (w y0 y1)
+  "The mean x of the ants currently between Y0 and Y1, or NIL if there
+are none.
+
+A close crop of a *route* cannot be framed by a constant, because the
+route is not in a constant place: the colony lays it wherever its ants
+happen to go, so a hand-picked centre is right for exactly one run and
+slides quietly off the trail the next time anything in the model
+changes.  This asks where the traffic actually is.
+
+The ants and not the field, which was the first version and is subtly
+the wrong question.  The strongest *cell* is where the pheromone is, and
+pheromone is laid by laden ants coming home — so centring on it frames
+the inbound lane and pushes the outbound one off the edge.  The picture
+is of the traffic, so the traffic is what it should be centred on.
+
+The same argument as everywhere else in this file, one level up: the
+pictures are generated rather than screenshotted so they cannot drift
+away from what the simulation does, and where the camera points is part
+of the picture."
+  (declare (type world w) (type f32 y0 y1))
+  (let* ((a (world-ants w))
+         (b (world-bodies w))
+         (xs (bodies-x b)) (ys (bodies-y b))
+         (sum 0.0f0) (n 0))
+    (declare (type f32 sum) (type fixnum n))
+    (dotimes (i (ants-n a))
+      (when (ant-live-p a i)
+        (let* ((bi (aref (ants-body a) i))
+               (y (aref ys bi)))
+          (when (<= (min y0 y1) y (max y0 y1))
+            (incf sum (aref xs bi))
+            (incf n)))))
+    (when (plusp n) (/ sum n))))
+
 (defun gallery-bridge (kind name seed minutes)
   "Render one bridge experiment after it has committed (§3.8).
 
@@ -105,8 +140,13 @@ under different conditions would make the figure a decoration."
     ;; specimen, because the two things this milestone is *for* are only
     ;; visible in traffic: every ant is at its own point in its own gait,
     ;; and every ant is pointing where it is actually going.
+    ;; Framed on the road rather than at a remembered coordinate: at this
+    ;; zoom the crop is 4.5 cm wide and the route wanders further than
+    ;; that between runs, so a constant here is a picture that works once.
     (gallery-shot w "15-vector-ant" :width 640 :height 400
-                                    :cx 0.3205f0 :cy 0.305f0 :span 0.045f0)
+                                    :cx (or (gallery-traffic-x w 0.295f0 0.315f0)
+                                            0.32f0)
+                                    :cy 0.305f0 :span 0.045f0)
     ;; Detail: the obstacle's right-hand end, where the route has to
     ;; squeeze past it.  Nothing in the model knows about bottlenecks;
     ;; this is the non-overlap rule and the deposition rule feeding each

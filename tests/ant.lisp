@@ -706,6 +706,100 @@ order-dependent collision pass, or a deposit applied in place."
           (c (snapshot 12345)))
       (is (not (equalp a c)) "changing the seed changed nothing"))))
 
+;;; --------------------------------------------------- individual pace
+;;;
+;;; A lifelong trait, like handedness, and it has the same three things to
+;;; prove: that it is fixed per individual, that it is centred so the
+;;; colony's average is the number §3.1 calibrated, and that it has an off
+;;; position which restores the previous model exactly.
+
+(test ant-pace-is-a-fixed-property-of-the-individual
+  (let ((seed 42))
+    (dotimes (id 200)
+      (let ((p (ant:ant-pace id seed)))
+        ;; no tick goes in, so nothing can move it
+        (is (= p (ant:ant-pace id seed)))
+        (is (<= (- 1.0f0 ant:*speed-spread*) p (+ 1.0f0 ant:*speed-spread*))
+            "ant ~d walks at ~,4f, outside +/-~,2f" id p ant:*speed-spread*)))
+    ;; and different ants really do differ
+    (let ((paces (loop for id below 200 collect (ant:ant-pace id seed))))
+      (is (> (length (remove-duplicates paces)) 190)
+          "only ~d distinct paces in 200 ants" (length (remove-duplicates paces)))
+      (is (> (- (reduce #'max paces) (reduce #'min paces))
+             (* 1.8f0 ant:*speed-spread*))
+          "the paces span only ~,4f of a ~,4f range"
+          (- (reduce #'max paces) (reduce #'min paces))
+          (* 2.0f0 ant:*speed-spread*)))))
+
+(test ant-pace-is-centred-on-the-calibrated-speed
+  "The colony's mean walking speed must still be *WALK-SPEED*.  A spread
+that drifted off centre would quietly recalibrate §3.1 — every distance
+in the model is a time to walk it — and would do so invisibly, because
+every individual would still look reasonable."
+  (let* ((paces (loop for id below 20000 collect (ant:ant-pace id 7)))
+         (mean (/ (reduce #'+ paces) (length paces))))
+    (is (< (abs (- mean 1.0f0)) 0.005f0)
+        "mean pace ~,5f, want 1" mean)))
+
+(test ant-pace-is-not-correlated-with-handedness
+  "Its own stream (§4.4).  Drawing both from one would make every
+left-handed ant fast, which is a rule nobody wrote and nobody could find."
+  (let ((left-sum 0.0f0) (left-n 0) (right-sum 0.0f0) (right-n 0))
+    (dotimes (id 20000)
+      (if (minusp (ant:ant-handedness id 3))
+          (progn (incf left-sum (ant:ant-pace id 3)) (incf left-n))
+          (progn (incf right-sum (ant:ant-pace id 3)) (incf right-n))))
+    (let ((l (/ left-sum left-n)) (r (/ right-sum right-n)))
+      (is (< (abs (- l r)) 0.006f0)
+          "left-handed ants average ~,5f and right-handed ~,5f" l r))))
+
+(test speed-spread-has-an-exact-off-position
+  "Zero must restore the previous model *bit for bit*, not nearly: the
+pace multiplies the step, so anything other than exactly 1 changes every
+trajectory and with it every published figure."
+  (let ((ant:*speed-spread* 0.0f0))
+    (dotimes (id 500)
+      (is (= 1.0f0 (ant:ant-pace id 11))))))
+
+(test individual-ants-walk-at-different-speeds
+  "The behavioural end of it: same heading, same state, same tick,
+different ground covered.  Asserted on the ants rather than on the
+function, because the function being right and never being *called* looks
+identical from outside."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 200))
+         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.02f0 :nest-r 0.01f0
+                              :capacity 200 :stock 500.0f0))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w))
+         (n 40))
+    (dotimes (i n) (ant:spawn-ant w c))
+    ;; Spread them across open ground, all walking the same way, far
+    ;; enough apart that the non-overlap rule has nothing to say.
+    (dotimes (i n)
+      (let ((bi (aref (ant:ants-body a) i)))
+        (setf (aref (ant:bodies-x b) bi) (+ 0.02f0 (* i 0.024f0))
+              (aref (ant:bodies-y b) bi) 0.5f0
+              (aref (ant:bodies-kind b) bi) ant:+body-ant+
+              (aref (ant:ants-state a) i) ant:+ant-outbound+
+              (aref (ant:ants-heading a) i) 0.0f0
+              (aref (ant:ants-crop a) i) 0.0f0)))
+    (let ((before (loop for i below n
+                        collect (aref (ant:bodies-x b)
+                                      (aref (ant:ants-body a) i)))))
+      (ant:world-step! w)
+      (let* ((moved (loop for i below n
+                          for x0 in before
+                          collect (abs (- (aref (ant:bodies-x b)
+                                                (aref (ant:ants-body a) i))
+                                          x0))))
+             (lo (reduce #'min moved))
+             (hi (reduce #'max moved)))
+        ;; Heading noise is on top of this, so the bar is that the spread
+        ;; is *there* rather than that it is exactly 20%.
+        (is (> (/ hi (max lo 1.0f-9)) 1.10f0)
+            "fastest ant covered ~,6f and slowest ~,6f — one speed for all"
+            hi lo)))))
+
 ;;; ------------------------------------------------------ the gait (§5.2)
 ;;;
 ;;; The stride phase is display state and the only piece of it the model

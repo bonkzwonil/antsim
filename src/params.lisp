@@ -53,6 +53,45 @@ one-cell wall, and deposition never skips a cell.")
 the ratio matters more than the value, because it is what makes a long
 arm cost more than a short one on the return leg as well as the outbound.")
 
+(defparameter *speed-spread* 0.10f0
+  "How much individual ants differ in walking speed, as a fraction either
+side of the colony's nominal speed.  [lit/cal]  0.10 means every ant
+walks somewhere between 90% and 110% of *WALK-SPEED*, fixed for its life
+(ANT-PACE).
+
+Defensible from §3.1 rather than invented: the species figure is a
+*range*, 1-3 cm/s, and the model had been taking the midpoint and
+handing it to every worker identically.  A colony in which every
+individual walks at exactly the same speed is the one claim in the
+movement model that nothing in the literature supports and that a watcher
+notices immediately — a trail of ants in perfect convoy, never
+overtaking, never bunching.
+
+Ten percent and not the full range the source quotes.  Three centimetres
+a second against one is a factor of three, and a factor of three between
+individuals would not be individual variation, it would be two castes;
+the quoted range is across studies, colonies and temperatures at least as
+much as it is across workers of one nest.  A tenth is a width that reads
+as ants rather than as a mixture, and it is small enough that no
+calibrated result moves — which was checked rather than assumed, see
+below.
+
+What it buys, beyond looking right: overtaking.  A single-speed column
+can only ever queue, so every interaction on a trail was a collision
+between equals and every jam dissolved only when its cause did.  With a
+spread there is a fast ant behind a slow one, which is the condition
+every result about lane formation is about — and which M3's second half
+needs to have something to sort.
+
+What it costs, and it is worth being explicit because it is not nothing:
+energy drains per *tick*, not per metre (§3.5), so a brisk ant covers
+more ground for the same fuel and is very slightly the fitter forager.
+At ±10% that is a ±10% edge in range on an individual, which is inside
+the noise of everything else about a foraging trip, and correcting it
+means making metabolism speed-dependent — a real mechanism, and a
+separate one.  Recorded here as a known asymmetry rather than papered
+over.")
+
 (defparameter *gait-stride* 0.003f0
   "Distance the body advances over one complete tripod cycle, metres
 (§5.2).  [cal]
@@ -948,6 +987,7 @@ relaxation from chasing floating-point noise forever.")
 (declaim (type f32
                *cell-size* *motion-dt* *pheromone-dt* *colony-dt*
                *ant-radius* *walk-speed* *walk-speed-laden* *turn-sigma*
+               *speed-spread*
                *gait-stride* *ant-disc-pixels* *ant-detail-pixels*
                *sensor-offset* *sensor-spread* *turn-rate*
                *trail-turn-gain* *trail-noise-suppression*
