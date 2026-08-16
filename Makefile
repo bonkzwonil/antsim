@@ -32,7 +32,8 @@ SMOKE_PNG ?= out/m0-smoke.png
 export CL_SOURCE_REGISTRY := $(CURDIR):
 
 .PHONY: all test acceptance test-render test-render-mesa test-render-ci \
-        test-render-bare smoke smoke-mesa live gallery repl page clean
+        test-render-bare smoke smoke-mesa live gallery word-scenario \
+        repl page clean
 
 all: test
 
@@ -103,6 +104,14 @@ live:
 	  --eval "(ql:quickload :antsim/live :silent t)" \
 	  --eval "$(if $(SCENARIO),(ant:live-scenario \"$(SCENARIO)\" $(LIVE_ARGS)),(ant:live-demo $(LIVE_ARGS)))" \
 	  --quit'
+
+## word-scenario — regenerate scenarios/antsim.json: the project's name
+## spelled in obstacles, in the same 3x5 font the HUD draws with.  Built
+## from *FONT-3X5* itself rather than a transcription of it, so the
+## scenario cannot drift away from the font and spelling something else
+## is a one-line change.
+word-scenario:
+	$(SBCL) --non-interactive --load scripts/build-word-scenario.lisp
 
 ## gallery — regenerate the README's images from a known scenario.  Every
 ## picture in the documentation comes from here rather than a screenshot,
