@@ -225,6 +225,30 @@ again against `develop` alone.
 **A parameter calibrated in a configuration you are not shipping is not
 calibrated.**
 
+Swept again against `develop` alone, where the cap carries the whole
+feedback term:
+
+| lay rate | eaten | born | pop | min-stock | died |
+|---|---|---|---|---|---|
+| 0 (off) | 4549 | 701 | 695 | 149.2 | 6 |
+| 6 | 4539 | 342 | 340 | 493.7 | 2 |
+| 9 | 4446 | 438 | 436 | 400.4 | 2 |
+| **12** | **4778** | 534 | 532 | 312.0 | 2 |
+| 18 | 4138 | 674 | 669 | 84.3 | 6 |
+| 25 | 4549 | 701 | 695 | 149.2 | 6 |
+| 40 | 4549 | 701 | 695 | 149.2 | 6 |
+
+12 stays. Two caveats worth carrying:
+
+- **The delay is doing most of the work.** `develop` alone holds a
+  minimum larder of 149 with no cap at all, against 8 for the bare
+  baseline. The cap roughly doubles what is left to gain.
+- **The response is not monotonic and 12 is a narrow optimum** — 18 is
+  markedly worse than either 12 or 25. That is a number calibrated on one
+  scenario at one colony size, not a law, and a scenario of very different
+  scale should re-check it. Above 25 the cap never binds at all, which is
+  the honest upper bound on what this apparatus can say about a queen.
+
 ## Mistakes worth not repeating
 
 - **Measuring a stale tree.** Two runs were read, or nearly read, from

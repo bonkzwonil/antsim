@@ -456,6 +456,20 @@ because a wider correlated random walk is what casting is.")
 (§3.10).  [cal]  0 or less means no ceiling, which is how this behaved
 before.
 
+Calibrated against the shipping configuration, which matters: swept on
+top of a per-worker reserve the cap looked free at any value above 25,
+because the reserve was doing the regulating and the cap was a formality.
+Without it the cap *is* the feedback term and the sweep looks nothing
+alike.  Over five seeds: 12 delivers the most food and holds twice the
+larder of no cap at all, 6 and 9 throttle the colony to half its size,
+18 is worse than either neighbour, and 25 and above never bind.
+
+So 12 is a narrow optimum on a non-monotonic response, measured at one
+colony size on one scenario.  Treat it as calibration and not as a law —
+and note that the development delay alone already lifts the minimum
+larder from 8 to 149, so this doubles what is left rather than supplying
+the regulation by itself.
+
 There is one queen.  Whatever the larder holds, brood production has a
 hard ceiling that food cannot raise, and leaving that out is what let a
 windfall become a population spike in the same minute it arrived.  A

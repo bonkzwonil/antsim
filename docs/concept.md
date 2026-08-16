@@ -855,12 +855,37 @@ a scenario wants depends on whether the growth curve is the subject.
   fixed point more slowly. Only a reserve measured against the number of
   mouths has an equilibrium.
 - **One queen, and she is not infinitely fast.** Laying is bounded per
-  tick whatever the larder holds. Measured, this is the single most
-  valuable change in the model's history after the homing fix: **+24% food
-  delivered, a minimum larder of 307 against zero, and deaths from 23 a
-  run to 1.** A colony that can convert a windfall into workers in the
-  minute it arrives has no characteristic timescale, so it overshoots
-  every fluctuation and starves on the far side of it.
+  tick whatever the larder holds. On its own this was the strongest single
+  factor screened — +24% food delivered, a minimum larder of 307 against
+  zero, deaths from 23 a run to 1 — though the honest version of that
+  number is that a *different* pairing measured better still, and the
+  queen ships for a reason other than its score. See below.
+
+  A colony that can convert a windfall into workers in the minute it
+  arrives has no characteristic timescale, so it overshoots every
+  fluctuation and starves on the far side of it.
+
+**Why these two and not the pair that measured best.** Breeding from a
+surplus over a reserve of larder per living worker was the best
+configuration tested: 4929 units against 4778 over five seeds, with a
+hundred more workers alive at the end. It is not what ships.
+
+It requires the colony to compute *stock per living worker* and decide
+against it. That is a colony-wide aggregate, and it is exactly what this
+model refuses everywhere else — §3.5 is explicit that foraging urgency is
+the only quantity read colony-wide, and that an individual learns it
+locally and honestly, by asking for food while it rests and being given
+none. A brood rule that reads a second aggregate spends that principle,
+and it spends it for 3%.
+
+A bounded lay rate and a development delay ask nobody to compute
+anything. One animal can lay only so fast; an egg takes as long as it
+takes. The regulation *falls out of* two physical facts instead of being
+computed from a measurement the colony has no way to make.
+
+Results decide between mechanisms that are equally defensible. They do
+not decide whether a mechanism is defensible, and a model that lets them
+is one that will eventually be right about numbers and wrong about ants.
 - **Death** comes from energy reaching zero and from age, with a per-tick
   hazard that rises with age. Foragers die away from home; that is what
   foragers do.
