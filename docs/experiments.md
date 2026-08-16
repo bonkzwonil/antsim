@@ -400,6 +400,41 @@ always affordable; a starving one wants 0.9 and never is. The nearly-full
 skim the stock and the ants that need it are served last. A served ant
 takes its deficit *or whatever is there*, whichever is less.
 
+### The meal fix does not (yet) show a benefit
+
+The 2x2, word scenario, seed 397767704, sampled minutes 130-150:
+
+| eat at source | meals | able mean | able sd | pop | died |
+|---|---|---|---|---|---|
+| no | 0 | 942.3 | 25.2 | 1057 | 1027 |
+| yes | 0 | 979.8 | 29.6 | 1068 | **985** |
+| no | 2 | 985.0 | 51.1 | 1006 | 1078 |
+| yes | 2 | 1006.5 | 41.2 | 1062 | **983** |
+
+**Meals increase the pulse rather than damping it.** Able-count standard
+deviation goes 25.2 → 51.1 without eating-at-source and 29.6 → 41.2 with
+it — the opposite of the prediction. Deaths do not improve.
+
+**Eating at the source helps modestly and consistently**: deaths down
+about 5–9% in both arms, same direction each time.
+
+**And the extinction was not reproduced at all.** The fully-old
+configuration — no meals, no eating at source — has 1057 ants alive and
+thriving at minute 150, where the reported live run was extinct by
+T10000. So none of the four arms entered the regime the fix was designed
+for, and this is not a test of the hypothesis; it is a test of a healthy
+colony, where unsurprisingly the feeding rule does not matter.
+
+Open, and the honest state: the trough mechanism is demonstrably present
+in the code — one forager's load really is spread over five hundred
+ant-ticks — and there is no measurement showing it *matters*. Those are
+different claims and today has separated them twice before (U-turns
+worked and did not pay; expendability worked and did not pay).
+
+What would settle it is a reproduction that actually collapses. Until
+then `*nest-meals-per-tick*` is a mechanism with a switch and no evidence,
+which is a worse position than a measured negative.
+
 ### Symmetry breaking, off its own test rig
 
 The word scenario also shows the binary bridge's phenomenon — traffic
@@ -521,6 +556,25 @@ on, and this model has changed twice since.
   instead of the bug.
 - **A metric that flatters.** Food *removed from the source* counts food
   carried by an ant that then died. Total births is the honest integral.
+- **A measurement budgeted on a broken model.** The feeding sweep was
+  sized from runs where the colony collapsed to a couple of hundred ants.
+  With the fix in, colonies survive and grow toward the scenario's
+  capacity, so every tick costs an order of magnitude more and an
+  eight-configuration sweep that should have taken minutes had not
+  finished one configuration in 38 CPU-minutes. A fix that works changes
+  what its own measurement costs. Budget on the *fixed* model, not the
+  broken one — and treat a run that is mysteriously slow as evidence
+  about the change rather than about the machine.
+- **A/B against a baseline that already contains the other change.**
+  Two energy fixes shipped together — meals in the nest, and foragers
+  eating at the source — and then only *meals* was swept. Eating at the
+  source was on by default in both arms, so the "control" was not the old
+  model at all, and both arms came back thriving with nothing to
+  distinguish. Same family as the stale-tree and expired-negative
+  mistakes: the baseline was not what it was assumed to be. The new cause
+  is specific and easy to repeat — a default was changed, and then
+  forgotten to be part of the comparison. Sweep every switch that moved,
+  or sweep the cross.
 - **A control arm that passes for the wrong reason.** The wall test's
   disabled case started passing because resting ants had stopped
   colliding with terrain and were walking through the obstacle. Assert the
