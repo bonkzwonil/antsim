@@ -478,10 +478,31 @@ SCENARIO=scenarios/foraging.json make live
 SEED=12345 make live   # repeat an exact run
 ```
 
-Three scenarios ship: `foraging` (a source that visibly empties, and a colony
+Five scenarios ship: `foraging` (a source that visibly empties, and a colony
 that starves when it does), `deneubourg-binary-bridge` (equal arms — the winner
-changes between runs), and `goss-double-bridge` (unequal arms — the short one
-wins every time, which is the result, not a stuck seed).
+changes between runs), `goss-double-bridge` (unequal arms — the short one wins
+every time, which is the result, not a stuck seed), and the project's own name
+spelled in solid terrain at two sizes — `antsim` on a desk-sized 1.00 × 0.72 m
+arena, and `antsim-large` at 5.00 × 3.60 m.
+
+```sh
+SCENARIO=scenarios/antsim-large.json make live
+```
+
+The large one is worth a note, because it is not the small one printed bigger.
+Every *length* is five times over — the letters, the arena, the gap between the
+nest and the food — and **the ant is not**, which is the point. A journey five
+times longer costs five times the energy out of the same fixed tank, and at the
+shipped default a colony there ate 8 units of food in half an hour and fell from
+2000 workers to 26: the source is not hard to reach at three metres, it is out
+of range. So that file restates the forager's range, scaled by exactly the
+factor the geometry is, and the two are then the same experiment at two sizes.
+The numbers are in [experiments.md](docs/experiments.md).
+
+The two also differ in a way worth watching for: at 3.5 cm a gap between letters
+is fourteen ants abreast and the lettering shapes the traffic, while at 17.5 cm
+it is seventy and stops being a bottleneck at all. In the small arena the *word*
+is the obstacle; in the large one the *distance* is.
 
 The window draws a **fresh seed each session** and prints it, so no two runs are
 alike and any run worth keeping can be replayed with `SEED=`. That is worth

@@ -105,11 +105,20 @@ live:
 	  --eval "$(if $(SCENARIO),(ant:live-scenario \"$(SCENARIO)\" $(LIVE_ARGS)),(ant:live-demo $(LIVE_ARGS)))" \
 	  --quit'
 
-## word-scenario — regenerate scenarios/antsim.json: the project's name
+## word-scenario — regenerate both word scenarios: the project's name
 ## spelled in obstacles, in the same 3x5 font the HUD draws with.  Built
 ## from *FONT-3X5* itself rather than a transcription of it, so the
-## scenario cannot drift away from the font and spelling something else
+## scenarios cannot drift away from the font and spelling something else
 ## is a one-line change.
+##
+##   scenarios/antsim.json        1.00 x 0.72 m
+##   scenarios/antsim-large.json  5.00 x 3.60 m — the same, five times over
+##
+## Only the geometry is five times bigger.  The ant is not scaled, which
+## is the whole reason the large one is a different experiment rather than
+## the same picture printed larger: a journey five times longer costs five
+## times the energy out of the same fixed tank, so the large file restates
+## the forager's range in its `ant` block.  At the default it starves.
 word-scenario:
 	$(SBCL) --non-interactive --load scripts/build-word-scenario.lisp
 

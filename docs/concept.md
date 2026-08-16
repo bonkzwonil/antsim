@@ -1691,6 +1691,43 @@ Deferred so far: `clock`, `species`, `bodies`, and the per-colony
 `brood_per_stock` / `max_age_s`, all of which are global parameters at
 M1's cut.
 
+### 6.3 The `ant` block, and why arena size needs one
+
+The override surface is uneven on purpose — it grew where an experiment
+needed it — but one gap turned out to be structural rather than
+incidental, and it is worth stating as a rule.
+
+**Arena size is the one thing a scene can change that the ant's own
+calibration cannot absorb.** A forager carries a fixed tank:
+`*energy-drain-walking*` is a free parameter set so an ant empties after
+about seven minutes of walking, roughly eight metres of path, and that
+was chosen against the 1–2 m arena of §3.1. Put the food three metres
+from the nest and no ant reaches it — measured, the colony ate 8 units in
+half an hour and fell from 2000 workers to 26.
+
+Nothing about that is a bug. It is what a fixed tank means. But it does
+mean **range belongs to the scene as much as to the animal**, so a
+scenario spanning metres has to be able to say so, and `ant` is the block
+that lets it:
+
+```json
+"ant": { "energy_drain_walking": 0.000024, "energy_drain_resting": 0.000004 }
+```
+
+Two things keep this from being a licence to tune. The default does not
+move, so nothing outside a file that sets it is affected. And the
+direction of the change is the defensible one: a real *Lasius* forager
+ranges far beyond eight metres and trunk trails run to tens of them, so
+the large arena's value is the more realistic one and the shipped default
+is the compromise a small arena allows.
+
+`scenarios/antsim-large.json` is the worked example — the same word, the
+same font, five times over in every length, with the range scaled by
+exactly the same factor so that a journey costs the same fraction of a
+tank in both files. A test asserts that ratio, because the failure it
+guards against is silent: get it wrong and both scenarios still run, they
+simply stop being the same experiment at two sizes.
+
 ## 7. Milestones
 
 Deliberately shaped like waldameisen's: each milestone ends in something

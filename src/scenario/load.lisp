@@ -264,6 +264,38 @@ to mean one thing in a scenario file and another in an acceptance run."
                   (put "packet_spacing" '*trail-packet-spacing*)
                   (put "packet_radius" '*trail-packet-radius*)
                   (put "packet_falloff" '*trail-packet-falloff*))))))))
+    ;; The ant block: the walk and the metabolism (§3.1, §3.5).
+    ;;
+    ;; It exists because of arena size, which is the one thing a scenario
+    ;; can change that the ant's own calibration cannot absorb.  A forager
+    ;; carries a fixed tank — *energy-drain-walking* is a [cal] parameter
+    ;; set so it empties after about seven minutes of walking, which is
+    ;; roughly eight metres of path — and that was chosen against the 1 m
+    ;; arena of §3.1.  Put the food three metres away and no ant reaches
+    ;; it: measured on the five-times arena, the colony ate 8 units in
+    ;; thirty minutes and went from 2000 workers to 26 (experiments.md).
+    ;;
+    ;; So range belongs to the *scene* as much as to the animal, and a
+    ;; scenario that spans metres has to be able to say so.  Note which
+    ;; way the honesty runs: a real Lasius forager ranges much further
+    ;; than eight metres, and trunk trails run to tens of them, so the
+    ;; large arena's value is the more defensible one and the default is
+    ;; the compromise.  The default does not move.
+    (let ((an (jget root "ant" "")))
+      (unless (eq an :missing)
+        (let ((a (jobject an "ant")))
+          (check-keys a '("walk_speed" "walk_speed_laden" "speed_spread"
+                          "energy_drain_walking" "energy_drain_resting")
+                      "ant")
+          (flet ((put (key var)
+                   (let ((v (jget a key "ant")))
+                     (unless (eq v :missing)
+                       (push (cons var (jnumber v (jpath "ant" key))) out)))))
+            (put "walk_speed" '*walk-speed*)
+            (put "walk_speed_laden" '*walk-speed-laden*)
+            (put "speed_spread" '*speed-spread*)
+            (put "energy_drain_walking" '*energy-drain-walking*)
+            (put "energy_drain_resting" '*energy-drain-resting*)))))
     ;; The colony block: brood regulation and the nest fiction (§3.10,
     ;; §3.11).  Kept here with the other overrides rather than on the
     ;; colony object itself because these are *parameters* — they change
@@ -318,7 +350,7 @@ and the starting population is placed with it."
                        (setf (slot-value c 'source) source)))))
     (let ((r (jobject root "")))
       (check-keys r '("name" "world" "seed" "duration_s" "choice" "pheromones"
-                      "colonies" "food" "obstacles" "colony_rules")
+                      "colonies" "food" "obstacles" "colony_rules" "ant")
                   "")
       (let* ((name (jopt r "name" "" #'jstring "scenario"))
              (seed (or seed (jopt r "seed" "" #'jinteger +default-seed+)))

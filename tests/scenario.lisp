@@ -205,3 +205,72 @@ bound around the run."
       (is (= 1.0f0 ant:*choice-n*) "the override was not in force")
       (is (= 5.0f0 ant:*choice-k*)))
     (is (= 2.0f0 ant:*choice-n*) "the override outlived its dynamic extent")))
+
+(test a-scenario-can-set-the-ant-itself
+  "§6: the `ant` block, which exists because arena size is the one thing
+a scene can change that the ant's own calibration cannot absorb.
+
+A forager's tank is fixed and was set against a 1 m arena; a scenario
+that spans metres has to be able to say so, or nothing ever reaches the
+food.  Carried like every other override rather than applied at load, for
+the same reason: a scenario that sets a range and then runs at the
+default range is the bug this whole mechanism exists to prevent."
+  (let ((s (ant:load-scenario-string
+            "{\"world\":{\"width\":0.4,\"height\":0.4},
+              \"ant\":{\"_why\":\"a comment\",
+                       \"energy_drain_walking\":0.000024,
+                       \"energy_drain_resting\":0.000004,
+                       \"speed_spread\":0.2},
+              \"colonies\":[{\"nest\":{\"x\":0.2,\"y\":0.2}}]}"))
+        (drain ant:*energy-drain-walking*)
+        (spread ant:*speed-spread*))
+    (is (= drain ant:*energy-drain-walking*)
+        "loading a scenario changed the global parameter set")
+    (ant:with-scenario-params (s)
+      (is (= 2.4f-5 ant:*energy-drain-walking*) "the range override was not in force")
+      (is (= 4.0f-6 ant:*energy-drain-resting*))
+      (is (= 0.2f0 ant:*speed-spread*)))
+    (is (= drain ant:*energy-drain-walking*)
+        "the override outlived its dynamic extent")
+    (is (= spread ant:*speed-spread*)))
+  ;; and a typo in the block is an error naming the path, not a default
+  (signals ant:scenario-error
+    (ant:load-scenario-string
+     "{\"world\":{\"width\":0.4,\"height\":0.4},
+       \"ant\":{\"enrgy_drain_walking\":0.00001},
+       \"colonies\":[{\"nest\":{\"x\":0.2,\"y\":0.2}}]}")))
+
+(test the-large-word-scenario-scales-only-the-geometry
+  "`scenarios/antsim-large.json` is `antsim.json` five times over in every
+length — and *only* in length.  The ant is the same animal in both, which
+is the whole reason the large one is a different experiment rather than
+the same picture printed bigger.
+
+What it does have to restate is range: the forager's tank was calibrated
+against a 1 m arena, and at the default a colony in the large one ate 8
+units in thirty minutes and fell from 2000 workers to 26.  So the range
+scales with the arena, and this checks it scales by exactly the same
+factor the geometry does — otherwise a journey is a different fraction of
+a tank in the two files and they stop being comparable."
+  (let ((small (ant:load-scenario #p"scenarios/antsim.json"))
+        (large (ant:load-scenario #p"scenarios/antsim-large.json")))
+    (let ((ws (ant:world-width (ant:scenario-world small)))
+          (wl (ant:world-width (ant:scenario-world large)))
+          (hs (ant:world-height (ant:scenario-world small)))
+          (hl (ant:world-height (ant:scenario-world large))))
+      (is (< (abs (- (/ wl ws) 5.0f0)) 1.0f-4) "width ratio ~,4f" (/ wl ws))
+      (is (< (abs (- (/ hl hs) 5.0f0)) 1.0f-4) "height ratio ~,4f" (/ hl hs)))
+    ;; the same letters, so the same number of rects
+    (is (= (length (ant:world-obstacles (ant:scenario-world small)))
+           (length (ant:world-obstacles (ant:scenario-world large))))
+        "the two files do not spell the same word")
+    ;; the small one states nothing about the ant; the large one must
+    (is (null (ant:scenario-params small))
+        "the small scenario has acquired parameter overrides")
+    (let ((drain (cdr (assoc 'ant:*energy-drain-walking*
+                             (ant:scenario-params large)))))
+      (is (not (null drain))
+          "the large scenario does not set the forager's range")
+      (is (< (abs (- (/ ant:*energy-drain-walking* drain) 5.0f0)) 1.0f-3)
+          "range scaled by ~,3f but the arena by 5"
+          (/ ant:*energy-drain-walking* drain)))))

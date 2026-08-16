@@ -55,8 +55,10 @@ mechanism is defensible.
 
 | parameter | default | off | what it does |
 |---|---|---|---|
-| `*walk-speed*` / `*walk-speed-laden*` | 0.02 / 0.015 | | m/s, free and carrying. The *ratio* is what makes a long arm cost more on the return leg, so they move together or not at all |
-| `*speed-spread*` | 0.10 | **0.0 = one speed for all** | how much individuals differ, as a fraction either side of nominal, fixed for life. §3.1 quotes a *range* and the model used to hand every worker its midpoint. Measured over 16 seeds on both bridges: neither §3.8 row moves |
+| ⬥ `*walk-speed*` / `*walk-speed-laden*` | 0.02 / 0.015 | | m/s, free and carrying. The *ratio* is what makes a long arm cost more on the return leg, so they move together or not at all |
+| ⬥ `*speed-spread*` | 0.10 | **0.0 = one speed for all** | how much individuals differ, as a fraction either side of nominal, fixed for life. §3.1 quotes a *range* and the model used to hand every worker its midpoint. Measured over 16 seeds on both bridges: neither §3.8 row moves |
+| ⬥ `*energy-drain-walking*` | 1.2e-4 | | energy per tick while walking — **this is the forager's range**, and it was calibrated against a 1 m arena. A scenario that spans metres has to raise it or nothing reaches the food: at the default, a colony in the 5 m arena ate 8 units in 30 minutes and fell from 2000 workers to 26 |
+| ⬥ `*energy-drain-resting*` | 2.0e-5 | | the same while resting. Scales with the one above, or a resting ant becomes relatively expensive |
 | `*turn-sigma*` | 0.05 | | per-tick heading noise. Set equal to the nest radius once and the colony died in its own doorway |
 | `*ant-radius*` | 0.0025 | | the collision disc of §3.11 — physics only. §5.2 draws something else entirely |
 
@@ -108,8 +110,9 @@ cannot change a result — which is the point of listing them apart.
 | `Q` / `ESC` | quit |
 
 ```sh
-SCENARIO=scenarios/antsim.json make live     # a scenario file
-SEED=397767704 make live                     # repeat a run
+SCENARIO=scenarios/antsim.json make live        # a scenario file
+SCENARIO=scenarios/antsim-large.json make live  # the same, five times over
+SEED=397767704 make live                        # repeat a run
 ```
 
 Without `SEED` the window draws a fresh one and prints it, so every session
@@ -123,6 +126,13 @@ The ⬥ parameters are settable per run, in three blocks:
 ```json
 "choice":     { "n": 2.0, "k": 20.0 },
 "pheromones": { "trail": { "decay_scale": 20.0, "max": 600.0 } },
+"ant": {
+  "energy_drain_walking": 0.000024,
+  "energy_drain_resting": 0.000004,
+  "walk_speed": 0.02,
+  "walk_speed_laden": 0.015,
+  "speed_spread": 0.10
+},
 "colony_rules": {
   "queen_lay_rate": 12.0,
   "brood_development_minutes": 8,
@@ -131,6 +141,13 @@ The ⬥ parameters are settable per run, in three blocks:
   "resting_ants_block": false
 }
 ```
+
+The `ant` block is there for one reason: **arena size is the thing a scene
+can change that the ant's own calibration cannot absorb.** A forager
+carries a fixed tank, and the tank was sized against a 1 m arena, so a
+scenario measured in metres has to restate the range or its colony
+starves in sight of the food. `scenarios/antsim-large.json` is the worked
+example, and [experiments.md](experiments.md) has the numbers.
 
 Unknown keys are an **error naming the path**, not a silent ignore — a
 scenario that quietly drops a setting is worse than one that refuses to

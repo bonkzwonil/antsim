@@ -588,6 +588,75 @@ assert them over seeds rather than per seed, which is why nothing caught
 it. They are owed a regeneration under a stated protocol, which is a job
 of its own and is on the list below.
 
+### Scaling the arena — what does and does not scale with it
+
+`scenarios/antsim-large.json` is `antsim.json` five times over in every
+length: a 5.00 × 3.60 m arena, letters 17.5 cm to a pixel, the nest 3.125 m
+from the nearest source instead of 0.625 m.
+
+**The naive version does not work, and the way it fails is the finding.**
+Scaling only the geometry — same ant, same everything else, population
+raised to 2000 to suit the longer trail — gives a colony that never gets
+going:
+
+| arena | nest→food | pop @30 min | stock | trail | eaten | died |
+|---|---|---|---|---|---|---|
+| 1.00 × 0.72 m | 0.625 m | 502 ↑ | 1412 | 182 k | 2720 | 162 |
+| 5.00 × 3.60 m | 3.125 m | **26** | **0** | 240 | **8** | **2173** |
+
+Eight units of food in half an hour against 2720, stock gone by minute
+20, and 2000 workers down to 26. The source is not *hard* to reach at
+3 m, it is out of range.
+
+The binding constraint is the forager's tank, and it is a constraint on
+the **outbound** leg only — an ant refills to full standing on the source
+(§3.5), so getting home is never the problem. `*energy-drain-walking*`
+is `[cal]`, set so an ant empties after about seven minutes of walking,
+which is roughly 8 m of path; a forager sets out at full and turns back
+at its give-up threshold, so it has about 4.5 m of *path* to find
+something with. A straight 3.125 m fits inside that and a correlated
+random walk over the same ground does not.
+
+Range against the same arena, 40 minutes, everything else held:
+
+| `*energy-drain-walking*` | range | pop | stock | trail | eaten | died |
+|---|---|---|---|---|---|---|
+| 1.2e-4 (default) | 1× | 26 | 0 | 240 | 8 | 2173 |
+| 4.8e-5 | 2.5× | 1962 | 692 ↓ | 423 k | 870 | 422 |
+| **2.4e-5** | **5×** | **2300 ↑** | **2938** | **640 k** | **1308** | **84** |
+
+**Five times the distance wants five times the range**, and the middle
+row is what a half-measure looks like: a trail does form and food does
+come in, but the larder falls all the way through and the deaths are
+five times the working case. It is a colony on its way down, not a
+working one.
+
+So the large scenario states the range in its own file, and that is what
+the new `ant` block in §6 exists for. Which way the honesty runs is worth
+being explicit about: a real *Lasius* forager ranges much further than
+eight metres and trunk trails run to tens of them, so the large arena's
+value is the *more* defensible one and the shipped default is the
+compromise. The default does not move — nothing outside this one file
+sees it.
+
+Scaled by exactly `1/5`, so a journey costs the same fraction of a tank
+in both files and they stay the same experiment at two sizes. A test
+asserts that ratio against the geometry ratio, because the failure it
+guards is silent: get it wrong and the two scenarios still both run,
+they just stop being comparable.
+
+Two things that came out of it and are *not* corrections:
+
+- **Population is set by trail length, not by area.** The area is 25×;
+  the population is 5×, because what a colony pays for is holding a road
+  open against evaporation, and evaporation runs on a clock that does not
+  know how far away the food is. 25× would have been a crowd.
+- **The doorways get easier, not harder.** A gap between letters is 17.5
+  cm instead of 3.5 cm — seventy ants abreast instead of fourteen — so
+  the lettering stops being a bottleneck. The small file is the one where
+  the word shapes the traffic; the large one is where the *distance*
+  does. They are worth having both.
+
 ## On the list, not yet measured
 
 - **The README's per-seed bridge tables.** Stale since `d6b0035` (see
