@@ -951,6 +951,45 @@ motion: contacts resolve along the line of centres, so crowded ants jostle
 and slide past each other smoothly, where boxes catch on their corners and
 produce a visible grid-lock jitter that reads as broken.
 
+**Traffic rules — designed, not built.** The one rule below is symmetric:
+two ants meeting head-on push each other apart along the line of centres,
+each takes half the correction, and neither has any notion of which way it
+would rather go. Real ants meeting head-on do not do that. Under crowding
+*Lasius niger* organises its trails into **lanes** — outbound and inbound
+traffic separating into distinct streams, with a documented throughput
+benefit (Dussutour, Fourcassié, Helbing & Deneubourg, *Nature* 2004, on
+this exact species).
+
+What the absence of that produces is visible at any pinch point: two
+streams meet at a corner, each blocks the other, and the pile does not
+resolve because nothing in the rule prefers a side. That would be a
+cosmetic complaint except for what it feeds:
+
+- Deposition counts the step an ant **attempted**, not the ground it
+  covered (§3.3), so an ant stalled in a jam keeps marking at full rate.
+- The mark recruits more ants into the jam.
+- Which is a positive feedback loop with no term in it that measures
+  progress.
+
+That loop is almost certainly what makes §3.8's density window bite: past
+about 900 ants on the double bridge the *long* arm starts winning, because
+congestion has become a stronger route-selector than pheromone. The bulb
+at a corner is the mechanism caught in the act.
+
+Two candidate fixes, and they are not equivalent:
+
+1. **Lane formation** — give ants a side preference on encounter, so
+   opposing streams separate instead of colliding. Faithful, documented in
+   the right species, and the more interesting of the two, because lanes
+   are an emergent property worth watching rather than a damping term.
+2. **Deposit by actual displacement** rather than attempted, so a stalled
+   ant stops reinforcing the jam it is stuck in. One line, and it kills
+   the feedback directly — but it also erases the "traffic jam that feeds
+   itself" finding, which is real behaviour and worth keeping.
+
+Worth measuring separately before either ships, and worth noting that (2)
+would change a published figure in the README while (1) would not.
+
 The rule is simply:
 
 > **No two blocking bodies may overlap** — disc against disc, and no disc

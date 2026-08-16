@@ -361,6 +361,26 @@ for ranking "delivers more food" against "reads right on screen". A
 parameter whose honest answer is *it depends what you are looking at*
 should stay visible rather than be buried in a default.
 
+## On the list, not yet measured
+
+- **Lane formation at pinch points.** Two streams meeting head-on at a
+  corner block each other; the pile does not resolve because the
+  non-overlap rule is symmetric and prefers no side. Because deposition
+  counts *attempted* distance, the stalled ants keep marking, which
+  recruits more ants into the jam. Probably the mechanism behind §3.8's
+  density window — past ~900 ants the long arm wins, so congestion has
+  overtaken pheromone as the route-selector. Documented in *L. niger*
+  (Dussutour et al. 2004). Two candidate fixes with different costs; see
+  §3.11.
+- **Trail decay.** Measured and parked: performance flat across a sixfold
+  change, appearance triples. An aesthetic choice, which is unusual for a
+  parameter here. The unmeasured half is the *aftermath* — how long a road
+  outlives a dead source — since evaporation is the colony's only way to
+  forget.
+- **Encounter-based recruitment** (§3.4). The fast channel the model
+  lacks: a laden ant meeting an outbound one carries current information,
+  where pheromone is an average over minutes.
+
 ## Mistakes worth not repeating
 
 - **Measuring a stale tree.** Two runs were read, or nearly read, from
