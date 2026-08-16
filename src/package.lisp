@@ -32,6 +32,11 @@
    #:*max-age-ticks* #:*brood-per-stock* #:*nest-upkeep*
    #:*pi-noise* #:*homing-weight-low-energy* #:*nest-arrival-radius*
    #:*nest-exit-scatter* #:*obstacle-avoidance* #:*homing-scan-steps*
+   #:*forager-expendability* #:*resting-ants-block*
+   #:*brood-reserve-ration* #:*brood-investment*
+   #:*queen-lay-rate* #:*brood-development-minutes*
+   #:*forager-maturity-ticks* #:*age-shade-ticks*
+   #:colony-brood-pipe #:colony-brood-head
    #:*trail-lost-threshold* #:*trail-follow-threshold* #:*trail-memory-decay*
    #:*uturn-ticks* #:*uturn-cast-gain*
    #:*relax-iterations* #:*relax-slop*
@@ -53,7 +58,8 @@
    #:bodies-n #:bodies-capacity #:bodies-x #:bodies-y #:bodies-r
    #:bodies-kind #:bodies-hash #:bodies-nfree
    #:body-kind-blocking-p #:body-kind-movable-p
-   #:+body-ant+ #:+body-corpse+ #:+body-food+ #:+body-nest+ #:+body-free+
+   #:+body-ant+ #:+body-corpse+ #:+body-food+ #:+body-nest+
+   #:+body-resting+ #:+body-free+
    #:*leave-probability* #:*nest-feed-rate*
    ;; world/scene — what a scenario names (§6)
    #:food #:food-x #:food-y #:food-r #:food-amount #:food-initial
@@ -63,7 +69,8 @@
    #:colony-population #:colony-capacity #:colony-born #:colony-died
    #:colony-nest-x #:colony-nest-y #:colony-nest-r #:colony-alive-p
    #:colony-forage-urgency #:colony-leave-probability
-   #:colony-energy-threshold #:food-current-radius
+   #:colony-energy-threshold #:colony-giveup-threshold
+   #:food-current-radius
    #:world #:make-world #:world-width #:world-height #:world-bodies
    #:world-ants #:world-colonies #:world-foods #:world-obstacles
    #:world-tick #:world-seed #:world-seconds #:world-food-at
@@ -73,7 +80,7 @@
    #:ants-id #:ants-body #:ants-colony #:ants-state #:ants-heading
    #:ants-crop #:ants-load-quality #:ants-energy #:ants-age
    #:ants-hvx #:ants-hvy #:ants-px #:ants-py #:ants-count-state
-   #:ants-trailed #:ants-exit #:ants-smelled #:ants-cast
+   #:ants-trailed #:ants-exit #:ants-smelled #:ants-cast #:ants-resolve
    #:path-integration-step!
    #:spawn-ant #:kill-ant
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+

@@ -79,6 +79,17 @@
   ;; the rule instead fires whenever an ant brushes any faint trail and
   ;; leaves it, which is most of what ants do.
   (smelled nil :type (or null f32v))
+  ;; The energy this ant will push down to before turning for home
+  ;; (§3.5), fixed at the moment it last left the nest.
+  ;;
+  ;; Carried rather than looked up.  How hungry the colony is decides how
+  ;; deep a forager digs into its reserve, but an ant crossing open
+  ;; ground cannot know how hungry the colony is *now* — the only honest
+  ;; way for it to have learnt that is by asking for food while resting
+  ;; and being told what there was.  So it learns it at the door and
+  ;; commits.  A colony that is fed while this ant is out does not reach
+  ;; across the arena and change its mind for it.
+  (resolve nil :type (or null f32v))
   ;; Ticks of casting left after a U-turn.  Zero for an ant that is
   ;; walking normally, which is nearly all of them nearly all the time.
   (cast nil :type (or null u8v))
@@ -97,6 +108,7 @@
               :trailed (mkf32 capacity)
               :exit (mkf32 capacity)
               :smelled (mkf32 capacity) :cast (mku8 capacity)
+              :resolve (mkf32 capacity)
               :free (mkfix capacity)))
 
 (declaim (inline ant-live-p))

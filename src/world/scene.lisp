@@ -103,7 +103,22 @@ every existing scenario behaving exactly as it did."
   ;; Brood accumulates fractionally between colony ticks; without this a
   ;; birth rate below one worker per tick would round to zero for ever and
   ;; a small colony could never grow.
-  (brood 0.0f0 :type f32))
+  (brood 0.0f0 :type f32)
+  ;; Eggs in development, as a ring of cohorts one colony tick apart
+  ;; (§3.10).  Slot BROOD-HEAD is the oldest and emerges next; new eggs
+  ;; are laid into it once it has been emptied, so the ring's length is
+  ;; exactly the development time.
+  ;;
+  ;; A pipeline rather than a number because brood is neither instant nor
+  ;; parallel.  There is one queen: she lays at a bounded rate whatever
+  ;; the larder holds, and what she lays becomes a worker weeks later,
+  ;; not the same afternoon.  Modelled as a single figure that converts
+  ;; food to workers on the spot, a colony answers a windfall with an
+  ;; immediate population spike and answers a famine by stopping dead —
+  ;; both of which are artefacts of leaving the queen and the developing
+  ;; brood out of the model rather than behaviours of a colony.
+  (brood-pipe nil :type (or null f32v))
+  (brood-head 0 :type fixnum))
 
 (defun colony-alive-p (c)
   (declare (type colony c))
@@ -141,17 +156,45 @@ shut is not."
                  (- *forage-urgency-gain* 1.0f0)))))
 
 (defun colony-energy-threshold (c)
-  "The energy an ant needs to set out — and, for one already out, the
-energy at which it gives up and turns for home.
+  "The energy an ant needs to set out.
 
-Deliberately one number for both.  They are the two ends of the same
-decision, and moving only the first would push a starving ant out of the
-nest and turn it round on the very next tick: the same deadlock in a
-different place."
+Moving this one alone, upward, would push a starving ant out of the nest
+and turn it round on the very next tick — a deadlock in a different
+place — which is why the give-up threshold below is defined *relative*
+to it and is never above it."
   (declare (type colony c))
   (* *energy-return-threshold*
      (- 1.0f0 (* (colony-forage-urgency c)
                  (- 1.0f0 *desperate-energy-fraction*)))))
+
+(defun colony-giveup-threshold (c)
+  "The energy at which an ant already out gives up and turns for home.
+
+The same number as the departure threshold while the larder is full, and
+falling below it — toward not turning back at all — as the larder
+empties (§3.5).
+
+These were one number for a long time, on the reasoning that setting out
+and turning back are two ends of one decision.  They are not, and the
+difference is the whole of what a colony is.  Whether to *spend* a
+forager is the colony's question and the answer depends on what the
+colony has left; whether the forager comes back alive is the forager's,
+and a superorganism does not weight it equally.  A worker is somatic
+tissue with legs.  When the larder is empty the expected value of one
+more ant searching exceeds the expected value of that ant resting safely
+at home, because a colony with no food and a full nest of survivors is
+dead anyway — so the bar for turning back drops, and at
+*forager-expendability* = 0 it reaches zero and the ant searches until
+it dies.
+
+This is documented behaviour, not licence: forager risk-taking rises
+with colony need across many species, and foraging is the caste's
+terminal role rather than a stage it survives.  What the model adds is
+that it is also the arithmetic."
+  (declare (type colony c))
+  (* (colony-energy-threshold c)
+     (- 1.0f0 (* (colony-forage-urgency c)
+                 (- 1.0f0 *forager-expendability*)))))
 
 ;;; --------------------------------------------------------------------
 ;;; World

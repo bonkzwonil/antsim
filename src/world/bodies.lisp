@@ -20,6 +20,22 @@
 (defconstant +body-corpse+ 1)
 (defconstant +body-food+ 2)
 (defconstant +body-nest+ 3)
+(defconstant +body-resting+ 4
+  "An ant that is *inside* the nest rather than standing in its doorway.
+
+The nest in this model is a disc a couple of centimetres across, and a
+mature colony has hundreds of ants resting in it at once — which cannot
+be true of a disc that small, because the real thing is a chamber system
+going down.  What the disc represents is the door.  Modelling the ants
+behind it as blocking discs on the surface puts the whole resting
+population in the doorway, where it obstructs its own foragers and draws
+as a crowd many times the size of the nest.
+
+So a resting ant keeps its body — it still has a position, and the
+renderer still draws it — but stops colliding, exactly as the nest
+entrance itself does and for the same reason (see BODY-KIND-BLOCKING-P):
+sealing a colony inside its own front door is an artefact of a
+two-dimensional simplification, not a fact about ants.")
 (defconstant +body-free+ 255)
 
 (declaim (inline body-kind-blocking-p body-kind-movable-p))
@@ -32,9 +48,17 @@ blocking would seal the colony in.  It is a trigger, not a wall."
 
 (defun body-kind-movable-p (kind)
   "Corpses are pushable — they are inert, not anchored.  Food sources and
-nest entrances are fixed points in the scenario."
+nest entrances are fixed points in the scenario.
+
+A resting ant is movable but not blocking, and the pair of predicates
+has to be read that way round: it takes no part in ant-ant contact,
+because the nest it is in is a chamber system and not a patch of ground
+(see +BODY-RESTING+), but it is still *somewhere*, so terrain still
+applies to it.  Exempting it from both was a real bug and the wall
+regression test caught it — an ant that collides with nothing walks
+through obstacles."
   (declare (type (unsigned-byte 8) kind))
-  (or (= kind +body-ant+) (= kind +body-corpse+)))
+  (or (= kind +body-ant+) (= kind +body-corpse+) (= kind +body-resting+)))
 
 (defstruct (bodies (:constructor %make-bodies))
   (n 0 :type fixnum)                    ; high-water mark, not live count
@@ -154,12 +178,14 @@ row measures."
       (fill cys 0.0f0)
       (dotimes (i n)
         (let ((ki (aref kinds i)))
-          (when (and (body-kind-blocking-p ki) (body-kind-movable-p ki))
+          (when (body-kind-movable-p ki)
             (let ((xi (aref xs i)) (yi (aref ys i)) (ri (aref rs i))
                   (dx 0.0f0) (dy 0.0f0) (deepest 0.0f0))
               (declare (type f32 xi yi ri dx dy deepest))
-              ;; disc against disc
-              (do-shash-neighbours (j hash xi yi (+ ri maxr))
+              ;; disc against disc — skipped entirely for a body that
+              ;; blocks nothing, which still falls through to terrain below
+              (when (body-kind-blocking-p ki)
+               (do-shash-neighbours (j hash xi yi (+ ri maxr))
                 (let ((jj (the fixnum j)))
                   (unless (= jj i)
                     (let ((kj (aref kinds jj)))
@@ -203,7 +229,7 @@ row measures."
                                                             (max i jj) 77)))
                                              (sgn (if (< i jj) 1.0f0 -1.0f0)))
                                         (setf dx (* sgn mag (cos ang))
-                                              dy (* sgn mag (sin ang)))))))))))))))
+                                              dy (* sgn mag (sin ang))))))))))))))))
               ;; NOTE the loop above assigns rather than accumulates: each
               ;; body resolves its single *deepest* overlap per iteration.
               ;; That is max projection, and it is chosen for one property

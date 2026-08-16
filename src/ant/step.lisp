@@ -104,7 +104,11 @@ initial condition rather than merely a convenient one."
              (rad (* (colony-nest-r c) (sqrt (rnd01 id 0 93 seed))))
              (sx (+ (colony-nest-x c) (* rad (cos ang))))
              (sy (+ (colony-nest-y c) (* rad (sin ang))))
-             (bi (bodies-alloc b sx sy *ant-radius* +body-ant+)))
+             ;; IN-NEST from birth, so it starts behind the door rather
+             ;; than in it (see +BODY-RESTING+).
+             (bi (bodies-alloc b sx sy *ant-radius*
+                               (if *resting-ants-block*
+                                   +body-ant+ +body-resting+))))
         (cond
           ((null bi) (ants-free! a i) nil)
           (t
@@ -125,6 +129,9 @@ initial condition rather than merely a convenient one."
                  (aref (ants-trailed a) i) 0.0f0
                  (aref (ants-smelled a) i) 0.0f0
                  (aref (ants-cast a) i) 0
+                 ;; It is standing in the nest, which is the one place
+                 ;; this reading is legitimate.
+                 (aref (ants-resolve a) i) (colony-giveup-threshold c)
                  ;; A newborn has no route to be faithful to, so its exit
                  ;; bearing is simply random — which is what makes the
                  ;; naive ants the colony's explorers (§3.4).
@@ -391,6 +398,18 @@ switch into and no switching logic to get wrong (§3.5)."
           (setf (aref (ants-px a) i) x
                 (aref (ants-py a) i) y)
 
+          ;; The body kind follows the state, derived here rather than
+          ;; assigned at each transition.  Set at the transitions it was
+          ;; possible for the two to disagree — anything that moved an
+          ;; ant between states without also moving its body left an ant
+          ;; that collided with nothing and therefore walked through
+          ;; walls, which is exactly what the wall regression test
+          ;; caught.  One place, every tick, no way to drift.
+          (setf (aref (bodies-kind (world-bodies w)) bi)
+                (if (and (= state +ant-in-nest+) (not *resting-ants-block*))
+                    +body-resting+
+                    +body-ant+))
+
           ;; --- age and metabolism ------------------------------------
           (incf (aref (ants-age a) i))
           (decf energy (if (= state +ant-in-nest+)
@@ -444,9 +463,17 @@ switch into and no switching logic to get wrong (§3.5)."
              ;; empty larder turns itself out of doors, and accepts ants
              ;; with far less in reserve, because the alternative is to
              ;; lie down and starve with the door shut.
-             (when (and (> (aref (ants-energy a) i) (colony-energy-threshold c))
+             ;; A callow worker nurses; foraging is the last job an ant
+             ;; takes up (§3.5).  This is also the buffer the brood rules
+             ;; cannot provide on their own: emerging is not the same
+             ;; event as joining the foraging pool.
+             (when (and (>= (aref (ants-age a) i) *forager-maturity-ticks*)
+                        (> (aref (ants-energy a) i) (colony-energy-threshold c))
                         (< (rnd01 id tick +stream-leave+ seed)
                            (colony-leave-probability c)))
+               ;; How deep this trip will dig, learnt here and carried.
+               ;; An ant in the field cannot read the larder (§3.5).
+               (setf (aref (ants-resolve a) i) (colony-giveup-threshold c))
                (setf (aref (ants-state a) i) +ant-outbound+
                      ;; Set off along the bearing this ant came home on,
                      ;; scattered (§3.4).
@@ -618,7 +645,7 @@ switch into and no switching logic to get wrong (§3.5)."
                       ;; against the colony's threshold, so the urge to
                       ;; turn back grows from the same point at which the
                       ;; ant would actually give up
-                      (ethr (colony-energy-threshold c))
+                      (ethr (aref (ants-resolve a) i))
                       ;; Total for a returning ant, and deliberately so.
                       ;;
                       ;; The home vector is a *vector*, not a path: it
@@ -773,7 +800,8 @@ switch into and no switching logic to get wrong (§3.5)."
                               ;; bake that whole error into the next trip.
                               (aref (ants-hvx a) i) (- (colony-nest-x c) x2)
                               (aref (ants-hvy a) i) (- (colony-nest-y c) y2)
-                              (aref (ants-state a) i) +ant-in-nest+))))
+                              (aref (ants-state a) i) +ant-in-nest+)
+                        )))
                    (t
                     ;; outbound: found food, or run low enough to turn back
                     ;; Give up at the threshold itself, not at half of it.
@@ -788,7 +816,7 @@ switch into and no switching logic to get wrong (§3.5)."
                     (cond ((world-food-at w x2 y2)
                            (setf (aref (ants-state a) i) +ant-at-food+))
                           ((< (aref (ants-energy a) i)
-                              (colony-energy-threshold c))
+                              (aref (ants-resolve a) i))
                            (setf (aref (ants-state a) i)
                                  +ant-returning+))))
                    ))               ; cond H, let G
@@ -856,11 +884,62 @@ stops producing brood, and decays."
   ;; upkeep
   (decf (colony-stock c) (* (colony-population c) *nest-upkeep*))
   (when (< (colony-stock c) 0.0f0) (setf (colony-stock c) 0.0f0))
-  ;; brood.  Fractional, so a birth rate below one worker per tick still
+  ;; Brood, out of the *surplus* — what the larder holds over and above a
+  ;; reserve for the workers already alive (§3.10).
+  ;;
+  ;; Investing a tenth of the whole stock, which is what this did, is a
+  ;; growth rule with no feedback term, and a rule with no feedback term
+  ;; has a fixed point.  This one's is stock zero: every surplus becomes
+  ;; mouths, the mouths consume the next surplus, and the colony grows
+  ;; until its upkeep matches everything its foragers can carry and then
+  ;; sits there.  Traced over forty minutes, population 169 -> 745 while
+  ;; the larder went 358 -> 0, with delivery averaging 120 a minute the
+  ;; whole way.  Nothing was failing to fetch food; the colony was
+  ;; spending it all on workers to fetch more.
+  ;;
+  ;; The reserve is stock per living worker, in the same units as
+  ;; *forage-ration*, because that is already the number the colony reads
+  ;; to decide whether it is hungry.  So one quantity carries one meaning
+  ;; throughout: above the line it breeds, below the line it forages
+  ;; harder.
+  ;;
+  ;; Fractional, so a birth rate below one worker per tick still
   ;; accumulates instead of rounding to zero for ever.
-  (let ((invest (* 0.1f0 (colony-stock c))))
-    (decf (colony-stock c) invest)
-    (incf (colony-brood c) (* *brood-per-stock* invest)))
+  ;; The ring is sized from the parameter here rather than at
+  ;; construction, so rebinding the development time actually takes
+  ;; effect — which is what makes it measurable.
+  (let ((len (max 1 *brood-development-minutes*)))
+    (declare (type fixnum len))
+    (when (or (null (colony-brood-pipe c))
+              (/= (length (the f32v (colony-brood-pipe c))) len))
+      (setf (colony-brood-pipe c) (mkf32 len)
+            (colony-brood-head c) 0)))
+  (let* ((pipe (colony-brood-pipe c))
+         (len (length (the f32v pipe)))
+         (head (mod (colony-brood-head c) len)))
+    (declare (type f32v pipe) (type fixnum len head))
+    ;; 1. the oldest cohort emerges
+    (incf (colony-brood c) (aref pipe head))
+    (setf (aref pipe head) 0.0f0)
+    ;; 2. the queen lays into the slot just vacated, so it comes out LEN
+    ;;    ticks from now.  Bounded twice over: by what the colony can
+    ;;    afford above its reserve, and by what one animal can lay.
+    (let* ((reserve (* (colony-population c) *forage-ration*
+                       *brood-reserve-ration*))
+           (surplus (max 0.0f0 (- (colony-stock c) reserve)))
+           (affordable (* *brood-per-stock* *brood-investment* surplus))
+           (eggs (if (plusp *queen-lay-rate*)
+                     (min affordable *queen-lay-rate*)
+                     affordable)))
+      (declare (type f32 reserve surplus affordable eggs))
+      (when (plusp eggs)
+        ;; pay only for the eggs actually laid
+        (decf (colony-stock c) (/ eggs (max 1.0f-6 *brood-per-stock*)))
+        (setf (aref pipe head) eggs)))
+    (setf (colony-brood-head c) (mod (1+ head) len)))
+  ;; 3. emerged brood becomes workers.  Fractional, so a birth rate below
+  ;;    one worker per tick still accumulates instead of rounding to zero
+  ;;    for ever.
   (loop while (and (>= (colony-brood c) 1.0f0)
                    (< (colony-population c) (colony-capacity c)))
         do (decf (colony-brood c) 1.0f0)
@@ -899,7 +978,31 @@ stops producing brood, and decays."
 
 (defun world-seed-population! (w c n)
   "Place the colony's starting workers (§3.10).  A starting count, not
-*the* count: births and deaths run from tick one."
+*the* count: births and deaths run from tick one.
+
+The starting workers are given *ages*, spread over the maturity window
+and beyond it, rather than all being newly emerged.  A scenario opens on
+a colony that already exists, and a colony that already exists is not
+three hundred callow workers hatched at once — that is the demography of
+a colony founded this morning, which is not what any scenario here
+describes.
+
+Left at zero it also breaks the scenarios outright once foraging has a
+maturity gate (§3.5): every starting ant is too young to leave, so
+nothing forages until the whole founding cohort matures simultaneously,
+and then all of it does.  Spreading the ages removes both the dead
+opening and the cohort that moves as one block afterwards.
+
+Deterministic, from the ant's own id, so a seeded run stays bit-exact."
   (declare (type world w) (type colony c) (type fixnum n))
-  (dotimes (i n) (unless (spawn-ant w c) (return)))
+  (let ((a (world-ants w))
+        (seed (world-seed w)))
+    (dotimes (i n)
+      (let ((idx (spawn-ant w c)))
+        (unless idx (return))
+        ;; 0 to 3x the maturity window: some of the colony is callow, most
+        ;; of it can work, which is what a going concern looks like.
+        (setf (aref (ants-age a) idx)
+              (floor (* 3.0f0 (max 1 *forager-maturity-ticks*)
+                        (rnd01 (aref (ants-id a) idx) 0 94 seed)))))))
   (colony-population c))

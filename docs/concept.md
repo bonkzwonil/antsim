@@ -15,6 +15,12 @@ walked. **§3.9 is the section to read second** — it is the explicit cut
 between the model described here and the much smaller thing M1 actually
 builds, because a design this deep ships nothing without one.
 
+
+> Measurements live in [experiments.md](experiments.md) — a lab notebook
+> recording the runs behind the decisions here, including the ones that
+> decided against a change. Every behavioural change carries an
+> off-switch so its claim can be measured rather than asserted.
+
 ## 1. What this is, and what it is not
 
 **It is a toy that tells the truth.** The point is that you can watch it,
@@ -458,9 +464,59 @@ navigation systems in parallel and weights them by confidence:
    source and not one left towards it**. With the memory in place, 34%
    leave within 15° of it and 2.4% away from it.
 
+4. **Social information — designed, not built.** The three systems above
+   are all *private*: an ant navigates on what it has measured itself. Real
+   foragers do not. They meet each other on trails and exchange information
+   by antennation and trophallaxis, and the encounter itself carries
+   navigational content that no private sense provides.
+
+   The content is directional and it is symmetric. A laden ant on a road
+   that keeps producing *outbound* nestmates coming the other way has
+   strong evidence it is heading toward the nest and on a road worth being
+   on — outbound traffic flows away from home, so meeting it head-on means
+   home is ahead. The same encounter runs the other way: an outbound ant
+   that meets a laden sister learns that there is food behind her, which
+   is a far better signal than the pheromone she has been laying, because
+   it is current rather than an average over the last several minutes.
+
+   Two things make this worth recording rather than filing under
+   embellishment.
+
+   - **Dead reckoning should be the fallback, not the primary.** The home
+     vector is what an ant falls back on when it is *alone* — which is the
+     situation of the first forager and almost nobody else. A model in
+     which every ant navigates as though it were the first forager gets
+     the common case wrong, and §3.2's wall-following failure is what that
+     looks like from the window: a laden ant driving at a bearing through
+     an obstacle because a straight line is genuinely all it has.
+   - **It closes a feedback loop the model is missing.** Traced through a
+     collapse, the failure is not that ants cannot get home; it is 553 ants
+     outbound with exactly one of them at the food. The trail decays because
+     too few return laden, and too few return laden because the trail
+     decayed — and nothing in the model lets a successful forager tell an
+     unsuccessful one anything at all, except by way of a field with a
+     time constant far longer than the event. Encounter-based recruitment
+     is the fast channel that positive feedback is missing.
+
+   Deliberately not built yet. It needs the broad phase to report ant-ant
+   *encounters* rather than only overlaps, and a rule for what is
+   exchanged, and both of those are choices worth making on their own
+   rather than in the middle of fixing something else.
+
 Weighting these is where personality comes from. An ant with a strong home
 vector and a weak trail ignores the trail. This is observed and it is what
 prevents a colony from being trivially hijacked by a single strong trail.
+
+**Shading ants by age — wanted, not built.** The body instance packs one
+float as `kind + state`, so that channel is entirely spent on behaviour and
+age has nowhere to go. Doing it properly means a second attribute in the
+instance buffer, with hue carrying state and lightness carrying age, so
+both read at once; the alternative — a toggle that swaps the whole
+colouring over to age — is cheaper but shows one or the other. Worth
+doing once the population actually *has* an age structure to look at,
+which is new as of the brood rules in §3.10. The callow tint is the
+special case of it that pays for itself immediately: a nest that is mostly
+pink has just bred hard and cannot forage on it yet.
 
 ### 3.5 Internal state and the foraging cycle
 
@@ -539,9 +595,77 @@ outbound, for the rest of the run. A real colony does the opposite — a
 hungry colony forages *harder*, and its foragers push deeper into their
 reserve before turning back.
 
-Both thresholds have to move together, or the deadlock simply relocates: a
-lowered departure bar alone would push a starving ant out of the nest and
-turn it round on the very next tick.
+A lowered departure bar *alone* would relocate the deadlock rather than fix
+it: it would push a starving ant out of the nest and turn it round on the
+very next tick. The conclusion drawn from that at the time — that the two
+bars are one number — was wrong, and wrong in a way that took a long time
+to see, because it is true of the *departure* bar and not of the other one.
+
+### The forager is spent, not saved
+
+An ant leaves when its energy is **above** the bar. So an ant that leaves
+at the margin is *at* the bar — and while both bars were one number, it
+therefore qualified to give up on its very next tick. A colony under
+pressure has most of its workers sitting at exactly that margin, so what
+came out was not one ant turning round but the whole workforce oscillating
+through the door. Measured on the double bridge at minute 26 of a
+collapse:
+
+| minute | population | able to forage | outside | carrying food | delivered |
+|---|---|---|---|---|---|
+| 20 | 487 | 470 | 424 | 103 | 182 |
+| **26** | **587** | **566** | **560** | **3** | **0** |
+
+Five hundred and sixty ants outside the nest, three of them carrying
+anything, and nothing delivered that minute. Two candidate explanations
+were ruled out by measurement — it is not a shortage of foragers, and it
+is not a blocked entrance: laden ants queued outside the unload radius
+never exceeded sixteen, and food in transit never exceeded thirty units.
+From the window it looks like panic: a colony pouring out and dying anyway
+beside a full source.
+
+> **What this does *not* yet establish.** "Outside the nest" counts
+> outbound, at-food and returning together, and the difference between
+> them is precisely what the diagnosis turns on — an ant that sets out and
+> gives up at once is *returning*, not searching. Until those are counted
+> separately, the door-oscillation reading is a hypothesis and not a
+> result. Two things already argue against it being the whole story: total
+> births are flat across every setting of the parameter below (657 / 653 /
+> 664 over four seeds), so nothing here changes how much food the colony
+> converts into workers.
+
+The two bars are separate quantities regardless, because one number for
+both is indefensible on its own terms: an ant leaves when it is *above*
+the bar, so with a single number an ant leaving at the margin has already
+met the condition for giving up. The give-up bar sits *below* the
+departure bar by a margin that widens as the larder empties:
+
+| larder | urgency | departs above | turns back below |
+|---|---|---|---|
+| full | 0.00 | 0.450 | 0.450 |
+| half | 0.50 | 0.281 | 0.141 |
+| empty | 1.00 | 0.113 | **0.000** |
+
+At a full larder they coincide and a fed colony behaves exactly as before,
+so nothing is thrown away that need not be. As the stock falls the gap
+opens, and at an empty larder the forager has no bar at all: it searches
+until it dies.
+
+That is the superorganism, stated as arithmetic rather than as sentiment.
+Whether to *spend* a forager is the colony's question and the answer
+depends on what the colony has left; whether the forager survives is the
+forager's, and a colony does not weight the two equally. A nest with an
+empty larder and a full complement of rested survivors is dead within the
+hour either way, so an ant held back to conserve itself is an ant wasted —
+the expected return on spending it is strictly greater. Forager
+risk-taking rising with colony need is documented across many species, and
+foraging is the last caste an ant belongs to rather than a stage it
+survives. What the model contributes is that it is also the arithmetic.
+
+Note what an ant is *not* given here. No ant reads the stock. Urgency is
+the one colony-wide quantity in the model, and an individual learns it only
+locally and honestly — by asking for food while it rests and being given
+none.
 
 The urgency term is the one place the model reads the stock as a
 colony-wide quantity, and it is worth being precise about why that is not

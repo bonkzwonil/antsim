@@ -315,14 +315,23 @@ nothing."
           (aref (ant:ants-hvx a) 0)))))
 
 (test displaced-nest-ant-still-knows-the-way-home
-  "Regression.  A resting ant is a blocking body, so the crowd at a busy
-nest shoves it, and path integration records the drift.  Departure used
-to zero the home vector — which told the ant that wherever it had been
-pushed to *was* home.  It would forage, return to that false origin, read
-a home vector of zero and sit there with a full crop it could not unload.
+  "Regression.  An ant does not depart from the middle of its nest: it is
+scattered across the disc at birth, it walks in from wherever it arrived,
+and until §3.11 exempted resting ants from ant-ant contact the crowd at a
+busy nest shoved it as well.  Path integration records all of that.
+
+Departure used to zero the home vector — which told the ant that wherever
+it happened to be standing *was* home.  It would forage, return to that
+false origin, read a home vector of zero and sit there with a full crop it
+could not unload.
 
 Reported from the live window, where a stuck ant is obvious.  No
-aggregate — population, stock, trail total — showed anything wrong."
+aggregate — population, stock, trail total — showed anything wrong.
+
+The age is set explicitly because foraging has a maturity gate (§3.10)
+and a callow ant will not leave at all; that is a different rule with a
+test of its own, and leaving it to chance here would make this one
+flaky."
   (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 32))
          (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :nest-r 0.02f0
                               :stock 1.0f6))
@@ -337,6 +346,8 @@ aggregate — population, stock, trail total — showed anything wrong."
             (aref (ant:ants-hvy a) 0) 0.0f0)
       (setf (aref (ant:bodies-x b) bi) 0.20f0
             (aref (ant:bodies-y b) bi) 0.20f0)
+      ;; old enough to forage — see the docstring
+      (setf (aref (ant:ants-age a) 0) (* 10 ant:*forager-maturity-ticks*))
       ;; force it out of the nest
       (let ((ant:*leave-probability* 1.0f0))
         (setf (aref (ant:ants-energy a) 0) 1.0f0)
@@ -452,12 +463,84 @@ visited."
             "a fed colony sent out ~d and a starving one ~d; hunger is ~
              not raising the departure rate" fed hungry)))))
 
-(test hunger-lowers-both-energy-thresholds-together
-  "The bar for setting out and the bar for giving up are one number.
+(test a-forager-is-spent-before-it-is-saved
+  "The bar for giving up must sit *below* the bar for setting out, and
+further below the hungrier the colony is (§3.5).
 
-They have to move together.  Lowering only the first would push a
-starving ant out of the nest and turn it round on the very next tick,
-which is the same deadlock standing in a different place."
+These were one number, on the reasoning that setting out and turning
+back are two ends of one decision.  That reasoning has a hole in it, and
+the hole cost a colony: an ant leaves when its energy is above the bar,
+so an ant that leaves at the margin is *at* the bar — and with one
+number it therefore qualified to turn back on its very next tick.
+Measured on the double bridge, 560 ants outside the nest, 3 of them
+carrying anything, nothing delivered that minute.  The colony was
+walking its whole workforce out of the door and straight back in.
+
+Whether to spend a forager is the colony's question and whether the
+forager survives is the forager's, and a superorganism does not weight
+them equally."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 200))
+         (rich (ant:add-colony w :nest-x 0.10f0 :nest-y 0.10f0
+                                 :stock 400.0f0))
+         (poor (ant:add-colony w :nest-x 0.30f0 :nest-y 0.30f0
+                                 :stock 0.0f0)))
+    (ant:world-seed-population! w rich 40)
+    (ant:world-seed-population! w poor 40)
+    (dolist (c (list rich poor))
+      (is (<= (ant:colony-giveup-threshold c)
+              (ant:colony-energy-threshold c))
+          "give-up (~,3f) is above departure (~,3f): an ant that sets out ~
+at the margin turns round on the next tick"
+          (ant:colony-giveup-threshold c)
+          (ant:colony-energy-threshold c)))
+    (is (< (ant:colony-giveup-threshold poor)
+           (ant:colony-energy-threshold poor))
+        "a starving colony's foragers give up at the same bar they left ~
+on (~,3f); nothing is being spent"
+        (ant:colony-giveup-threshold poor))
+    (is (< (ant:colony-giveup-threshold poor)
+           (ant:colony-giveup-threshold rich))
+        "hunger did not lower the give-up bar: ~,3f against ~,3f"
+        (ant:colony-giveup-threshold poor)
+        (ant:colony-giveup-threshold rich))))
+
+(test an-ant-in-the-field-cannot-read-the-larder
+  "§3.5: how deep a forager digs into its reserve is learnt at the nest
+door and carried, not looked up while it walks.
+
+The distinction is the difference between a superorganism and a shared
+global.  A colony that is fed while this ant is halfway across the arena
+must not reach out and change the ant's mind — the only honest way for
+it to have learnt anything about the larder is by asking for food while
+resting and being told what there was.
+
+Tested by moving the larder underneath an ant that is already out.  Its
+resolve must not budge."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 64))
+         (c (ant:add-colony w :nest-x 0.2f0 :nest-y 0.2f0 :stock 0.0f0))
+         (a (ant:world-ants w)))
+    (ant:world-seed-population! w c 8)
+    ;; send one out with a starving larder behind it
+    (setf (aref (ant:ants-resolve a) 0) (ant:colony-giveup-threshold c)
+          (aref (ant:ants-state a) 0) ant:+ant-outbound+)
+    (let ((carried (aref (ant:ants-resolve a) 0)))
+      (is (< carried (ant:colony-energy-threshold c))
+          "a starving colony should send its foragers out to dig deeper ~
+than the departure bar, not the same (~,3f)" carried)
+      ;; now fill the larder while it is away
+      (setf (ant:colony-stock c) 4000.0f0)
+      (is (> (ant:colony-giveup-threshold c) carried)
+          "the test is not testing anything: feeding the colony did not ~
+move its give-up bar")
+      (dotimes (k 200) (ant:world-step! w))
+      (is (< (abs (- (aref (ant:ants-resolve a) 0) carried)) 1.0f-6)
+          "resolve moved from ~,4f to ~,4f while the ant was in the ~
+field; it is reading the colony, not remembering it"
+          carried (aref (ant:ants-resolve a) 0)))))
+
+(test hunger-lowers-the-bar-for-setting-out
+  "A hungry colony turns itself out of doors: it accepts foragers with
+less in reserve, and sends them more often."
   (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 200))
          (full (ant:add-colony w :nest-x 0.10f0 :nest-y 0.10f0
                                  :stock 400.0f0))

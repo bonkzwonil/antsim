@@ -157,8 +157,18 @@ returners read warm, which is what makes a working trail legible as
                            0.4f0)
                           ((= s +ant-returning+) 0.3f0)
                           ((= s +ant-at-food+) 0.2f0)
-                          ((= s +ant-outbound+) 0.1f0)
-                          (t 0.0f0))))))))
+                          ;; Nothing more urgent to report, so this one
+                          ;; carries its age instead (§5.1).  0.5 is
+                          ;; newly emerged, 0.9 fully mature; the
+                          ;; behavioural states above keep their own
+                          ;; colours because those are what the picture
+                          ;; is for.
+                          (t (+ 0.5f0
+                                (* 0.4f0
+                                   (min 1.0f0
+                                        (/ (float (aref (ants-age a) i) 1.0f0)
+                                           (float (max 1 *age-shade-ticks*)
+                                                  1.0f0)))))))))))))
     (dotimes (i n)
       (let ((k (aref kinds i)))
         (unless (= k +body-free+)
@@ -167,8 +177,14 @@ returners read warm, which is what makes a working trail legible as
                   (cffi:mem-aref ptr :float (+ o 1)) (aref ys i)
                   (cffi:mem-aref ptr :float (+ o 2)) (aref rs i)
                   (cffi:mem-aref ptr :float (+ o 3))
-                  (+ (float k 1.0f0)
-                     (if (= k +body-ant+) (aref state-of i) 0.0f0)))
+                  ;; A resting ant is drawn as an ant.  The kind exists
+                  ;; to keep it out of the collision pass (§3.11), not to
+                  ;; give it a look of its own, and mapping it back here
+                  ;; means the shader needs no case for it.
+                  (+ (if (= k +body-resting+) 0.0f0 (float k 1.0f0))
+                     (if (or (= k +body-ant+) (= k +body-resting+))
+                         (aref state-of i)
+                         0.0f0)))
             (incf count)))))
     ;; Drawing-only instances follow: the arrival ring and the two stock
     ;; gauges.  None of them is in the body table, because none of them

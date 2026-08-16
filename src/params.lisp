@@ -451,6 +451,160 @@ the ground they know, the sweep is what re-acquires the line.  Written
 as a multiplier on the existing noise rather than a new search mode,
 because a wider correlated random walk is what casting is.")
 
+(defparameter *queen-lay-rate* 12.0f0
+  "The most eggs one queen lays per colony tick — per simulated minute
+(§3.10).  [cal]  0 or less means no ceiling, which is how this behaved
+before.
+
+There is one queen.  Whatever the larder holds, brood production has a
+hard ceiling that food cannot raise, and leaving that out is what let a
+windfall become a population spike in the same minute it arrived.  A
+colony that can convert any surplus into workers instantly has no
+characteristic timescale, so it overshoots every fluctuation and then
+starves on the far side of it — which is the oscillation between piling
+out and dying that the window shows.
+
+A rate limit is a different kind of regulator from a reserve and the two
+do different jobs: *brood-reserve-ration* decides how much the colony is
+willing to spend, this decides how fast it can spend it at all.  Neither
+substitutes for the other.")
+
+(defparameter *brood-development-minutes* 8
+  "How long an egg takes to become a worker, in colony ticks (§3.10).
+[cal, compressed]  1 means the old behaviour — brood emerges in the tick
+it is paid for.
+
+Real development is weeks; this model runs an hour, so the number is a
+compression rather than a measurement and is marked accordingly.  What
+it has to preserve is the *sign* of the effect, not its scale: a colony
+whose workforce answers a food surplus only after a delay cannot track
+its food supply exactly, so it necessarily overshoots and undershoots,
+and a population that breathes is the honest behaviour of one.  Brood
+that emerges instantly makes the colony a controller with no lag, which
+is both unreal and — because it never builds a reserve — more fragile
+rather than less.")
+
+(defparameter *forager-maturity-ticks* 6000
+  "How old a worker must be before it will leave the nest, in motion
+ticks (§3.5, §3.10).  [cal, compressed]  6000 is five simulated minutes
+at 20 Hz; 0 restores the old behaviour, where an ant could be born and
+sent out in the same second.
+
+Temporal polyethism, and it is one of the best-attested facts about ant
+societies: a callow worker nurses brood and tends the nest, and takes up
+foraging only later in life.  Foraging is the *last* job an ant holds,
+which is also why §3.5 can treat a forager as expendable — it is already
+near the end of its working life.
+
+Structurally it does something the other two brood rules cannot.  A lay
+rate bounds how fast eggs appear and a development time delays their
+emergence, but both of those still deliver workers straight into the
+foraging pool.  Maturity puts a second buffer *after* emergence, so a
+colony that has just doubled its brood does not double its foraging
+pressure at the same instant.  The three together give the population an
+age structure, which is the thing this model has never had: born, then
+developing, then in the nest, then out.")
+
+(defparameter *age-shade-ticks* 36000
+  "The age at which an ant is drawn as fully mature, in motion ticks
+(§5.1).  Display only — nothing in the model reads it.  30 simulated
+minutes, so a run shows the whole ramp.
+
+Age is shaded only on ants that are not saying something more urgent.
+An ant carrying food, sitting at a source, or too spent to set out keeps
+its own colour, because those are what the picture is *for*; age is the
+background variable and it gets the ants that have nothing else to
+report.  Encoding it that way also costs nothing — the instance buffer
+packs one float per body, and the states that matter are a short list,
+so the rest of the range is free for a ramp.")
+
+(defparameter *brood-investment* 0.1f0
+  "The fraction of the breedable larder the colony turns into brood each
+colony tick (§3.10).
+
+A rate, not a regulator, and the distinction is worth stating because
+capping it looks like the obvious cure for runaway growth and is not.
+A reserve expressed as a share of the stock scales away with the stock:
+keeping back half and breeding from a tenth of the rest breeds a
+twentieth instead of a tenth, which reaches the same fixed point more
+slowly.  Stock zero stays the attractor because the quantity protecting
+the larder shrinks in lockstep with the larder.
+
+What makes an equilibrium is a reserve measured against the number of
+mouths — see *brood-reserve-ration*.  Breeding then stops at a larder
+proportional to the population instead of at nothing.  This rate governs
+how fast the colony climbs to that line; it cannot decide where the line
+is.")
+
+(defparameter *brood-reserve-ration* 1.0f0
+  "How much larder the colony keeps back per living worker before it
+breeds, as a multiple of *forage-ration* (§3.10).  0 restores the old
+rule — breed from the whole larder — so the difference is measurable.
+
+The old rule invested a tenth of the stock in brood every minute and
+asked nothing else: not whether the workers it had could feed the ones
+it was about to make, not whether the road could carry them.  A rule
+with no feedback term has a fixed point, and this one's fixed point is
+stock zero.  Traced over forty minutes on the double bridge, the
+population climbed monotonically from 169 to 745 while the larder fell
+monotonically from 358 to nothing — and delivery was never the problem,
+averaging 120 units a minute throughout.  The colony was not starving
+because it could not fetch food.  It was starving because it converted
+every surplus into mouths and then had no surplus.
+
+Breeding from the *surplus* instead closes the loop.  The reserve is
+measured in the same units as *forage-ration* — stock per living worker
+— deliberately, because that is already the quantity the colony reads to
+decide how hungry it is (COLONY-FORAGE-URGENCY).  One number therefore
+means one thing throughout: a colony breeds when it is above the line it
+calls comfortable, and forages harder when it is below it.  Nothing new
+is measured and no new sense is added.
+
+This is also what real colonies do — brood is fed by trophallaxis from
+what foragers bring in, and egg-laying tracks nutrition rather than
+running open-loop.")
+
+(defparameter *resting-ants-block* nil
+  "Whether ants resting in the nest still collide with everything else
+(§3.11).  NIL — they do not — is the model; T restores the behaviour
+this had before, so the difference is measurable rather than asserted.
+
+The nest is a disc a couple of centimetres across and a mature colony
+rests hundreds of workers in it at once, which cannot be true of a disc
+that small.  What the disc actually represents is the *door*; the nest
+itself is a chamber system going down, and the model is two-dimensional.
+Leaving resting ants in the collision pass therefore puts the entire
+resting population in its own doorway, where it obstructs its own
+foragers and draws as a crowd many times the size of the nest.
+
+The nest entrance body is already exempt from collision for exactly this
+reason — making it solid would seal the colony in — so this is the same
+exemption applied to the same fiction, one level further in.")
+
+(defparameter *forager-expendability* 0.0f0
+  "How far the give-up threshold falls below the departure threshold when
+the larder is empty, as a fraction of it (§3.5).  1.0 keeps them equal,
+which is how this model behaved before; 0.0 means a forager from a
+starving nest never turns back and searches until it dies.
+
+Equal was a bug, and a self-inflicted one.  An ant leaves when its
+energy is above the bar, so an ant that leaves at the margin is *at* the
+bar, and with one number that is also the bar for giving up — it turned
+round on the next tick.  Measured on the double bridge at minute 26 of a
+collapse: 560 ants outside the nest, 3 of them carrying anything, and
+nothing delivered that minute.  Not a shortage of foragers and not a
+blocked entrance; the colony was walking its whole workforce out of the
+door and straight back in.  From the window that is the oscillation
+between piling out in a panic and dying quietly.
+
+Setting the floor to zero rather than merely lowering it is the
+colony's arithmetic, not cruelty.  A nest with an empty larder and a
+full complement of rested survivors is dead in an hour either way, so an
+ant held back to conserve itself is an ant wasted; the expected return on
+spending it is strictly greater.  Foraging is the last caste an ant
+belongs to and the risk it accepts rises with the colony's need — the
+model just makes that a number.")
+
 (defparameter *nest-exit-scatter* 0.5f0
   "Spread, radians, on the bearing an ant sets off from the nest (§3.4).
 
@@ -642,9 +796,13 @@ relaxation from chasing floating-point noise forever.")
                *brood-per-stock* *nest-upkeep*
                *pi-noise* *homing-weight-low-energy* *nest-arrival-radius*
                *nest-exit-scatter* *obstacle-avoidance*
+               *forager-expendability* *brood-reserve-ration*
+               *queen-lay-rate*
+               *brood-investment*
                *trail-lost-threshold* *trail-follow-threshold*
                *trail-memory-decay* *uturn-cast-gain*
                *relax-slop*))
 
 (declaim (type fixnum *max-age-ticks* *relax-iterations* *homing-scan-steps*
-               *uturn-ticks*))
+               *uturn-ticks* *brood-development-minutes*
+               *forager-maturity-ticks* *age-shade-ticks*))

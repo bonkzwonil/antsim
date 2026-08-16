@@ -195,7 +195,7 @@ out vec4 frag;
 // kinds, matching world/bodies.lisp
 // 0 ant  1 corpse  2 food  3 nest  4 nest arrival halo (drawing only)
 // ants additionally carry state in the fractional part: .1 outbound,
-// .2 at food, .3 returning laden
+// .2 at food, .3 returning laden, .4 spent, .5-.9 age ramp
 
 vec3 kind_color(float k) {
     int base = int(floor(k + 0.01));
@@ -215,6 +215,20 @@ vec3 kind_color(float k) {
     // line is not going anywhere whatever it is nominally doing, and a
     // nest quietly filling with spent ants is the shape a colony's death
     // actually takes.  Drawn in the one hue nothing else on screen uses.
+    // Age ramp, .5 newly emerged to .9 fully mature (§5.1).  Only ants
+    // with nothing more urgent to report get here: carrying food,
+    // sitting at a source and too spent to leave all keep their own
+    // colours below, because those are what the picture is for.  Age is
+    // the background variable, so it gets the rest.
+    //
+    // What it makes legible is the colony's age structure, which is new
+    // -- before the brood rules of §3.10 every ant was effectively the
+    // same age.  A nest gone pink has just bred hard and cannot forage
+    // on it yet; a trail of pale ants is a colony spending its young.
+    if (frac > 0.45) {
+        float t = clamp((frac - 0.5) / 0.4, 0.0, 1.0);
+        return mix(vec3(1.00, 0.70, 0.85), vec3(0.86, 0.88, 0.92), t);
+    }
     if (frac > 0.35) return vec3(0.95, 0.25, 0.22);        // spent, starving
     if (frac > 0.25) return vec3(1.00, 0.72, 0.30);        // returning laden
     if (frac > 0.15) return vec3(0.95, 0.90, 0.70);        // at food
