@@ -1,5 +1,14 @@
 # antsim
 
+![Two routes to the same food, one of them shorter. The colony finds it.](docs/images/14-hero.png)
+
+*Goss's double bridge, run on this model. Two corridors lead from the nest to
+the food and one is longer. Nothing in the simulation can measure a distance,
+compare two routes, or tell that an alternative exists — yet the traffic
+collapses onto the short one, because ants that take it get home sooner and lay
+pheromone sooner. Every mark in that picture was deposited by an ant that
+walked there.*
+
 **Version M2.1 · 2026-08-15** — the renderer, the interactive window, and the
 round of corrections that watching it produced. See [where it
 is](#where-it-is) for what that covers and what is next.
@@ -27,8 +36,13 @@ experiments, run on the model, with the papers' own criteria.
 
 ### Deneubourg's binary bridge (1990) — symmetry breaking
 
+![The binary bridge: two equal arms, and the colony committed to one of them](docs/images/12-binary-bridge.png)
+
 Two arms of **equal** length between nest and food. There is no better route,
-so any departure from an even split has to be the colony's own doing.
+so any departure from an even split has to be the colony's own doing. In the
+picture the two corridors are identical and one of them is carrying almost all
+the traffic — that asymmetry is the entire result, and it was produced by the
+run rather than drawn.
 
 | seed | arm A | arm B | committed to |
 |---|---|---|---|
@@ -113,6 +127,38 @@ SCENARIO=scenarios/goss-double-bridge.json make live
 A test asserts that the files and the Lisp constructors build the same
 apparatus vertex for vertex — otherwise the published result and the thing you
 can look at would be two different experiments with the same name.
+
+### The experiment has a working density window
+
+Both bridges are run with a **fixed** colony, because that is how they were run
+in the laboratory: the question is whether trail-laying *alone* selects an arm,
+so anything else that could do the selecting has to be held still. A colony
+that breeds during the run is exactly such a thing.
+
+How many ants turns out to matter more than that, and it is the sort of result
+this project exists to find. Over ten seeds, with the population held fixed:
+
+| ants | worst replicate | mean share |
+|---|---|---|
+| 150 | 0.544 | 0.805 |
+| **250** | **0.671** | 0.788 |
+| 400 | 0.552 | 0.723 |
+| 900 | *long arm wins* | 0.690 |
+| 1200 | *long arm wins* | 0.668 |
+
+**Past about 900 ants the long arm wins.** Crowding does not merely weaken the
+shortest-path result — it *inverts* it, because congestion in the corridors
+starts deciding the route instead of pheromone. Below about 250 the opposite
+failure: too little traffic for the nonlinearity to latch onto, so individual
+runs wander.
+
+So a bridge result quoted without its colony size is under-specified, and this
+model will tell you a different thing about ants depending on how many of them
+you put in the room. That is not a defect to be tuned away; it is the same
+congestion effect visible everywhere else in these pictures, arriving where it
+can be measured. The full record is in
+[docs/experiments.md](docs/experiments.md), including three explanations that
+were wrong before this one.
 
 ![An established trail between nest and food](docs/images/03-trail.png)
 
@@ -225,9 +271,10 @@ nest. That is the first ants home, laying the first pheromone.
 ![Forty seconds: the first thread](docs/images/01-searching.png)
 
 By **5 minutes** that thread has become a road — in fact two of them, which is
-the frame [above](#what-emerges). The total is 78 263 and the population has
-grown from 150 to 266: the first turn of the loop that drives everything after
-it, where food comes in, workers are made, and more workers thicken the trail.
+the frame [above](#what-emerges). The total is 56 208, and the population is still exactly the 150 it started
+with: the colony is feeding itself but has not yet banked enough surplus for
+the queen to lay against, and the brood she does lay takes time to emerge
+(§3.10). Growth comes later, and lags the food that pays for it.
 
 Everything in the pictures above grew from those first ants, by the ants' own
 rules. The colour scale is identical across every image, so a trail that looks
@@ -235,12 +282,12 @@ stronger is stronger.
 
 ## How it ends
 
-The source in this scenario is finite, and it runs out after **23 minutes**.
+The source in this scenario is finite, and it runs out after **28 minutes**.
 What happens over the next six is the part worth watching.
 
 ### The road outlives the source
 
-At the moment the source empties, the trail is at full strength — 91 580 units
+At the moment the source empties, the trail is at full strength — 71 004 units
 — and the colony is still pouring ants onto it.
 
 ![The source has just run out](docs/images/09-abandoned.png)
@@ -250,20 +297,20 @@ whatever pheromone is in front of it; an ant deposits only when it is carrying
 food. So the traffic continues and the renewal stops, and evaporation starts
 taking the road out from under the ants still walking it.
 
-**Two minutes later** the trail is down to 12 426 — 86% gone — and the ants are
+**Two minutes later** the trail is down to 9 621 — 86% gone — and the ants are
 still packed along the line where it was, including a knot where the food used
 to be. Not one of them is orange, because there is nothing left to carry.
 
 ![Two minutes on: walking a road that is dissolving](docs/images/10-fading.png)
 
-**Six minutes** and it is 228, from 91 580. The structure is simply gone, and
+**Six minutes** and it is 176, from 71 004. The structure is simply gone, and
 with it every trace of where the food had been. The colony disperses back into
 the random walk it started with — and the red ants are the ones that no longer
 have the reserve to try again.
 
 ![Six minutes on: nothing left](docs/images/11-collapsed.png)
 
-The population is *rising* through all three frames — 750, 782, 811 — because
+The population is *rising* through all three frames — 390, 414, 462 — because
 the colony is still converting its stored food into workers while its road
 dissolves. It is at its largest a few minutes after it has already lost.
 
@@ -465,8 +512,10 @@ threshold**, and **task reallocation**. The first two need a two-source
 apparatus, which is a much smaller job than the bridge was now that the
 apparatus pattern exists.
 
-M2 is still not signed off: it is specified to include a gallery of the M1
-scenarios, and now that those scenarios exist the gallery should render them.
+**M2 is signed off.** Its last outstanding piece was a gallery of the M1
+scenarios; both bridge experiments now render from the apparatus itself, under
+the protocol the acceptance rows assert on, so the pictures at the top of this
+page are the same runs the claims are made from.
 
 Three smaller things §5.1 asks for and M2 has not built: obstacles are a flat
 fill with no soft outline, food quality is not encoded in colour or saturation,
@@ -484,10 +533,27 @@ value on the strongest part of the trail.
 
 The colony in the pictures grows to a **carrying capacity** rather than
 increasing without bound: workers burn energy to live, the colony's stock is the
-difference between what foragers bring in and what the nest consumes, and when
-that reaches zero the birth rate does too. How many ants a colony can support is
-therefore a result of how far the food is and how good the trail to it is, which
-is the coupling §3.10 is about.
+difference between what foragers bring in and what the nest consumes, and how
+many ants a colony can support is therefore a result of how far the food is and
+how good the trail to it is. That is the coupling §3.10 is about.
+
+Getting there took the round's largest correction. The rule had no feedback
+term — a fixed share of the larder became workers every minute regardless — and
+a growth rule with no feedback has a fixed point, which for this one was **zero
+reserve**. The colony grew until its upkeep matched everything its foragers
+could carry and then sat there with nothing banked, which is why so many runs
+showed a colony starving beside a full source. It was never failing to fetch
+food; it was spending all of it on more mouths. Brood now goes through one queen
+at a bounded rate, into a pipeline that takes time to emerge, and the population
+has an age structure the renderer shades.
+
+Three mechanisms built in the same round ship **off**, with their numbers
+recorded rather than their reasoning: U-turns on a lost trail, forager
+expendability, and breeding from a per-worker reserve. That last one measured
+*better* than what shipped and is off anyway, because it would have the colony
+compute stock per living worker — a colony-wide aggregate, which is precisely
+what this model refuses everywhere else. Results decide between mechanisms that
+are equally defensible; they do not decide whether a mechanism is defensible.
 
 ## Copyright and licence
 

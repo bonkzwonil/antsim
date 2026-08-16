@@ -1000,9 +1000,18 @@ Deterministic, from the ant's own id, so a seeded run stays bit-exact."
     (dotimes (i n)
       (let ((idx (spawn-ant w c)))
         (unless idx (return))
-        ;; 0 to 3x the maturity window: some of the colony is callow, most
-        ;; of it can work, which is what a going concern looks like.
+        ;; A spread of ages, so the colony looks and behaves like a going
+        ;; concern rather than a cohort hatched this morning.
+        ;;
+        ;; Scaled against the *larger* of the maturity window and the age
+        ;; at which an ant is drawn as fully mature.  Keying it to
+        ;; maturity alone was wrong the moment maturity was switched off:
+        ;; the window collapses to a single tick, every founder is born
+        ;; newborn, and the whole colony renders as callow for the rest of
+        ;; the run.  A parameter set to zero should not silently take a
+        ;; second quantity to zero with it.
         (setf (aref (ants-age a) idx)
-              (floor (* 3.0f0 (max 1 *forager-maturity-ticks*)
+              (floor (* 1.5f0 (max (* 2 *forager-maturity-ticks*)
+                                   *age-shade-ticks*)
                         (rnd01 (aref (ants-id a) idx) 0 94 seed)))))))
   (colony-population c))

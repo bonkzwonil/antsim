@@ -1649,10 +1649,46 @@ magnitude above 3.2σ every single time, and every ant left on a wild angle
 deterministically. The draws look independent and are not. **One stream,
 one question.**
 
+A second round followed, and it went further than corrections:
+
+- **Ants could not feel walls.** The collision pass removes only the
+  component *into* a surface, so a blind ant slid along it and marked it
+  while sliding, and the mark recruited others onto the same wall. The
+  antennae now veto a direction that is inside terrain — and, separately
+  and more importantly, veto the *home bearing* too, since a laden ant is
+  steered by the bearing and not by the choice function (§3.2, §3.4).
+  Four times the food delivered, and deaths from 126 a run to 0.5.
+- **The colony had no regulation of any kind.** It converted a share of
+  its larder into workers every minute regardless, so the fixed point of
+  its own growth rule was zero reserve — and a colony with no reserve
+  cannot absorb the jams and trail collapses this simulation produces
+  constantly. Brood now goes through one queen at a bounded rate into a
+  pipeline that takes time to emerge (§3.10).
+- **The population acquired an age structure**, and the renderer shades
+  it, because until the brood rules there was nothing to see.
+- **The bridge experiments acquired a protocol** — a fixed colony, of a
+  size the apparatus actually works at. Past about 900 ants the long arm
+  wins: crowding stops being noise and starts being the thing that
+  selects (§3.8).
+
+Three of the mechanisms built in this round ship **off**, with their
+numbers recorded: U-turns on a lost trail, forager expendability, and
+breeding from a per-worker reserve. The last of those measured *best* of
+anything tried and is off anyway, because it requires the colony to
+compute stock per living worker — a colony-wide aggregate, which is what
+this model refuses everywhere else.
+
 The lesson is the same one M2 was justified by, and it keeps holding: the
 renderer earns its early place because *the model's failures are shaped
 like pictures*. Every one of these was invisible to the aggregate
-statistics that were being printed at the time.
+statistics that were being printed at the time — and two of the round's
+best findings came from a human watching the window and saying what
+looked wrong, then the measurement agreeing.
+
+The measurements themselves live in
+[experiments.md](experiments.md), including the ones that decided against
+a change, and the four ways a measurement was got wrong before it was got
+right.
 
 **M3 — the ant model.** The vector ant, the tripod gait rig, VS
 articulation, LOD, antennae, payload, state tint. The one genuinely novel

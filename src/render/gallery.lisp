@@ -35,6 +35,30 @@ one obstacle across part of the route."
     (format t "~&  ~a~%" (namestring path))
     path))
 
+(defun gallery-bridge (kind name seed minutes)
+  "Render one bridge experiment after it has committed (§3.8).
+
+The apparatus and its protocol are the ones the acceptance rows use — a
+fixed colony of the size the experiment is calibrated for, and no death
+by old age — because a picture captioned with a published result has to
+have been produced by the run that result is asserted from.  Rendering it
+under different conditions would make the figure a decoration."
+  (let* ((b (ecase kind
+              (:binary (binary-bridge :seed seed))
+              (:double (double-bridge :seed seed))))
+         (w (bridge-world b))
+         (c (bridge-colony b)))
+    (let ((*brood-investment* 0.0f0)
+          (*max-age-ticks* 2000000000))
+      ;; the same two phases: let it commit, then measure a clean window
+      (bridge-run! b (* 1200 (floor minutes 2)))
+      (bridge-reset-counts! b)
+      (bridge-run! b (* 1200 (ceiling minutes 2))))
+    (gallery-shot w name)
+    (format t "~&  ~a: share ~{~,3f~^ / ~}, winner arm ~a, pop ~d~%"
+            name (bridge-share b) (bridge-winner b) (colony-population c))
+    b))
+
 (defun render-gallery ()
   "Render the README's images.  `make gallery`."
   (multiple-value-bind (w c) (gallery-world)
@@ -119,4 +143,31 @@ one obstacle across part of the route."
     (format t "~&  60 min: pop ~d, trail ~,0f, stock ~,0f~%"
             (colony-population c) (field-total (colony-field c))
             (colony-stock c))
+    ;; The two published experiments, as pictures.
+    ;;
+    ;; These are the figures the README's opening claim rests on, and
+    ;; they are rendered from the apparatus rather than drawn: the
+    ;; asymmetry visible in each one was produced by the run, and by the
+    ;; same code the acceptance rows assert on.
+    (gallery-bridge :binary "12-binary-bridge" 2 12)
+    ;; The hero: the double bridge committed to its short arm, framed
+    ;; wide.  Chosen for the top of the README because it is the one
+    ;; picture that is simultaneously pretty and *the result* — two
+    ;; routes offered, one taken, and nothing in the model that can
+    ;; measure a length.
+    ;; Framed to the whole apparatus, not cropped to the corridors: the
+    ;; picture has to show *two routes between the same two points*, so
+    ;; the nest and the source both have to be in it or the claim in the
+    ;; caption is not visible in the image.
+    (let ((b (gallery-bridge :double "13-double-bridge" 2 12)))
+      ;; Framed to the arena exactly rather than fitted to it: VIEW-FIT
+      ;; letterboxes whenever the frame is wider than the world, and the
+      ;; seam where the grid stops reads as a rendering fault in a picture
+      ;; that is the first thing anyone sees.  Span is the world's full
+      ;; width, and the height follows from the aspect and still contains
+      ;; both the nest and the source — which it must, because the caption
+      ;; claims two routes between the same two points.
+      (gallery-shot (bridge-world b) "14-hero"
+                    :width 1000 :height 740
+                    :cx 0.35f0 :cy 0.30f0 :span 0.70f0))
     (values)))
