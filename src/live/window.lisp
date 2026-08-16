@@ -86,6 +86,19 @@ otherwise silently swap the readout for a different individual.")
       ;; positions.
       ((#\q #\Q) (glfw:set-window-should-close))
       ((#\h #\H #\?) (setf *live-keyhelp* (not *live-keyhelp*)))
+      ;; Toggle whether ants resting in the nest take part in ant-ant
+      ;; collision (§3.11).  Live rather than at startup because the
+      ;; question it settles is a visual one: the change is defensible on
+      ;; modelling grounds — the nest disc is a door, and the real thing
+      ;; is a chamber system going down — and it costs about 14% of the
+      ;; food delivered for reasons no measurement has explained.  An
+      ;; unexplained cost of that size is as likely to be a bug as a
+      ;; trade-off, and the cheapest way to find out is to watch one
+      ;; colony both ways.
+      ((#\n #\N)
+       (setf *resting-ants-block* (not *resting-ants-block*))
+       (format t "~&resting ants ~:[pass through each other~;collide~]~%"
+               *resting-ants-block*))
       (t nil))))
 
 (glfw:def-key-callback live-key (window key scancode action mods)
@@ -180,6 +193,7 @@ that makes the state machine observable while it is being calibrated."
     ("DRAG"  "PAN")
     ("CLICK" "INSPECT")
     ("H"     "HIDE")
+    ("N"     "NEST")
     ("Q"     "QUIT"))
   "The key legend, in the order it is drawn.  Kept as data rather than a
 run of HUD-TEXT calls so the panel can size itself to its contents — the

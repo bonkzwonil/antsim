@@ -825,18 +825,69 @@ a scenario wants depends on whether the growth curve is the subject.
   and a liveness mask says which slots are alive, so growth is free: birth
   claims a slot from the free list, death returns it. This is exactly why
   the table was fixed-capacity to begin with.
-- **Birth rate** is a function of nest food stock: the colony converts
-  stored food into new workers at a rate proportional to what it has,
-  scaled by a configured brood efficiency, and clamped at capacity. A
-  colony that forages well grows; a colony that cannot feed itself
-  shrinks. That coupling is the whole point and it is one line of arithmetic.
+- **Birth rate** was a function of nest food stock: the colony converted a
+  fixed share of what it held into new workers each tick, clamped at
+  capacity. A colony that forages well grows; one that cannot feed itself
+  shrinks. That coupling is the whole point and it is one line of
+  arithmetic — and one line of arithmetic with no feedback term in it,
+  which is where the trouble was.
+
+  **A growth rule with no feedback has a fixed point, and this one's was
+  zero reserve.** Every surplus became mouths, the mouths consumed the
+  next surplus, and the colony climbed until its upkeep matched everything
+  its foragers could carry. Traced over forty minutes on the double
+  bridge: population 169 → 745, larder 358 → 0, both monotonic — with
+  delivery averaging 120 units a minute throughout. The colony was never
+  failing to fetch food. It was spending all of it on workers to fetch
+  more, so it held no buffer, and a colony with no buffer cannot absorb
+  the jams and trail collapses this simulation produces constantly. Every
+  "colony starves beside a full source" run traces back here.
+
+  Brood now comes out of the **surplus** over a reserve of larder per
+  living worker, measured in the same units as the foraging urgency of
+  §3.5 — so one quantity carries one meaning throughout: above the line
+  the colony breeds, below it the colony forages harder.
+
+  A reserve expressed as a *share of the stock* cannot do this, which is
+  worth stating because it is the obvious first answer. It scales away
+  with the thing it protects: keeping back half and breeding from a tenth
+  of the rest breeds a twentieth instead of a tenth and reaches the same
+  fixed point more slowly. Only a reserve measured against the number of
+  mouths has an equilibrium.
+- **One queen, and she is not infinitely fast.** Laying is bounded per
+  tick whatever the larder holds. Measured, this is the single most
+  valuable change in the model's history after the homing fix: **+24% food
+  delivered, a minimum larder of 307 against zero, and deaths from 23 a
+  run to 1.** A colony that can convert a windfall into workers in the
+  minute it arrives has no characteristic timescale, so it overshoots
+  every fluctuation and starves on the far side of it.
 - **Death** comes from energy reaching zero and from age, with a per-tick
   hazard that rises with age. Foragers die away from home; that is what
   foragers do.
-- **No brood stages** in M1 — no eggs, larvae, pupae, no development time,
-  no nurses. A single `stock → workers` rate is the sound simple
-  abstraction; brood stages are a refinement that adds a lag, and the lag
-  is the only thing they add until nursing exists to interact with it.
+- **Brood stages** — eggs laid into a pipeline that takes time to emerge,
+  and callow workers that do not forage until they have aged.
+
+  This section previously argued the opposite: that a single `stock →
+  workers` rate was the sound simple abstraction, and that development
+  time "adds a lag, and the lag is the only thing it adds until nursing
+  exists to interact with it." **Measured, that is wrong.** The lag alone
+  is worth +17% food delivered and takes the minimum larder from zero to
+  177, with no nursing anywhere in the model. The reasoning failed
+  because it treated a lag as a detail of the mechanism rather than as
+  what it is — a feedback term. A controller with no delay tracks its
+  input exactly and therefore has no reason to hold a reserve; give it a
+  delay and it must.
+
+  Maturity does something the other two cannot: it separates *emerging*
+  from *joining the foraging pool*, so a colony that has just bred hard
+  does not increase its foraging pressure at the same instant. That is
+  temporal polyethism, among the best-attested facts about ant societies,
+  and it is also why §3.5 can treat a forager as expendable — foraging is
+  the last job an ant holds.
+
+  Together the three give the population an **age structure**, which this
+  model has never had: laid, developing, callow, working. The renderer
+  shades it (§5.1).
 
 The visible consequence is that "400 ants" becomes where a scenario
 *starts*, never where it stays. How many ants a run ends with is a result.

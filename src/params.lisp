@@ -484,7 +484,7 @@ that emerges instantly makes the colony a controller with no lag, which
 is both unreal and — because it never builds a reserve — more fragile
 rather than less.")
 
-(defparameter *forager-maturity-ticks* 6000
+(defparameter *forager-maturity-ticks* 0
   "How old a worker must be before it will leave the nest, in motion
 ticks (§3.5, §3.10).  [cal, compressed]  6000 is five simulated minutes
 at 20 Hz; 0 restores the old behaviour, where an ant could be born and
@@ -536,7 +536,7 @@ proportional to the population instead of at nothing.  This rate governs
 how fast the colony climbs to that line; it cannot decide where the line
 is.")
 
-(defparameter *brood-reserve-ration* 1.0f0
+(defparameter *brood-reserve-ration* 0.0f0
   "How much larder the colony keeps back per living worker before it
 breeds, as a multiple of *forage-ration* (§3.10).  0 restores the old
 rule — breed from the whole larder — so the difference is measurable.
@@ -581,7 +581,7 @@ The nest entrance body is already exempt from collision for exactly this
 reason — making it solid would seal the colony in — so this is the same
 exemption applied to the same fiction, one level further in.")
 
-(defparameter *forager-expendability* 0.0f0
+(defparameter *forager-expendability* 1.0f0
   "How far the give-up threshold falls below the departure threshold when
 the larder is empty, as a fraction of it (§3.5).  1.0 keeps them equal,
 which is how this model behaved before; 0.0 means a forager from a

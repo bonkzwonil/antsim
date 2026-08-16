@@ -264,6 +264,43 @@ to mean one thing in a scenario file and another in an acceptance run."
                   (put "packet_spacing" '*trail-packet-spacing*)
                   (put "packet_radius" '*trail-packet-radius*)
                   (put "packet_falloff" '*trail-packet-falloff*))))))))
+    ;; The colony block: brood regulation and the nest fiction (§3.10,
+    ;; §3.11).  Kept here with the other overrides rather than on the
+    ;; colony object itself because these are *parameters* — they change
+    ;; how the model behaves, not what the scene contains, and a scenario
+    ;; that sets one is stating an experiment rather than a place.
+    (let ((cl (jget root "colony_rules" "")))
+      (unless (eq cl :missing)
+        (let ((cr (jobject cl "colony_rules")))
+          (check-keys cr '("queen_lay_rate" "brood_development_minutes"
+                           "brood_reserve_ration" "forager_maturity_ticks"
+                           "forager_expendability" "resting_ants_block")
+                      "colony_rules")
+          (flet ((put (key var)
+                   (let ((v (jget cr key "colony_rules")))
+                     (unless (eq v :missing)
+                       (push (cons var (jnumber v (jpath "colony_rules" key)))
+                             out))))
+                 ;; These two are declaimed FIXNUM, so a float from the
+                 ;; file would be a type error at the first use rather
+                 ;; than a complaint about the file.
+                 (put-int (key var)
+                   (let ((v (jget cr key "colony_rules")))
+                     (unless (eq v :missing)
+                       (push (cons var (jinteger v (jpath "colony_rules" key)))
+                             out))))
+                 (put-bool (key var)
+                   (let ((v (jget cr key "colony_rules")))
+                     (unless (eq v :missing)
+                       ;; jzon gives T / :FALSE for JSON booleans
+                       (push (cons var (and (not (eq v :false)) (not (null v))))
+                             out)))))
+            (put "queen_lay_rate" '*queen-lay-rate*)
+            (put-int "brood_development_minutes" '*brood-development-minutes*)
+            (put "brood_reserve_ration" '*brood-reserve-ration*)
+            (put-int "forager_maturity_ticks" '*forager-maturity-ticks*)
+            (put "forager_expendability" '*forager-expendability*)
+            (put-bool "resting_ants_block" '*resting-ants-block*)))))
     (nreverse out)))
 
 (defun parse-scenario (root &key source seed)

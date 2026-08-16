@@ -99,9 +99,131 @@ the nest entrance jamming (laden ants queued outside the unload radius
 never exceeded 16) and ants oscillating through the door (they were
 *outbound*, 553 of them, with one ant at the food).
 
-### Colony factor screen — running
+### Colony factor screen
 
-Six factors, each alone against the baseline, then all together.
+Six factors, each alone against the baseline, three seeds, 40 simulated
+minutes, averaged.
+
+| config | eaten | born | pop | min-stock | died |
+|---|---|---|---|---|---|
+| base | 3934 | 650 | 626 | **0.0** | 23 |
+| nest | 3552 | 584 | 555 | 0.0 | 28 |
+| spend | 3873 | 664 | 207 | 20.2 | 457 |
+| reserve | 4416 | 604 | 600 | 205.4 | 3 |
+| **queen** | **4881** | 618 | 617 | **307.0** | **1** |
+| develop | 4619 | **697** | **688** | 176.6 | 9 |
+| mature | 3981 | 670 | 666 | 58.0 | 4 |
+| all six | 4248 | 486 | 484 | 328.7 | 2 |
+
+Every brood factor breaks the zero-reserve lock *and* delivers more food.
+The single best change is the queen's bounded lay rate: +24% food, a
+minimum larder of 307 against nothing, and deaths from 23 to 1. Capping
+how fast a colony can convert a windfall into mouths turns out to be
+worth more than anything else tried.
+
+`all six` is worse than the best subsets because it carries the two
+factors that cost something, which is the argument for screening before
+combining.
+
+Two negatives:
+
+- **spend** — population 626 to 207 and deaths 23 to 457, with births
+  flat. The superorganism reasoning behind it is sound and the model
+  disagrees: it kills workers faster without producing more.
+- **nest** — a net 10% cost. This *reverses* an earlier reading of the
+  same change, and the earlier one was wrong because resting ants were
+  then exempt from terrain and walking through obstacles. It survives on
+  its modelling argument — the nest disc is a door, not a chamber system
+  — and not on its numbers, which is how it is presented.
+
+### Colony combinations
+
+Only the factors the screen moved, plus the two it showed costing
+something so their cost is measured *in combination* rather than assumed.
+
+| config | eaten | born | pop | min-stock | died |
+|---|---|---|---|---|---|
+| base | 3934 | 650 | 626 | 0.0 | 23 |
+| queen | 4881 | 618 | 617 | 307.0 | 1 |
+| queen+reserve | 4142 | 552 | 550 | 242.4 | 2 |
+| queen+develop | **5069** | 534 | 532 | **360.8** | 2 |
+| reserve+develop | 4922 | 637 | 635 | 328.4 | 2 |
+| queen+reserve+develop | 4587 | 533 | 530 | 325.9 | 3 |
+| +maturity | 4167 | 486 | 485 | 329.5 | 1 |
+| +maturity+nest | 4248 | 486 | 484 | 328.7 | 2 |
+| +maturity+spend | 4167 | 486 | 485 | 329.5 | 1 |
+
+The last row is **identical to the one above it in every column**.
+Forager expendability has become unreachable: once the colony holds a
+reserve, urgency never rises to where it fires. Fixing the cause did not
+merely make the symptomatic change unnecessary, it made it inert.
+
+Reserve and queen are two regulators of one overshoot, so stacking them
+over-damps — the colony grows more slowly and ends smaller without
+holding more.
+
+### Confirmation, five seeds — and a reversal
+
+| config | eaten | born | pop | min-stock | died |
+|---|---|---|---|---|---|
+| base | 4042 | 659 | 636 | 8.2 | 22 |
+| queen+develop | 4778 | 534 | 532 | 312.0 | 2 |
+| **reserve+develop** | **4929** | **639** | **638** | 323.8 | 2 |
+| queen+develop+nest | 4131 | 502 | 498 | 264.1 | 4 |
+| queen+develop+maturity | 4446 | 524 | 523 | 335.8 | 2 |
+
+Five seeds reverse the three-seed winner. `reserve+develop` scored 4922
+and 4929 across the two rounds; `queen+develop` swung 5069 → 4778. The
+3% gap that made queen+develop look best was seed noise, and acting on it
+would have shipped the wrong default and a wrong sentence in §3.10.
+
+**Rule earned here: a gap of a few percent on three seeds is not a
+result.** The 24% gap from the baseline was always safe to trust; the one
+between the leaders was not.
+
+**And the winner on numbers is not the one that shipped.** `reserve`
+requires the colony to compute stock per living worker and decide against
+it — a colony-wide aggregate, which is exactly what this model refuses
+everywhere else. §3.5 is explicit that foraging urgency is *the only*
+quantity read colony-wide, and that an ant learns it locally by asking for
+food and being given none; a second global reader in the brood rule spends
+that principle for 3%.
+
+A bounded lay rate and a development delay ask nobody to compute anything.
+One animal can lay only so fast, and an egg takes as long as it takes.
+The regulation falls out of two physical facts rather than out of a
+measurement the colony has no way to make — so `queen+develop` ships, at
+4778 against 4929, and the 3% is the price of not inventing a sense.
+
+Results decide between mechanisms that are equally defensible. They do
+not decide whether a mechanism is defensible.
+
+`nest` costs 14% and `maturity` 7%, both consistent across every round
+they appear in.
+
+### Calibrating the queen — and an error in how it was asked
+
+First attempt swept the lay rate on top of `reserve+develop`:
+
+| lay rate | eaten | born | pop | min-stock |
+|---|---|---|---|---|
+| 0 (off) | 4929 | 639 | 638 | 323.8 |
+| 12 | 4493 | 533 | 530 | 305.5 |
+| 25 | 4929 | 639 | 638 | 323.8 |
+| 50 | 4929 | 639 | 638 | 323.8 |
+| 100 | 4929 | 639 | 638 | 323.8 |
+
+Identical to unbounded at every rate above 25 — the cap never binds.
+Which is the right answer to the wrong question: `reserve` is not
+shipping, and with it present the reserve does the regulating while the
+cap is a formality that only shows up as a cost when set too low.
+
+In the shipping configuration the cap **is** the feedback term. The same
+number is being asked to do a completely different job, so it was swept
+again against `develop` alone.
+
+**A parameter calibrated in a configuration you are not shipping is not
+calibrated.**
 
 ## Mistakes worth not repeating
 

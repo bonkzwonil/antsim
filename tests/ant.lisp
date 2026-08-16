@@ -478,7 +478,15 @@ walking its whole workforce out of the door and straight back in.
 
 Whether to spend a forager is the colony's question and whether the
 forager survives is the forager's, and a superorganism does not weight
-them equally."
+them equally.
+
+The *mechanism* is what is tested here, bound on explicitly, because it
+ships **off**: measured, spending foragers took the population from 626
+to 207 and deaths from 23 to 457 with births flat, and once brood
+regulation (§3.10) gave the colony a reserve it became unreachable
+altogether — urgency never rises to where it fires. The invariant it
+rests on is tested at the default too, since that is the part that must
+hold however the parameter is set."
   (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 200))
          (rich (ant:add-colony w :nest-x 0.10f0 :nest-y 0.10f0
                                  :stock 400.0f0))
@@ -486,23 +494,36 @@ them equally."
                                  :stock 0.0f0)))
     (ant:world-seed-population! w rich 40)
     (ant:world-seed-population! w poor 40)
-    (dolist (c (list rich poor))
-      (is (<= (ant:colony-giveup-threshold c)
-              (ant:colony-energy-threshold c))
-          "give-up (~,3f) is above departure (~,3f): an ant that sets out ~
-at the margin turns round on the next tick"
-          (ant:colony-giveup-threshold c)
-          (ant:colony-energy-threshold c)))
-    (is (< (ant:colony-giveup-threshold poor)
-           (ant:colony-energy-threshold poor))
-        "a starving colony's foragers give up at the same bar they left ~
+    ;; The invariant, whatever the parameter says: an ant that sets out at
+    ;; the margin must not already qualify to turn back.
+    (dolist (setting (list ant:*forager-expendability* 1.0f0 0.5f0 0.0f0))
+      (let ((ant:*forager-expendability* setting))
+        (dolist (c (list rich poor))
+          (is (<= (ant:colony-giveup-threshold c)
+                  (ant:colony-energy-threshold c))
+              "at expendability ~,2f give-up (~,3f) is above departure (~,3f)"
+              setting
+              (ant:colony-giveup-threshold c)
+              (ant:colony-energy-threshold c)))))
+    ;; And the mechanism itself, turned on.
+    (let ((ant:*forager-expendability* 0.0f0))
+      (is (< (ant:colony-giveup-threshold poor)
+             (ant:colony-energy-threshold poor))
+          "a starving colony's foragers give up at the same bar they left ~
 on (~,3f); nothing is being spent"
-        (ant:colony-giveup-threshold poor))
-    (is (< (ant:colony-giveup-threshold poor)
-           (ant:colony-giveup-threshold rich))
-        "hunger did not lower the give-up bar: ~,3f against ~,3f"
-        (ant:colony-giveup-threshold poor)
-        (ant:colony-giveup-threshold rich))))
+          (ant:colony-giveup-threshold poor))
+      (is (< (ant:colony-giveup-threshold poor)
+             (ant:colony-giveup-threshold rich))
+          "hunger did not lower the give-up bar: ~,3f against ~,3f"
+          (ant:colony-giveup-threshold poor)
+          (ant:colony-giveup-threshold rich)))
+    ;; At the shipped default the two coincide, which is the old
+    ;; behaviour and is recorded here so that changing the default
+    ;; changes a test rather than silently changing the model.
+    (is (= (ant:colony-giveup-threshold poor)
+           (ant:colony-energy-threshold poor))
+        "expendability is no longer off by default; if that is intended, ~
+this assertion is the place to say so")))
 
 (test an-ant-in-the-field-cannot-read-the-larder
   "§3.5: how deep a forager digs into its reserve is learnt at the nest
@@ -515,8 +536,14 @@ it to have learnt anything about the larder is by asking for food while
 resting and being told what there was.
 
 Tested by moving the larder underneath an ant that is already out.  Its
-resolve must not budge."
-  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 64))
+resolve must not budge.
+
+Expendability is bound on so that there is a gap to observe at all: with
+it off — the shipped default — the give-up bar equals the departure bar
+and a stale reading would be indistinguishable from a fresh one.  What is
+being tested is the *carrying*, which is true either way."
+  (let* ((ant:*forager-expendability* 0.0f0)
+         (w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 64))
          (c (ant:add-colony w :nest-x 0.2f0 :nest-y 0.2f0 :stock 0.0f0))
          (a (ant:world-ants w)))
     (ant:world-seed-population! w c 8)
