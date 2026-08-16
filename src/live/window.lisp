@@ -217,11 +217,26 @@ that makes the state machine observable while it is being calibrated."
                 *live-selected-id* (aref (ants-id a) best))
           (setf *live-selected* nil)))))
 
-(defun ant-state-name (s)
-  (case s (0 "IN NEST") (1 "OUTBOUND") (2 "AT FOOD") (3 "RETURNING")
-        (t "DEAD")))
+(defun ant-state-name (s &optional (waited 0))
+  "The state's name, except that IN NEST is two different situations and
+the panel should not call them the same thing.
 
-(defun ant-state-rgb (s)
+An ant resting with a full tank is between trips.  An ant resting *under*
+the bar it needs to set out is not resting at all — it is waiting to be
+fed, and cannot work until it is.  Those look identical in the table and
+read identically on a map, which is precisely how a nest quietly filling
+with ants that cannot leave got mistaken for a nest full of ants
+declining to (§3.5).  So the panel names the second one."
+  (case s
+    (0 (if (plusp waited) "WAITING FOR FOOD" "IN NEST"))
+    (1 "OUTBOUND") (2 "AT FOOD") (3 "RETURNING")
+    (t "DEAD")))
+
+(defun ant-state-rgb (s &optional (waited 0))
+  (when (and (= s 0) (plusp waited))
+    ;; the same red the map uses for an ant that cannot set out, so the
+    ;; panel and the picture say the same thing about the same ant
+    (return-from ant-state-rgb (values 0.95f0 0.25f0 0.22f0)))
   (case s
     (1 (values 0.86f0 0.88f0 0.92f0))
     (2 (values 0.95f0 0.90f0 0.70f0))
@@ -345,9 +360,16 @@ most likely to be hunting for the ant they just clicked."
             (hud-quad h px py 4.0 ph r g bl 0.95))
           (hud-text h tx ty (format nil "ANT ~D" (aref (ants-id a) i))
                     :scale s)
-          (multiple-value-bind (r g bl) (ant-state-rgb st)
-            (hud-text h tx (+ ty line) (ant-state-name st)
-                      :scale s :r r :g g :b bl))
+          (let ((waited (aref (ants-waited a) i)))
+            (multiple-value-bind (r g bl) (ant-state-rgb st waited)
+              (hud-text h tx (+ ty line) (ant-state-name st waited)
+                        :scale s :r r :g g :b bl))
+            ;; and for how long, in seconds rather than ticks: the panel
+            ;; is read by a person, and the rest of it is in seconds
+            (when (plusp waited)
+              (hud-text h (+ tx 148) (+ ty line)
+                        (format nil "~,1Fs" (* waited *motion-dt*))
+                        :scale s :r 0.95 :g 0.25 :b 0.22)))
           ;; energy and crop as bars: both are bounded, and a bar reads
           ;; faster than a number for anything bounded
           (hud-text h tx (+ ty (* 2 line)) "ENERGY" :scale s

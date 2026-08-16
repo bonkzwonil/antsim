@@ -82,7 +82,7 @@
    #:ants-id #:ants-body #:ants-colony #:ants-state #:ants-heading
    #:ants-crop #:ants-load-quality #:ants-energy #:ants-age
    #:ants-hvx #:ants-hvy #:ants-px #:ants-py #:ants-count-state
-   #:ants-trailed #:ants-exit #:ants-smelled #:ants-cast #:ants-resolve
+   #:ants-trailed #:ants-exit #:ants-smelled #:ants-cast #:ants-resolve #:ants-waited
    #:path-integration-step!
    #:spawn-ant #:kill-ant
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+
