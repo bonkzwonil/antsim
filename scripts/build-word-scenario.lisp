@@ -1,9 +1,10 @@
 ;;;; scripts/build-word-scenario.lisp — spell a word in obstacles.
 ;;;;
-;;;; Emits two scenarios, the same picture at two sizes:
+;;;; Emits three scenarios from one font:
 ;;;;
-;;;;   scenarios/antsim.json        1.00 x 0.72 m — the desk-sized one
-;;;;   scenarios/antsim-large.json  5.00 x 3.60 m — the same, five times over
+;;;;   scenarios/antsim.json           1.00 x 0.72 m — the desk-sized one
+;;;;   scenarios/antsim-overload.json  the same arena, far too many ants
+;;;;   scenarios/antsim-large.json     5.00 x 3.60 m — five times over
 ;;;;
 ;;;; The project's own name rendered as solid terrain in the 3x5 bitmap font
 ;;;; the HUD draws with, with the nest below it and food above, so every
@@ -96,7 +97,7 @@ down, which is a fine way to notice you did it."
 
 (defun emit (path &key (scale 1.0f0) (start 400) (stock 900.0f0)
                        (capacity 6000) (world-capacity 8000)
-                       (food-amount 60000.0f0) (note ""))
+                       (food-amount 60000.0f0) (seed 20260816) note)
   (with-open-file (s path :direction :output :if-exists :supersede)
     (let* ((rects (word-rects *word* scale))
            (world-w (* *world-w* scale))
@@ -107,8 +108,10 @@ down, which is a fine way to notice you did it."
       (format s "  \"_what3\": \"the word and the food above it, so every trail has to\",~%")
       (format s "  \"_what4\": \"thread the lettering. Generated from the font itself by\",~%")
       (format s "  \"_what5\": \"scripts/build-word-scenario.lisp -- do not hand-edit.\",~%")
-      (unless (string= note "")
-        (format s "  \"_scale\": ~s,~%" note))
+      (when note
+        (loop for line in note
+              for i from 1
+              do (format s "  \"_why~d\": \"~a\",~%" i line)))
       (format s "~%")
       (format s "  \"world\": { \"width\": ~,3f, \"height\": ~,3f, \"capacity\": ~d },~%~%"
               world-w world-h world-capacity)
@@ -162,11 +165,26 @@ down, which is a fine way to notice you did it."
         (format s "    \"energy_drain_walking\": ~,8f,~%" (/ 1.2f-4 scale))
         (format s "    \"energy_drain_resting\": ~,8f~%" (/ 2.0f-5 scale))
         (format s "  },~%~%"))
-      (format s "  \"seed\": 20260816,~%  \"duration_s\": 3600~%}~%")
+      (format s "  \"seed\": ~d,~%  \"duration_s\": 3600~%}~%" seed)
       (format t "~&~a: ~d rects, ~d letters, ~,2f x ~,2f m~%"
               path (length rects) (length *word*) world-w world-h))))
 
 (emit #p"scenarios/antsim.json")
+
+;; The same arena, overloaded: a colony far too large for the income its
+;; geometry allows.  This is the regime in which how the nest *distributes*
+;; scarce food decides whether it lives, and it is the regime every earlier
+;; measurement of that question missed -- those runs started small and grew
+;; healthily, so the feeding rule could not matter either way.
+(emit #p"scenarios/antsim-overload.json"
+      :start 1400 :stock 40.0 :seed 4035347294
+      :note (list "1400 ants on 40 units of stock: metabolism exceeds income"
+                  "from the first tick, so the only question left is how the"
+                  "nest shares what little arrives.  At nest_meals_per_tick 0"
+                  "-- the old communal sip -- it stabilises, then from about"
+                  "T2800 oscillates at stock 0 with an exhausted nest, and"
+                  "never recovers.  With meals it does.  Reported from the"
+                  "window; the seed is the one it was seen on."))
 
 ;;; Five times over.  Population and stock are *not* multiplied by the area
 ;;; (x25) — see the header: what a colony has to pay for is the length of
@@ -180,4 +198,9 @@ down, which is a fine way to notice you did it."
       :capacity 12000
       :world-capacity 20000
       :food-amount 150000.0f0
-      :note "Five times the small antsim.json in every length. The ant is not scaled -- see the script header.")
+      :note (list "Five times the small antsim.json in every length."
+                  "The ant is NOT scaled -- see the script header. A journey"
+                  "five times longer costs five times the energy out of the"
+                  "same fixed tank, which is why this file restates the"
+                  "forager's range in its `ant` block. At the default it"
+                  "starves: 8 units eaten in 30 minutes, 2000 ants to 26."))

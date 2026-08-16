@@ -18,7 +18,13 @@ There are three ways to change one:
 **Anything not marked ⬥ can only be changed in source or by rebinding it in
 Lisp.** That is a real gap rather than a design: the JSON surface grew when
 a particular experiment needed it, so it covers the choice function, the
-trail field and the colony rules, and nothing else.
+trail field, the colony rules and the ant itself, and nothing else.
+
+The last of those is the one that is *structural* rather than incidental.
+Arena size is the thing a scene can change that the ant's own calibration
+cannot absorb — a forager's tank was sized against a 1 m arena — so a
+scenario measured in metres has to be able to restate its range or its
+colony starves in sight of the food. See the `ant` block below.
 
 ## Why so many are off
 
@@ -90,8 +96,8 @@ cannot change a result — which is the point of listing them apart.
 
 | parameter | default | off | what it does |
 |---|---|---|---|
-| `*forager-eats-at-source*` | **t** | nil | an ant standing on food eats. Modest, consistent: ~5–9% fewer deaths in both arms |
-| `*nest-meals-per-tick*` | 2 | 0 = the old trough | hungriest resting ants fed to satiety, bounded per tick. **Modelling, not a fix** — the collapse it addressed was pre-queen and no longer occurs |
+| `*forager-eats-at-source*` | **t** | nil | an ant standing on food eats. Separable from meals and doing a different job: meals decide how many ants can leave at all, this decides whether one that leaves survives the trip. Without it an overloaded colony does not even stabilise (1063 → 378) |
+| `*nest-meals-per-tick*` | 2 | 0 = the old trough | hungriest resting ants fed to satiety, bounded per tick. **Load-bearing under population pressure**: on an overloaded colony the trough locks at 644 ants with 83 able to work and never recovers, meals climb back to 1146 with 807 able (`scenarios/antsim-overload.json`) |
 | `*nest-feed-rate*` | 0.002 | | the old communal sip, used only when meals are off |
 | ⬥ `*forager-expendability*` | **1.0 = off** | | 0.0 means a forager from an empty nest never turns back. Measured harmful: population 626 → 207, deaths 23 → 457, births flat |
 | ⬥ `*resting-ants-block*` | **nil** | t | whether resting ants take part in ant-ant collision. Left switchable on purpose: passing runs smoother, colliding looks better, and nothing in the model ranks those |

@@ -6,7 +6,12 @@
   "_what3": "the word and the food above it, so every trail has to",
   "_what4": "thread the lettering. Generated from the font itself by",
   "_what5": "scripts/build-word-scenario.lisp -- do not hand-edit.",
-  "_scale": "Five times the small antsim.json in every length. The ant is not scaled -- see the script header.",
+  "_why1": "Five times the small antsim.json in every length.",
+  "_why2": "The ant is NOT scaled -- see the script header. A journey",
+  "_why3": "five times longer costs five times the energy out of the",
+  "_why4": "same fixed tank, which is why this file restates the",
+  "_why5": "forager's range in its `ant` block. At the default it",
+  "_why6": "starves: 8 units eaten in 30 minutes, 2000 ants to 26.",
 
   "world": { "width": 5.000, "height": 3.600, "capacity": 20000 },
 

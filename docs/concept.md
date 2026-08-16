@@ -1863,6 +1863,42 @@ The measurements themselves live in
 a change, and the four ways a measurement was got wrong before it was got
 right.
 
+**M2.2 — the colony's own metabolism.** Another interleaved one, and like
+M2.1 its content is corrections that only became visible from the window.
+Where M2.1 was about how an ant *moves*, this is about how a colony feeds
+itself.
+
+- **The nest fed everybody a little instead of somebody enough.** Every
+  resting ant drew a fixed sip from a common store each tick, so one
+  forager's load was spread over five hundred ant-ticks — with several
+  hundred ants in the nest, roughly one tick each. Nobody was fuelled by
+  it, and since an empty larder lowers the departure bar, ants holding
+  almost nothing still qualified to leave and exhausted. `COLONY-FEED!`
+  now serves the hungriest resting ants to satiety, a bounded few per
+  tick. That is the recipient half of the trophallaxis §3.9 defers, and
+  it is the half that decides whether the colony lives.
+- **A forager standing on food did not eat.** Energy was only ever
+  restored at the nest, so a forager crossed the whole return trip on the
+  reserve it set out with, and a long route killed runners no matter how
+  rich the source they were standing on — while carrying a full crop,
+  which is precisely the absurdity the separate crop and energy fields
+  exist to *describe* rather than to cause.
+- **`WAITING FOR FOOD` is now a phase.** `IN NEST` was covering two
+  unrelated situations: an ant resting between trips, and an ant that
+  cannot leave until somebody feeds it. Conflating them is what made a
+  nest quietly filling with spent ants read as a nest full of ants
+  declining to go out.
+- **A scenario that reproduces the failure**,
+  `scenarios/antsim-overload.json` — 1400 ants on 40 units of stock,
+  where metabolism exceeds income from the first tick and the only
+  question left is how the nest shares what little arrives.
+
+That last item is the milestone's real lesson. Every earlier measurement
+of the feeding rule started with a small colony that simply grew
+healthily, so the rule could not matter either way and dutifully measured
+as nothing. **A fix cannot be defended without a reproduction of the
+failure it fixes**, and the reproduction is worth more than the fix.
+
 **M3 — the ant model, and how ants meet.** The vector ant, the tripod
 gait rig, VS articulation, LOD, antennae, payload, state tint. The one
 genuinely novel piece of engineering in the project, and it gets its own
