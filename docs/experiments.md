@@ -361,6 +361,121 @@ for ranking "delivers more food" against "reads right on screen". A
 parameter whose honest answer is *it depends what you are looking at*
 should stay visible rather than be buried in a default.
 
+### The trough: why colonies starved with food coming in
+
+Reported from the window, and the code agrees exactly. Every resting ant
+drew `*nest-feed-rate*` = 0.002 energy per tick from a common store, so
+one forager's load — about a unit — was spread over five hundred
+ant-ticks. With several hundred ants in the nest that is roughly *one
+tick each*: everybody gets a hair, nobody gets a meal. Meanwhile an empty
+larder has pushed the departure bar down to about 0.11, so an ant holding
+almost nothing still qualifies to leave — walks out, and exhausts.
+
+Watched, that is not an equilibrium but a **ratchet**. Each delivery
+lifts the whole nest over the bar at the same instant, the whole nest
+departs, and a fraction of it does not come back. The reproducer is seed
+397767704 after T8000: the nest wakes up for a split second and goes red
+again. The endpoint on the word scenario is **extinction at T10000 with
+both sources untouched and full**, and a ring of corpses centred on the
+nest door.
+
+The food was never the constraint. The distribution rule was.
+
+The fix is trophallaxis's recipient half, which can be had without the
+pairwise coupling §3.9 defers:
+
+- **fully restored** — a unit of stock buys one forager that finishes a
+  trip, or five hundred that get halfway; only the first is worth
+  anything and the second is what makes corpses;
+- **hungriest first** — which forced feeding out of the ant loop into its
+  own pass, because that loop walks the table in index order and cannot
+  know who is hungriest until it has seen everyone, so feeding inside it
+  can only ever be first-come, and the order is the *array's layout*;
+- **bounded per tick** — a nest serves a few ants at a time, not all of
+  them at once.
+
+One trap on the way: requiring the larder to cover an ant's whole deficit
+before serving it inverts the queue. An ant at 0.99 wants 0.01 and is
+always affordable; a starving one wants 0.9 and never is. The nearly-full
+skim the stock and the ants that need it are served last. A served ant
+takes its deficit *or whatever is there*, whichever is less.
+
+### Symmetry breaking, off its own test rig
+
+The word scenario also shows the binary bridge's phenomenon — traffic
+committing to one of two near-equal routes, and occasionally flipping —
+in a geometry where nobody arranged for it. The routes through the
+lettering are equal by accident, not by construction.
+
+That is worth more than it looks. A purpose-built apparatus always
+carries the worry that it *manufactures* the effect it demonstrates:
+Deneubourg's bridge is two deliberately equal arms with everything else
+controlled, so a sceptic can ask whether symmetry breaking is a property
+of colonies or of bridges. The same dynamic arriving unbidden in a
+scenario built as a joke is the answer an acceptance row cannot give.
+
+Also a reminder that the acceptance rows test the *claim*, not the
+mechanism's reach. Nothing in §3.8 would have caught it if trail
+commitment only worked inside the apparatus.
+
+### Pockets kill ants, and the word scenario is the reproducer
+
+`scenarios/antsim.json` spells the project's name in obstacles, and the
+concave letters turned out to be a better diagnostic than anything built
+on purpose: **ants pile up and die inside the pockets** — the notch in
+the N, the inside of the S.
+
+The mechanism is §3.4's stated limitation, made visible, plus a step that
+was not recorded:
+
+1. The home vector points *through* the letter, so a laden ant walks into
+   the pocket.
+2. The antennal veto lets it slide along the inside wall, but leaving a
+   concavity means walking **away** from the nest, which no bearing can
+   express however wide the scan.
+3. It dies there.
+
+**A fourth step was claimed here and was wrong.** The write-up said the
+corpses narrow the pocket and trap the next ant — a positive feedback.
+They do not: a corpse is a *movable* body, ants shove it, and watching a
+long run shows the corpse piles ending up well clear of the pockets
+rather than filling them. The mistake was reading a grey mass in a
+picture as evidence of a mechanism instead of checking
+`body-kind-movable-p`, which answers it in one line.
+
+What actually holds the ants there is the pair the window shows: the
+bearing is followed too eagerly, and once an ant is against a wall it
+adheres to it. Both are things this model added on purpose — the home
+vector is total for a laden ant, and the antennal scan makes it follow an
+edge rather than press into it — so the trap is built out of two fixes,
+each of which is right on its own.
+
+**The model already names the missing behaviour.** §3.2 lists *search
+spirals* — an ant homing on a vector that is not getting it there
+switches to an expanding systematic search — as real, documented, and
+deferred. That is exactly the escape a pocket needs: not a better
+bearing, but a rule for noticing the bearing has stopped working. The
+same counter would bound the other half, since an ant that has been
+following an edge for a long time without its bearing coming clear is an
+ant whose edge-following has become the problem rather than the fix.
+
+Both halves want the same piece of state: *how long have I been failing
+to make progress toward home*. That is one number per ant, and it is the
+cheapest thing on this list.
+
+**The other candidate fix has an expired measurement against it.** Letting the
+trail override the straight-line bearing was measured at −29% (262 units
+delivered against 367) and the negative was kept in the source. That run
+predates both the antennal veto and brood regulation — a model in which
+ants died on walls constantly and the colony grew to zero reserve. The
+nest A/B reversed sign for exactly this reason once the model changed
+underneath it, so this one is owed a re-run before it is treated as
+settled.
+
+Worth stating as a rule, since it has now bitten twice: **a negative
+result has a shelf life.** It is a fact about the model it was measured
+on, and this model has changed twice since.
+
 ## On the list, not yet measured
 
 - **Lane formation at pinch points.** Two streams meeting head-on at a
@@ -377,6 +492,13 @@ should stay visible rather than be buried in a default.
   parameter here. The unmeasured half is the *aftermath* — how long a road
   outlives a dead source — since evaporation is the colony's only way to
   forget.
+- **Search spirals** (§3.2, §3.9) — deferred since M1 as a refinement,
+  and the word scenario shows it is not one. An ant whose bearing has
+  stopped making progress has no rule for noticing, so it follows the
+  bearing and the wall into a concavity and stays. One counter per ant —
+  ticks without progress toward home — serves both the spiral and a bound
+  on edge-following.
+
 - **Encounter-based recruitment** (§3.4) — descoped, and noteworthy.
   The fast channel the model lacks: a laden ant meeting an outbound one
   carries *current* information, where pheromone is an average over the

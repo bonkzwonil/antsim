@@ -453,10 +453,16 @@ switch into and no switching logic to get wrong (§3.5)."
                          (aref bys bi) (+ y (* (/ ndy nd) step))))))
              ;; The nest is a resource, not a waypoint (§3.5): a resting
              ;; ant is fed from the colony's stock.
-             (let ((want (min (- 1.0f0 energy) *nest-feed-rate*)))
-               (when (and (> want 0.0f0) (> (colony-stock c) want))
-                 (decf (colony-stock c) want)
-                 (incf (aref (ants-energy a) i) want)))
+             ;; The old communal sip, kept only as the off-position of
+             ;; *nest-meals-per-tick*.  Meals are served by COLONY-FEED!,
+             ;; which cannot run here: this loop visits ants in table
+             ;; order and cannot know which one is hungriest until it has
+             ;; seen them all.
+             (when (<= *nest-meals-per-tick* 0)
+               (let ((want (min (- 1.0f0 energy) *nest-feed-rate*)))
+                 (when (and (> want 0.0f0) (> (colony-stock c) want))
+                   (decf (colony-stock c) want)
+                   (incf (aref (ants-energy a) i) want))))
              ;; Whether to set out, and the bar for doing so, both move
              ;; with how hungry the colony is (COLONY-FORAGE-URGENCY).  A
              ;; nest with a full larder trickles foragers out; one with an
@@ -526,6 +532,14 @@ switch into and no switching logic to get wrong (§3.5)."
                                     (food-amount f))))
                     (incf (aref (ants-crop a) i) take)
                     (decf (food-amount f) take)
+                    ;; and it eats.  The crop is the colony's; this is
+                    ;; the ant's own, and an ant standing on food is not
+                    ;; hungry.  Not charged to the source: a forager's
+                    ;; gut is negligible against the crop it is filling
+                    ;; from the same pile, and the arithmetic would be
+                    ;; noise dressed as rigour.
+                    (when *forager-eats-at-source*
+                      (setf (aref (ants-energy a) i) 1.0f0))
                     (setf (aref (ants-load-quality a) i) (food-quality f))
                     (when (or (>= (aref (ants-crop a) i) 0.999f0)
                               (food-empty-p f))
@@ -673,7 +687,9 @@ switch into and no switching logic to get wrong (§3.5)."
                       ;; memory — the path walked out, not the trail field
                       ;; — which is §3.4's landmark system and is not M1.
                       (urge (if returning
-                                1.0f0
+                                ;; Total, unless a trail is allowed to
+                                ;; argue with it (§3.4).
+                                (- 1.0f0 (* *trail-homing-suppression* smell))
                                 (* *homing-weight-low-energy*
                                    (max 0.0f0
                                         (/ (- ethr
@@ -873,6 +889,67 @@ leak."
           (decf (aref (ants-hvy a) i) (* my (+ 1.0f0 ex)))))))
   (values))
 
+(defun colony-feed! (w)
+  "Serve meals from each colony's stock: the hungriest resting ants
+first, each restored as far as the larder allows (§3.5).
+
+Its own pass, and it has to be one.  The ant loop walks the table in
+index order and cannot know which ant is hungriest until it has seen them
+all, so feeding inside it can only ever be first-come — and since the
+order is the array's layout, that means the low-numbered ants eat for
+ever.
+
+*nest-meals-per-tick* is both the bound on the work and the model.  A
+nest serves a few ants at a time, not all of them at once, and that is
+the whole difference between a colony that fields foragers and one that
+fields hundreds of ants too weak to finish a trip.
+
+O(meals x ants) with meals a small constant, which at the default is
+about a thousand array reads against a tick that already does collision
+resolution and three-point sensing for every ant.  Not the bottleneck,
+and measured before it is optimised.
+
+If it ever *is* the bottleneck, the structure to reach for is a bucket
+priority queue rather than a sort: ants indexed by energy band, feeding
+drawn from the lowest non-empty band.  It fits this problem unusually
+well because energy only falls while an ant rests and jumps to full when
+it is served, so an ant moves monotonically downward through the bands
+and entries can be invalidated lazily instead of removed — push on
+entry, and on pop discard any entry whose ant no longer belongs to that
+band.
+
+Two constraints it would have to respect, both from SS4.2 and SS4.4.  The
+bands must hold ant indices in ascending order rather than live in a
+hash table, because which of several equally hungry ants gets served has
+to be decided the same way on every run or bit-exactness goes; and they
+must be preallocated with the ant table, because an allocation every
+tick would cost more than the scan it replaces."
+  (declare (type world w))
+  (let ((a (world-ants w))
+        (meals *nest-meals-per-tick*))
+    (declare (type fixnum meals))
+    (when (plusp meals)
+      (dolist (c (world-colonies w))
+        (dotimes (k meals)
+          (declare (ignorable k))
+          (when (<= (colony-stock c) 0.0f0) (return))
+          (let ((best -1) (beste 2.0f0)
+                (cid (colony-id c)))
+            (declare (type fixnum best) (type f32 beste))
+            (dotimes (i (ants-n a))
+              (when (and (ant-live-p a i)
+                         (= (aref (ants-colony a) i) cid)
+                         (= (aref (ants-state a) i) +ant-in-nest+)
+                         (< (aref (ants-energy a) i) beste))
+                (setf best i beste (aref (ants-energy a) i))))
+            ;; nobody resting, or nobody hungry: the larder keeps
+            (when (or (minusp best) (>= beste 1.0f0)) (return))
+            (let ((want (min (- 1.0f0 beste) (colony-stock c))))
+              (declare (type f32 want))
+              (decf (colony-stock c) want)
+              (incf (aref (ants-energy a) best) want)))))))
+  (values))
+
 (defun colony-step! (w c)
   "One colony tick: upkeep, births, deaths by starvation of the stock.
 
@@ -958,6 +1035,9 @@ stops producing brood, and decays."
       (setf (aref (bodies-r b) (food-body f)) (food-current-radius f))))
   (bodies-resolve! (world-bodies w) (world-obstacles w))
   (path-integration-step! w)
+  ;; after the drain, so a meal is measured against what the ant has
+  ;; actually spent this tick
+  (colony-feed! w)
   (incf (world-tick w))
   (when (zerop (mod (world-tick w) (world-pheromone-every w)))
     (dolist (c (world-colonies w))

@@ -81,10 +81,21 @@ down, which is a fine way to notice you did it."
       ;; Two sources rather than one, left and right of centre, so the
       ;; colony threads the word in two places and the picture has a trail
       ;; through more of the lettering than a single road would give.
+      ;;
+      ;; 60 000 units each, and the ceiling is arithmetic rather than
+      ;; taste.  FOOD-AMOUNT is a single float and an ant withdraws
+      ;; *crop-fill-rate* = 0.02 per tick, so once a source holds more
+      ;; than about 0.02 * 2^24 ~ 170 000 units the withdrawal is smaller
+      ;; than the float's own resolution at that magnitude and rounds
+      ;; away entirely.  The first version of this file used 900 000: the
+      ;; sources were silently infinite, and every measurement of food
+      ;; eaten on this scenario read exactly zero while the colony was
+      ;; visibly thriving on it.  A source too large to deplete is also
+      ;; too large to account for.
       (format s "  \"food\": [~%")
-      (format s "    { \"x\": ~,3f, \"y\": ~,3f, \"r\": 0.030, \"amount\": 900000.0, \"quality\": 1.0 },~%"
+      (format s "    { \"x\": ~,3f, \"y\": ~,3f, \"r\": 0.030, \"amount\": 60000.0, \"quality\": 1.0 },~%"
               (* 0.28f0 *world-w*) (- *world-h* 0.06f0))
-      (format s "    { \"x\": ~,3f, \"y\": ~,3f, \"r\": 0.030, \"amount\": 900000.0, \"quality\": 1.0 }~%"
+      (format s "    { \"x\": ~,3f, \"y\": ~,3f, \"r\": 0.030, \"amount\": 60000.0, \"quality\": 1.0 }~%"
               (* 0.72f0 *world-w*) (- *world-h* 0.06f0))
       (format s "  ],~%~%")
       (format s "  \"seed\": 20260816,~%  \"duration_s\": 3600~%}~%")

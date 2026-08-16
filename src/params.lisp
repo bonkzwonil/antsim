@@ -636,6 +636,30 @@ spending it is strictly greater.  Foraging is the last caste an ant
 belongs to and the risk it accepts rises with the colony's need — the
 model just makes that a number.")
 
+(defparameter *trail-homing-suppression* 0.0f0
+  "How much a strong trail under a laden ant's antennae overrides its
+straight-line bearing home, 0..1 (§3.4).  0 is the bearing always
+winning, which is how this behaves.
+
+The home vector cannot route.  It points *through* whatever stands
+between the ant and the nest, so an ant that walks into a concavity
+cannot leave it: getting out means walking away from the nest, and a
+bearing has no way to say that.  Watched on the word scenario, that is
+ants piling into the pockets of the letters and dying there — and their
+corpses are blocking bodies that nothing removes, so the pocket narrows
+and takes the next one more easily.
+
+Following the road home instead is the obvious answer and it was measured
+at **-29%** — 262 units of food delivered against 367 — and left out.
+That measurement predates the antennal veto (§3.2) and brood regulation
+(§3.10) both: it was taken on a model where ants died on walls constantly
+and the colony ran at zero reserve.  The nest-occupancy A/B reversed sign
+for exactly that reason once the model changed underneath it.
+
+So this exists again to be re-measured rather than because it is
+believed.  A negative result is a fact about the model it was measured
+on, and this one is two rounds out of date.")
+
 (defparameter *nest-exit-scatter* 0.5f0
   "Spread, radians, on the bearing an ant sets off from the nest (§3.4).
 
@@ -695,6 +719,63 @@ which an ant will set out, and the energy at which an outbound ant gives
 up.  Lowering only the first would send a starving ant out of the nest
 and turn it round on the very next tick, which is a deadlock wearing a
 different hat.")
+
+(defparameter *forager-eats-at-source* t
+  "Whether a forager feeds *itself* at a source before carrying anything
+home (§3.5).  NIL restores the old behaviour, in which energy was only
+ever restored at the nest.
+
+The crop is the **social** stomach: it is what the ant carries for the
+colony, and this model already keeps it separate from personal energy —
+an ant can starve carrying a full crop, which is real and is why the two
+are different fields.  What was missing is the other half of that
+distinction.  A forager standing *on* a food source is standing on food,
+and it eats.
+
+Leaving it out meant a forager made the entire return trip on whatever
+reserve it set out with, so a long route killed runners in transit no
+matter how rich the source at the end of it — and the ants that died
+were carrying a full crop, which is exactly the absurdity the separate
+fields exist to describe rather than to cause.
+
+Not charged to the source.  A forager's gut is negligible against the
+crop it is filling from the same pile, so the bookkeeping would be noise
+dressed as rigour — and the consequence that matters is unaffected: a
+colony's *reach* stops being set by whatever reserve an ant happened to
+set out with.")
+
+(defparameter *nest-meals-per-tick* 2
+  "How many resting ants the colony feeds to satiety each motion tick,
+hungriest first (§3.5).  0 falls back to the old behaviour, in which
+every resting ant sipped *nest-feed-rate* from a common store.
+
+The sip is why a colony starves with food coming in.  Every resting ant
+draws 0.002 a tick, so one forager's load — about a unit — is spread over
+five hundred ant-ticks; with several hundred ants in the nest that is
+roughly one tick each and nobody is fuelled by it.  An empty larder has
+meanwhile pushed the departure bar down to about 0.11, so an ant holding
+almost nothing still qualifies to leave, walks out, and exhausts.
+
+Watched, that is a ratchet rather than an equilibrium.  Each delivery
+lifts the whole nest a hair over the bar at once, the whole nest departs,
+and a fraction of it does not come back.  Repeat until the colony is
+gone: measured on the word scenario, extinction at T10000 with both
+sources untouched and full, and a ring of corpses centred on the nest
+door.  The food was never the constraint.  The distribution rule was.
+
+Two properties matter and neither is optional:
+
+  - **Fully restored.** A unit of stock buys one forager that completes a
+    trip, or five hundred that get halfway.  Only the first is worth
+    anything, and the second is what makes corpses.
+  - **Hungriest first.** Serving in table order would feed the
+    low-numbered ants for ever, which is an artefact of the array's
+    layout.  Serving whoever is nearest empty is fair by construction and
+    needs no ordering to be maintained.
+
+This is trophallaxis without the pairwise coupling §3.9 defers — the
+recipient side of it, which is the side that matters for whether the
+colony lives.")
 
 (defparameter *nest-feed-rate* 0.002f0
   "Energy per motion tick a resting ant draws from the colony's stock.
@@ -827,6 +908,7 @@ relaxation from chasing floating-point noise forever.")
                *brood-per-stock* *nest-upkeep*
                *pi-noise* *homing-weight-low-energy* *nest-arrival-radius*
                *nest-exit-scatter* *obstacle-avoidance*
+               *trail-homing-suppression*
                *forager-expendability* *brood-reserve-ration*
                *queen-lay-rate*
                *brood-investment*
@@ -835,5 +917,6 @@ relaxation from chasing floating-point noise forever.")
                *relax-slop*))
 
 (declaim (type fixnum *max-age-ticks* *relax-iterations* *homing-scan-steps*
+               *nest-meals-per-tick*
                *uturn-ticks* *brood-development-minutes*
                *forager-maturity-ticks* *age-shade-ticks*))

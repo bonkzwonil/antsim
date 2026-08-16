@@ -662,10 +662,39 @@ risk-taking rising with colony need is documented across many species, and
 foraging is the last caste an ant belongs to rather than a stage it
 survives. What the model contributes is that it is also the arithmetic.
 
-Note what an ant is *not* given here. No ant reads the stock. Urgency is
-the one colony-wide quantity in the model, and an individual learns it only
-locally and honestly — by asking for food while it rests and being given
-none.
+Note what an ant is *not* given here. No ant reads the stock **in the
+field**. Urgency is the one colony-wide quantity in the model, and a
+forager carries the number it learnt at the door rather than consulting
+it as it walks.
+
+**That is still one compromise short, and the compromise is visible in
+this section's own prose.** The sentence above used to claim an ant
+learns the larder's state "by asking for food while it rests and being
+given none" — which is the right model and is not what the code did. The
+departure rate and the departure bar both read `colony-forage-urgency`
+directly, so an ant in the nest *was* reading stock-per-worker; the
+justification was that it is standing on the nest, which is a weaker
+argument than the one the docstring was making.
+
+The honest version is the one the prose describes: an ant that is hungry,
+resting, and **not served** for some number of ticks has learnt that the
+larder is thin, and that is the only thing it needs to know. It grows
+keener to leave. An ant that is served promptly learns the opposite. No
+aggregate is read by anybody, and the colony's state reaches the
+individual through the one channel a real ant has — whether it got fed.
+
+Two things follow that are worth stating:
+
+- **It only became implementable with meals.** Under the communal sip
+  every resting ant received `*nest-feed-rate*` every tick, so "was I
+  fed?" was always *yes* and carried no information at all. Bounded
+  hungriest-first service is what turns being unfed into an event.
+- **An energetic ant should not be waiting in the nest to begin with.**
+  Whether to set out is a question about the ant's own reserve and its
+  own recent experience of being fed — not about a stock level. A full
+  ant with no evidence of plenty has no reason to sit still.
+
+Designed, not yet built; the per-ant state it needs is one counter.
 
 The urgency term is the one place the model reads the stock as a
 colony-wide quantity, and it is worth being precise about why that is not

@@ -33,6 +33,7 @@
    #:*pi-noise* #:*homing-weight-low-energy* #:*nest-arrival-radius*
    #:*nest-exit-scatter* #:*obstacle-avoidance* #:*homing-scan-steps*
    #:*forager-expendability* #:*resting-ants-block*
+   #:*trail-homing-suppression*
    #:*brood-reserve-ration* #:*brood-investment*
    #:*queen-lay-rate* #:*brood-development-minutes*
    #:*forager-maturity-ticks* #:*age-shade-ticks*
@@ -60,7 +61,8 @@
    #:body-kind-blocking-p #:body-kind-movable-p
    #:+body-ant+ #:+body-corpse+ #:+body-food+ #:+body-nest+
    #:+body-resting+ #:+body-free+
-   #:*leave-probability* #:*nest-feed-rate*
+   #:*leave-probability* #:*nest-feed-rate* #:*nest-meals-per-tick*
+   #:*forager-eats-at-source*
    ;; world/scene — what a scenario names (§6)
    #:food #:food-x #:food-y #:food-r #:food-amount #:food-initial
    #:food-density #:food-density-for
@@ -100,7 +102,7 @@
    #:bridge-share #:bridge-winner
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
-   #:world-step! #:world-run! #:colony-step! #:world-seed-population!
+   #:world-step! #:world-run! #:colony-step! #:colony-feed! #:world-seed-population!
    ;; render/png (antsim/render)
    #:write-png #:crc32 #:adler32
    ;; render/egl
