@@ -20,6 +20,22 @@
       } }
   ],
 
+  "_protocol": "Deneubourg and Goss ran a fixed colony over the",
+  "_protocol2": "apparatus. The question is whether trail-laying alone",
+  "_protocol3": "selects an arm, so anything else that could do the",
+  "_protocol4": "selecting is held still. A colony that breeds during the",
+  "_protocol5": "run floods the arms, and crowding then decides for",
+  "_protocol6": "reasons that have nothing to do with length: measured over",
+  "_protocol7": "six seeds, growth left the short arm's share running from",
+  "_protocol8": "0.59 to 0.97. The short arm still won every replicate, but",
+  "_protocol9": "reading a shortest-path result off that spread is reading a",
+  "_protocol10": "growth curve with an experiment stapled to it.",
+
+  "colony_rules": {
+    "brood_investment": 0.0,
+    "max_age_ticks": 2000000000
+  },
+
   "colonies": [
     { "id": "home",
       "nest": { "x": 0.32, "y": 0.10, "r": 0.02 },

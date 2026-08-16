@@ -274,7 +274,8 @@ to mean one thing in a scenario file and another in an acceptance run."
         (let ((cr (jobject cl "colony_rules")))
           (check-keys cr '("queen_lay_rate" "brood_development_minutes"
                            "brood_reserve_ration" "forager_maturity_ticks"
-                           "forager_expendability" "resting_ants_block")
+                           "forager_expendability" "resting_ants_block"
+                           "brood_investment" "max_age_ticks")
                       "colony_rules")
           (flet ((put (key var)
                    (let ((v (jget cr key "colony_rules")))
@@ -295,10 +296,12 @@ to mean one thing in a scenario file and another in an acceptance run."
                        ;; jzon gives T / :FALSE for JSON booleans
                        (push (cons var (and (not (eq v :false)) (not (null v))))
                              out)))))
+            (put "brood_investment" '*brood-investment*)
             (put "queen_lay_rate" '*queen-lay-rate*)
             (put-int "brood_development_minutes" '*brood-development-minutes*)
             (put "brood_reserve_ration" '*brood-reserve-ration*)
             (put-int "forager_maturity_ticks" '*forager-maturity-ticks*)
+            (put-int "max_age_ticks" '*max-age-ticks*)
             (put "forager_expendability" '*forager-expendability*)
             (put-bool "resting_ants_block" '*resting-ants-block*)))))
     (nreverse out)))
@@ -315,7 +318,7 @@ and the starting population is placed with it."
                        (setf (slot-value c 'source) source)))))
     (let ((r (jobject root "")))
       (check-keys r '("name" "world" "seed" "duration_s" "choice" "pheromones"
-                      "colonies" "food" "obstacles")
+                      "colonies" "food" "obstacles" "colony_rules")
                   "")
       (let* ((name (jopt r "name" "" #'jstring "scenario"))
              (seed (or seed (jopt r "seed" "" #'jinteger +default-seed+)))

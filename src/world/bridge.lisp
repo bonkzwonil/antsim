@@ -273,7 +273,31 @@ report, and an arm carries its foragers out as well as home."
     (values)))
 
 (defun bridge-run! (b ticks)
-  "Run the apparatus, tallying every tick."
+  "Run the apparatus, tallying every tick — with the colony's population
+held fixed, which is part of the protocol and not an optimisation.
+
+Deneubourg and Goss ran a *fixed* colony over the apparatus.  The
+question the experiment asks is whether trail-laying alone selects the
+shorter arm, so anything else that could do the selecting has to be held
+still, and a colony that breeds during the run is exactly such a thing:
+more ants means more crowding in the arms, and crowding decides which
+arm gets used for reasons that have nothing to do with its length.
+
+Measured, that confound is large and it is a *variance* effect rather
+than a bias.  Over six seeds the short arm's share with a growing colony
+ran 0.590 0.970 0.971 0.719 0.968 0.684 — mean 0.817, and the short arm
+won every replicate, but the spread is enormous.  Flooding sometimes
+locks the short arm in hard and sometimes jams it.  Reading a
+shortest-path result off that is reading a colony's growth curve with a
+path-selection experiment stapled to it.
+
+**The protocol is not applied here.**  It is stated by the caller — the
+shipped scenarios say it in their `colony_rules` block, and the
+acceptance rows bind it explicitly — because an experiment whose
+controls are hidden inside its run loop is an experiment nobody can
+check.  Binding it here would also silently make a JSON bridge and a
+Lisp bridge two different experiments, which is precisely the divergence
+the shipped-bridges test exists to prevent."
   (declare (type bridge b) (type fixnum ticks))
   (dotimes (i ticks)
     (world-step! (bridge-world b))

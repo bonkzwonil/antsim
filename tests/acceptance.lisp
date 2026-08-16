@@ -35,6 +35,31 @@
   "Replicates per row.  Small, because each is a several-minute colony
 run; large enough that 'varies with seed' has something to vary over.")
 
+(defmacro %with-bridge-protocol (&body body)
+  "The experimental controls, stated where they can be read.
+
+Deneubourg and Goss ran a **fixed** colony over the apparatus, and the
+reason matters: the experiment asks whether trail-laying alone selects an
+arm, so every other thing that could do the selecting has to be held
+still.  A colony that breeds during the run is exactly such a thing —
+more ants means more crowding in the arms, and crowding decides for
+reasons that have nothing to do with length.
+
+Measured over six seeds, letting it grow left the short arm's share
+running 0.590 0.970 0.971 0.719 0.968 0.684.  The short arm still won
+every replicate and the *mean* was better than with the old colony
+rules (0.817 against 0.790) — so growth does not bias the result, it
+inflates its variance, which is worse for a test and no better for a
+claim.
+
+The shipped bridge scenarios carry the same block under `colony_rules`,
+so the JSON and Lisp forms of these experiments remain the same
+experiment.  Deliberately not applied inside BRIDGE-RUN!: controls
+hidden in a run loop are controls nobody can check."
+  `(let ((ant:*brood-investment* 0.0f0)      ; a fixed colony
+         (ant:*max-age-ticks* 2000000000))   ; nobody dies of old age
+     ,@body))
+
 (defun %run-bridge (b)
   "Let the colony commit, then measure a clean window.
 
@@ -42,9 +67,10 @@ Two phases because the interesting quantity is the *committed* traffic
 split.  Counting from tick zero would fold in the exploratory phase,
 where the split genuinely is near even, and would understate a real
 commitment rather than overstate it."
-  (ant:bridge-run! b (* 1200 6))
-  (ant:bridge-reset-counts! b)
-  (ant:bridge-run! b (* 1200 6))
+  (%with-bridge-protocol
+    (ant:bridge-run! b (* 1200 6))
+    (ant:bridge-reset-counts! b)
+    (ant:bridge-run! b (* 1200 6)))
   b)
 
 (test symmetry-breaking-on-a-binary-bridge
