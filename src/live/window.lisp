@@ -37,6 +37,25 @@ starting point moved.")
 guessable, and a window that does not say what it responds to is a window
 most people will only pan around in.")
 (defvar *live-hud* nil)
+
+(defparameter *live-food-amount* 200.0f0
+  "How much food the A key drops (§5.5).
+
+200 rather than the 2500 a scenario source carries, because the point of
+dropping one by hand is to watch a colony *find* it and strip it inside a
+minute or two — a source that outlives your attention teaches nothing
+that the scenario file does not already show.  Small enough to vanish,
+large enough that the trail to it has time to form.")
+
+(defparameter *live-food-radius* 0.015f0
+  "The radius of a dropped source at its starting amount, metres.
+
+Fixes the density, and the density is what makes the drawn disc mean
+something absolute: the source shrinks as it is eaten, so the circle is
+the food rather than a fraction of what it started as (§5.1).  Also the
+collision radius — a smaller pile has a shorter edge, so fewer ants can
+reach it at once, which is the queueing at a dwindling source you can
+watch happen.")
 (defvar *live-selected* nil
   "Slot of the inspected ant, or NIL.  Held with its id so the panel can
 tell 'the ant you clicked' from 'whatever now occupies that slot' — slots
@@ -95,6 +114,9 @@ otherwise silently swap the readout for a different individual.")
       ;; unexplained cost of that size is as likely to be a bug as a
       ;; trade-off, and the cheapest way to find out is to watch one
       ;; colony both ways.
+      ((#\a #\A)
+       (destructuring-bind (cx cy) (glfw:get-cursor-position)
+         (live-drop-food (float cx 1.0f0) (float cy 1.0f0))))
       ((#\n #\N)
        (setf *resting-ants-block* (not *resting-ants-block*))
        (format t "~&resting ants ~:[pass through each other~;collide~]~%"
@@ -152,6 +174,27 @@ otherwise silently swap the readout for a different individual.")
   (setf *live-last-x* (float x 1.0f0)
         *live-last-y* (float y 1.0f0)))
 
+(defun live-drop-food (px py)
+  "Put a food source where the cursor is (§5.5).
+
+Nothing about this reaches into the colony: a source is a fact about the
+*world*, and the ants have to find it the same way they find any other —
+by walking into it.  No ant is told it appeared, no trail is seeded, and
+the arrival of a fresh source is therefore a real test of whether search
+still works once a colony has committed to a road somewhere else."
+  (when (and *live-world* *live-view*)
+    (multiple-value-bind (wx wy) (view-screen->world *live-view* px py)
+      ;; Outside the arena is a miss rather than an error: the view can be
+      ;; zoomed out past the world's edge, and a source placed there would
+      ;; sit where no ant can reach and quietly look like a bug.
+      (if (and (<= 0.0f0 wx (world-width *live-world*))
+               (<= 0.0f0 wy (world-height *live-world*)))
+          (let ((f (add-food *live-world* wx wy
+                             *live-food-radius* *live-food-amount*)))
+            (format t "~&food: ~,0f units at (~,3f ~,3f)~%"
+                    (food-amount f) wx wy))
+          (format t "~&food: (~,3f ~,3f) is outside the arena~%" wx wy)))))
+
 (defun live-inspect (px py)
   "Report the ant nearest the click.  §5.5 lists inspection under the
 window's controls; the rich version is M5's, and this is the cheap one
@@ -192,6 +235,7 @@ that makes the state machine observable while it is being calibrated."
     ("WHEEL" "ZOOM")
     ("DRAG"  "PAN")
     ("CLICK" "INSPECT")
+    ("A"     "ADD FOOD")
     ("H"     "HIDE")
     ("N"     "NEST")
     ("Q"     "QUIT"))
@@ -375,9 +419,12 @@ Controls:
   wheel        zoom, anchored at the cursor
   right-drag   pan
   left-click   inspect the ant under the pointer
+  a            drop a food source at the cursor
+  n            resting ants: collide with each other, or pass through
   space        pause
   + / -        time compression, halving and doubling
   home         frame the whole world
+  h / ?        show or hide the key legend
   q / escape   quit
 
 Returns the world, so a session can keep poking at it afterwards."
