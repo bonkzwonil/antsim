@@ -425,15 +425,32 @@ T10000. So none of the four arms entered the regime the fix was designed
 for, and this is not a test of the hypothesis; it is a test of a healthy
 colony, where unsurprisingly the feeding rule does not matter.
 
-Open, and the honest state: the trough mechanism is demonstrably present
-in the code — one forager's load really is spread over five hundred
-ant-ticks — and there is no measurement showing it *matters*. Those are
-different claims and today has separated them twice before (U-turns
-worked and did not pay; expendability worked and did not pay).
+**Resolved: the disease was cured before the cure was built.** The
+collapse the meal fix was designed for was a *pre-queen* phenomenon.
+Bounding the lay rate and giving brood a development delay (§3.10)
+removed the unbounded growth that produced the zero-reserve ratchet, and
+pinning the bridge population removed it there too. Every run above is
+post-queen, so none of them could have shown it. Reproducing the
+oscillation now would mean checking out a commit from before those fixes.
 
-What would settle it is a reproduction that actually collapses. Until
-then `*nest-meals-per-tick*` is a mechanism with a switch and no evidence,
-which is a worse position than a measured negative.
+That changes what the meal rule *is*. It is not a fix — there is nothing
+left for it to fix — it is better modelling, and it ships on that basis
+rather than on a number:
+
+- A communal trough that every resting ant sips from simultaneously is
+  not a defensible account of trophallaxis, which is a pairwise transfer
+  to satiety. Nothing about the individual service discipline requires a
+  colony-wide read, so unlike the per-worker brood reserve there is no
+  principle arguing against it.
+- Measured, it costs nothing that matters: deaths unchanged (985 → 983
+  with eating-at-source on), able-count variance slightly higher.
+
+Kept on those terms, with the numbers recorded so nobody mistakes it for
+a performance change. The general lesson is worth more than the rule: a
+mechanism can be *right* and its motivating symptom can already be gone,
+and the measurement that would have caught the symptom will then show
+nothing at all. Check that the failure still reproduces before building
+against it.
 
 ### Symmetry breaking, off its own test rig
 
