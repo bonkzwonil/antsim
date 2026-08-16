@@ -776,19 +776,25 @@ Two properties matter and neither is optional:
 This is trophallaxis without the pairwise coupling §3.9 defers — the
 recipient side of it.
 
-**It ships as modelling rather than as a fix, and the distinction is
-recorded because the measurement is otherwise puzzling.** The collapse
-described above was a *pre-queen* phenomenon: bounding the lay rate and
-delaying brood emergence (§3.10) removed the unbounded growth that drove
-the ratchet, so by the time this was built the failure no longer
-occurred. Measured against the current model it changes nothing — deaths
-985 against 983 — because there is nothing left for it to change.
+**Measured, in the regime it exists for.**  On a colony that is *not*
+income-constrained this changes nothing, and four early measurements duly
+said so — a nest with food to spare does not care how it shares it.  On
+one that is, it is the whole difference.  1400 ants on 40 units of stock
+(`scenarios/antsim-overload.json`), run to T7200:
 
-A trough that every resting ant sips from at once is still not a
-defensible account of trophallaxis, and individual service needs no
-colony-wide read, so nothing argues against it either. But it is not
-load-bearing, and a future reader deserves to know that rather than
-inferring a benefit from its existence.")
+    trough   population locks at 644 after 929 deaths, stock pinned at
+             zero from T2400 onward, 83 ants able to work.  It does not
+             die and it never recovers.
+    meals    dips to 851, climbs back to 1146, holds a larder throughout,
+             807 able at the worst point.
+
+Ten times the able foragers at the low point, which is the number the
+colony's future actually depends on.
+
+Brood regulation (§3.10) stops a colony *growing into* that state, which
+is why it is hard to reach by accident now.  It does nothing for a colony
+that starts there — so the failure was never cured, only made harder to
+provoke.")
 
 (defparameter *nest-feed-rate* 0.002f0
   "Energy per motion tick a resting ant draws from the colony's stock.

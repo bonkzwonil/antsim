@@ -400,57 +400,54 @@ always affordable; a starving one wants 0.9 and never is. The nearly-full
 skim the stock and the ants that need it are served last. A served ant
 takes its deficit *or whatever is there*, whichever is less.
 
-### The meal fix does not (yet) show a benefit
+### The meal fix, measured in the regime it exists for
 
-The 2x2, word scenario, seed 397767704, sampled minutes 130-150:
+**First attempt measured nothing, because it measured the wrong regime.**
+Four configurations on a colony that started small and grew healthily came
+back identical — 1057 ants thriving even with fully-old behaviour. A
+colony whose income comfortably covers its metabolism does not care how
+the nest shares food, so the rule could not matter and dutifully did not.
 
-| eat at source | meals | able mean | able sd | pop | died |
-|---|---|---|---|---|---|
-| no | 0 | 942.3 | 25.2 | 1057 | 1027 |
-| yes | 0 | 979.8 | 29.6 | 1068 | **985** |
-| no | 2 | 985.0 | 51.1 | 1006 | 1078 |
-| yes | 2 | 1006.5 | 41.2 | 1062 | **983** |
+The reproducer, supplied from the window, is the same arena **overloaded**:
+1400 ants on 40 units of stock, so metabolism exceeds income from the
+first tick and the only question left is how the nest shares what little
+arrives. It ships as `scenarios/antsim-overload.json` with its seed.
 
-**Meals increase the pulse rather than damping it.** Able-count standard
-deviation goes 25.2 → 51.1 without eating-at-source and 29.6 → 41.2 with
-it — the opposite of the prediction. Deaths do not improve.
+Trajectory to T7200, `*forager-eats-at-source*` on:
 
-**Eating at the source helps modestly and consistently**: deaths down
-about 5–9% in both arms, same direction each time.
+| | trough (meals 0) | meals 2 |
+|---|---|---|
+| T1200 | 944, stock 64.7 | 1026, stock 102.7 |
+| T2400 | 699, stock **0.0** | 856, stock 233.6 |
+| T3600 | 647, stock **0.0** | 955, stock 242.9 |
+| T4800 | 644, stock **0.0** | 1072, stock 190.9 |
+| T6000 | 644, stock **0.0** | 1144, stock 102.2 |
+| T7200 | 644, stock **0.0** | 1146, stock 50.4 |
+| able at worst | **83** | **807** |
+| died | 929 | 1227 |
 
-**And the extinction was not reproduced at all.** The fully-old
-configuration — no meals, no eating at source — has 1057 ants alive and
-thriving at minute 150, where the reported live run was extinct by
-T10000. So none of the four arms entered the regime the fix was designed
-for, and this is not a test of the hypothesis; it is a test of a healthy
-colony, where unsurprisingly the feeding rule does not matter.
+The trough loses 929 ants — over half — and then **locks**: population flat
+at 644, stock pinned at zero from T2400 onward, 83 ants able to work. It
+does not die, and it never recovers either. Meals dip to 851 and climb
+back to 1146, holding a real larder throughout.
 
-**Resolved: the disease was cured before the cure was built.** The
-collapse the meal fix was designed for was a *pre-queen* phenomenon.
-Bounding the lay rate and giving brood a development delay (§3.10)
-removed the unbounded growth that produced the zero-reserve ratchet, and
-pinning the bridge population removed it there too. Every run above is
-post-queen, so none of them could have shown it. Reproducing the
-oscillation now would mean checking out a commit from before those fixes.
+Ten times as many able foragers at the worst point is the number that
+matters, because it is the one the colony's future depends on.
 
-That changes what the meal rule *is*. It is not a fix — there is nothing
-left for it to fix — it is better modelling, and it ships on that basis
-rather than on a number:
+Eating at the source is separable and also real. Without it the trough
+does not even stabilise — 1063 → 840 → 513 → 443 → 420 → 378, stock zero
+throughout, 27 able at worst. The two do different jobs: meals decide how
+many ants can leave at all, eating at the source decides whether one that
+leaves survives the trip.
 
-- A communal trough that every resting ant sips from simultaneously is
-  not a defensible account of trophallaxis, which is a pairwise transfer
-  to satiety. Nothing about the individual service discipline requires a
-  colony-wide read, so unlike the per-worker brood reserve there is no
-  principle arguing against it.
-- Measured, it costs nothing that matters: deaths unchanged (985 → 983
-  with eating-at-source on), able-count variance slightly higher.
-
-Kept on those terms, with the numbers recorded so nobody mistakes it for
-a performance change. The general lesson is worth more than the rule: a
-mechanism can be *right* and its motivating symptom can already be gone,
-and the measurement that would have caught the symptom will then show
-nothing at all. Check that the failure still reproduces before building
-against it.
+**The correction this forced.** An earlier entry here concluded the meal
+rule was "modelling, not a fix" — that the collapse it addressed was a
+pre-queen phenomenon already cured. That was wrong, and wrong for a
+reason worth keeping: the failure had not been cured, it had merely been
+made *harder to reach*. Brood regulation stops a colony growing into the
+overloaded state on its own; it does nothing for a colony that starts
+there. Absence of a failure under one starting condition is not absence
+of the failure.
 
 ### Symmetry breaking, off its own test rig
 
@@ -592,6 +589,12 @@ on, and this model has changed twice since.
   is specific and easy to repeat — a default was changed, and then
   forgotten to be part of the comparison. Sweep every switch that moved,
   or sweep the cross.
+- **Concluding "no effect" from the wrong regime.** The feeding rule
+  measured as nothing four times, on colonies whose income comfortably
+  covered their metabolism — where it *cannot* matter. In the regime it
+  exists for it is the difference between 83 able foragers and 807. Ask
+  what conditions make the mechanism binding, and measure there; a null
+  from a healthy system says nothing about a sick one.
 - **A control arm that passes for the wrong reason.** The wall test's
   disabled case started passing because resting ants had stopped
   colliding with terrain and were walking through the obstacle. Assert the
