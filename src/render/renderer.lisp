@@ -29,7 +29,21 @@
   (body-capacity 0 :type fixnum)
   (poly-vao 0 :type unsigned-byte)
   (poly-vbo 0 :type unsigned-byte)
-  (poly-capacity 0 :type fixnum))
+  (poly-capacity 0 :type fixnum)
+  ;; The articulated ant of §5.2.  One static mesh, one instance buffer,
+  ;; and a second persistent map for the same reason as the first: eight
+  ;; floats per ant per frame and no GL call in the loop.
+  (ant-program 0 :type unsigned-byte)
+  (ant-mesh nil :type (or null ant-mesh))
+  (ant-vao 0 :type unsigned-byte)
+  (ant-vbo 0 :type unsigned-byte)
+  (ant-ebo 0 :type unsigned-byte)
+  (ant-ssbo 0 :type unsigned-byte)
+  (ant-map (cffi:null-pointer) :type cffi:foreign-pointer))
+
+(defconstant +ant-instance-floats+ 8
+  "Two vec4s: (x y heading phase) and (radius state load flick).  §5.2's
+per-instance record, and std430 wants the vec4 alignment anyway.")
 
 (defun make-renderer (&key (body-capacity 8192) (poly-capacity 4096)
                            field-width field-height)
@@ -43,6 +57,9 @@ field grid."
                                         *poly-fragment-glsl*)
             :body-program (link-program *body-vertex-glsl*
                                         *body-fragment-glsl*)
+            :ant-program (link-program *ant-vertex-glsl*
+                                       *ant-fragment-glsl*)
+            :ant-mesh (build-ant-mesh)
             :empty-vao (gl:gen-vertex-array)
             :field-w field-width :field-h field-height
             :field-scratch (mkf32 (* field-width field-height))
@@ -87,6 +104,49 @@ field grid."
       (gl:vertex-attrib-pointer 0 2 :float nil 0 (cffi:null-pointer))
       (gl:bind-vertex-array 0)
       (setf (renderer-poly-vao r) vao (renderer-poly-vbo r) vbo))
+    ;; the ant mesh — static, uploaded once, never touched again
+    (let* ((m (renderer-ant-mesh r))
+           (vao (gl:gen-vertex-array))
+           (vbo (gl:gen-buffer))
+           (ebo (gl:gen-buffer))
+           (stride (* +ant-vertex-floats+ 4)))
+      (gl:bind-vertex-array vao)
+      (gl:bind-buffer :array-buffer vbo)
+      (let ((v (ant-mesh-verts m)))
+        (cffi:with-foreign-object (buf :float (length v))
+          (dotimes (i (length v))
+            (setf (cffi:mem-aref buf :float i) (aref v i)))
+          (%gl:buffer-data :array-buffer (* (length v) 4) buf :static-draw)))
+      (gl:bind-buffer :element-array-buffer ebo)
+      (let ((ix (ant-mesh-index m)))
+        (cffi:with-foreign-object (buf :unsigned-int (length ix))
+          (dotimes (i (length ix))
+            (setf (cffi:mem-aref buf :unsigned-int i) (aref ix i)))
+          (%gl:buffer-data :element-array-buffer (* (length ix) 4) buf
+                           :static-draw)))
+      (loop for (loc size offset) in '((0 2 0) (1 2 8) (2 1 16) (3 1 20))
+            do (gl:enable-vertex-attrib-array loc)
+               (gl:vertex-attrib-pointer loc size :float nil stride
+                                         (cffi:make-pointer offset)))
+      (gl:bind-vertex-array 0)
+      (setf (renderer-ant-vao r) vao
+            (renderer-ant-vbo r) vbo
+            (renderer-ant-ebo r) ebo))
+    ;; ant instance buffer, same persistent map as the body one
+    (let ((buf (gl:gen-buffer))
+          (bytes (* body-capacity +ant-instance-floats+ 4)))
+      (gl:bind-buffer :shader-storage-buffer buf)
+      (%gl:buffer-storage :shader-storage-buffer bytes (cffi:null-pointer)
+                          (logior +map-write-bit+ +map-persistent-bit+
+                                  +map-coherent-bit+))
+      (let ((ptr (%gl:map-buffer-range :shader-storage-buffer 0 bytes
+                                       (logior +map-write-bit+
+                                               +map-persistent-bit+
+                                               +map-coherent-bit+))))
+        (when (cffi:null-pointer-p ptr)
+          (error "Failed to persistently map the ant buffer"))
+        (setf (renderer-ant-ssbo r) buf
+              (renderer-ant-map r) ptr)))
     r))
 
 (defun destroy-renderer (r)
@@ -94,9 +154,13 @@ field grid."
   (gl:delete-program (renderer-field-program r))
   (gl:delete-program (renderer-poly-program r))
   (gl:delete-program (renderer-body-program r))
-  (gl:delete-vertex-arrays (list (renderer-empty-vao r) (renderer-poly-vao r)))
+  (gl:delete-program (renderer-ant-program r))
+  (gl:delete-vertex-arrays (list (renderer-empty-vao r) (renderer-poly-vao r)
+                                 (renderer-ant-vao r)))
   (gl:delete-textures (list (renderer-field-tex r)))
-  (gl:delete-buffers (list (renderer-body-ssbo r) (renderer-poly-vbo r)))
+  (gl:delete-buffers (list (renderer-body-ssbo r) (renderer-poly-vbo r)
+                           (renderer-ant-vbo r) (renderer-ant-ebo r)
+                           (renderer-ant-ssbo r)))
   (values))
 
 ;;; --------------------------------------------------------------------
@@ -117,13 +181,68 @@ field grid."
                             :red :float buf)))
   (values))
 
-(defun upload-bodies (r w)
+(defun ant-display-state (a i c)
+  "What this ant is saying, as the single float both ant shaders read
+(§5.1, §5.3).  Zero is reserved for a corpse.
+
+Spent outranks every behavioural state, because it overrides them in
+fact: an ant below the energy it needs to set out is not going to,
+whatever it is nominally doing.  Without this the end of a colony is
+invisible — the nest fills up with ants drawn in ordinary resting grey,
+and a watcher sees them \"deciding\" to stay home rather than being out of
+fuel.  It was mistaken for exactly that."
+  (declare (type ants a) (type fixnum i))
+  (let ((s (aref (ants-state a) i)))
+    (cond ((and c (< (aref (ants-energy a) i) (colony-energy-threshold c)))
+           0.4f0)
+          ((= s +ant-returning+) 0.3f0)
+          ((= s +ant-at-food+) 0.2f0)
+          ;; Nothing more urgent to report, so this one carries its age
+          ;; instead (§5.1).  0.5 is newly emerged, 0.9 fully mature; the
+          ;; behavioural states above keep their own colours because those
+          ;; are what the picture is for.
+          (t (+ 0.5f0
+                (* 0.4f0
+                   (min 1.0f0
+                        (/ (float (aref (ants-age a) i) 1.0f0)
+                           (float (max 1 *age-shade-ticks*) 1.0f0)))))))))
+
+(defun ant-display-flick (a i)
+  "How recently this ant put its gaster down: 1 at the moment of a
+deposit, gone a few millimetres later (§3.3, §5.2).
+
+Read off the distance since the last packet rather than recorded as an
+event, because that distance *is* the record — the deposit rule fires
+when it crosses the packet spacing and resets it to zero, so a small
+value can only mean a packet has just gone into the ground.  Nothing new
+has to be stored, and the drawing cannot disagree with the mechanism
+about when a deposit happened."
+  (declare (type ants a) (type fixnum i))
+  (if (and (= (aref (ants-state a) i) +ant-returning+)
+           (> (aref (ants-crop a) i) 0.0f0)
+           (>= (aref (ants-load-quality a) i) *trail-quality-threshold*))
+      ;; Clamped before the EXP rather than after.  An ant that has just
+      ;; filled its crop is carrying a distance accumulated over its whole
+      ;; outbound leg, which is metres rather than millimetres, and the
+      ;; answer is the same 0 either way — but only one of the two ways
+      ;; gets there without depending on how the float traps are set.
+      (exp (- (min 60.0f0
+                   (/ (aref (ants-trailed a) i)
+                      (* 0.18f0 *trail-packet-spacing*)))))
+      0.0f0))
+
+(defun upload-bodies (r w &key skip-ants)
   "Write every body into the mapped instance buffer.  Returns the count.
 
 An ant's behavioural state is packed into the fractional part of the kind
 so the fragment shader can tint by it without a second buffer — laden
 returners read warm, which is what makes a working trail legible as
-*traffic* rather than as a stripe."
+*traffic* rather than as a stripe.
+
+With SKIP-ANTS, ants and corpses are left out because the vector program
+of §5.2 is drawing them instead.  Everything else on the screen — sources,
+nests, arrival rings, stock gauges — comes through here at every zoom, so
+there stays exactly one place that knows what a food source looks like."
   (declare (type renderer r) (type world w))
   (let* ((b (world-bodies w))
          (a (world-ants w))
@@ -139,39 +258,16 @@ returners read warm, which is what makes a working trail legible as
       (dotimes (i (ants-n a))
         (when (ant-live-p a i)
           (let* ((bi (aref (ants-body a) i))
-                 (s (aref (ants-state a) i))
                  (ci (aref (ants-colony a) i))
                  (c (when (< ci (length colonies)) (aref colonies ci))))
             (when (< bi (length state-of))
-              (setf (aref state-of bi)
-                    ;; Spent outranks every behavioural state, because it
-                    ;; overrides them in fact: an ant below the energy it
-                    ;; needs to set out is not going to, whatever it is
-                    ;; nominally doing.  Without this the end of a colony
-                    ;; is invisible — the nest fills up with ants drawn in
-                    ;; ordinary resting grey, and a watcher sees them
-                    ;; "deciding" to stay home rather than being out of
-                    ;; fuel.  It was mistaken for exactly that.
-                    (cond ((and c (< (aref (ants-energy a) i)
-                                     (colony-energy-threshold c)))
-                           0.4f0)
-                          ((= s +ant-returning+) 0.3f0)
-                          ((= s +ant-at-food+) 0.2f0)
-                          ;; Nothing more urgent to report, so this one
-                          ;; carries its age instead (§5.1).  0.5 is
-                          ;; newly emerged, 0.9 fully mature; the
-                          ;; behavioural states above keep their own
-                          ;; colours because those are what the picture
-                          ;; is for.
-                          (t (+ 0.5f0
-                                (* 0.4f0
-                                   (min 1.0f0
-                                        (/ (float (aref (ants-age a) i) 1.0f0)
-                                           (float (max 1 *age-shade-ticks*)
-                                                  1.0f0)))))))))))))
+              (setf (aref state-of bi) (ant-display-state a i c)))))))
     (dotimes (i n)
       (let ((k (aref kinds i)))
-        (unless (= k +body-free+)
+        (unless (or (= k +body-free+)
+                    (and skip-ants
+                         (or (= k +body-ant+) (= k +body-resting+)
+                             (= k +body-corpse+))))
           (let ((o (* count 4)))
             (setf (cffi:mem-aref ptr :float (+ o 0)) (aref xs i)
                   (cffi:mem-aref ptr :float (+ o 1)) (aref ys i)
@@ -213,6 +309,62 @@ returners read warm, which is what makes a working trail legible as
     ;; Sources need no gauge instance: the body itself shrinks as it is
     ;; eaten (FOOD-CURRENT-RADIUS), so the disc on screen *is* the amount
     ;; left, and it is the same circle the ants are queueing against.
+    count))
+
+(defun upload-ants (r w)
+  "Write one §5.2 instance record per ant — and per corpse — into the
+mapped ant buffer.  Returns the count.
+
+Eight floats each, and that is the entire per-frame cost of the
+articulated ant: the gait, the antennal sweep, the swelling crop and the
+gaster dip are all derived from these in the vertex shader, so animating
+a colony rewrites no geometry and issues no GL call in the loop."
+  (declare (type renderer r) (type world w))
+  (let* ((a (world-ants w))
+         (b (world-bodies w))
+         (ptr (renderer-ant-map r))
+         (cap (renderer-body-capacity r))
+         (xs (bodies-x b)) (ys (bodies-y b)) (rs (bodies-r b))
+         (kinds (bodies-kind b))
+         (colonies (coerce (world-colonies w) 'vector))
+         (count 0))
+    (flet ((emit (x y heading phase radius state load flick)
+             (let ((o (* count +ant-instance-floats+)))
+               (setf (cffi:mem-aref ptr :float (+ o 0)) x
+                     (cffi:mem-aref ptr :float (+ o 1)) y
+                     (cffi:mem-aref ptr :float (+ o 2)) heading
+                     (cffi:mem-aref ptr :float (+ o 3)) phase
+                     (cffi:mem-aref ptr :float (+ o 4)) radius
+                     (cffi:mem-aref ptr :float (+ o 5)) state
+                     (cffi:mem-aref ptr :float (+ o 6)) load
+                     (cffi:mem-aref ptr :float (+ o 7)) flick))
+             (incf count)))
+      (dotimes (i (ants-n a))
+        (when (and (ant-live-p a i) (< count cap))
+          (let* ((bi (aref (ants-body a) i))
+                 (ci (aref (ants-colony a) i))
+                 (c (when (< ci (length colonies)) (aref colonies ci))))
+            (emit (aref xs bi) (aref ys bi)
+                  (aref (ants-heading a) i)
+                  (aref (ants-gait a) i)
+                  (aref rs bi)
+                  (ant-display-state a i c)
+                  (min 1.0f0 (aref (ants-crop a) i))
+                  (ant-display-flick a i)))))
+      ;; Corpses.  They are bodies and not ants — the ant slot was freed
+      ;; when this one died (§3.11) — so they are picked up here from the
+      ;; body table, and they are drawn by the same mesh because a dead
+      ;; ant is ant-shaped.  State zero puts them in the corpse branch of
+      ;; the shader: legs folded under, antennae down, no gait.
+      ;;
+      ;; The heading is invented, from the body index, because nothing
+      ;; recorded which way this one was facing when it stopped.  A field
+      ;; of corpses all pointing north would be the more obvious lie.
+      (dotimes (i (min (bodies-n b) cap))
+        (when (and (= (aref kinds i) +body-corpse+) (< count cap))
+          (emit (aref xs i) (aref ys i)
+                (* 6.2831855f0 (rnd01 i 0 77 (world-seed w)))
+                0.5f0 (aref rs i) 0.0f0 0.0f0 0.0f0))))
     count))
 
 ;;; --------------------------------------------------------------------
@@ -268,14 +420,62 @@ framebuffer.  Layers back to front, per §5.1."
             (gl:draw-arrays :triangle-fan 0 n)))))
 
     ;; --- bodies ------------------------------------------------------
-    (let ((count (upload-bodies r w))
-          (p (renderer-body-program r)))
+    ;;
+    ;; Level of detail, §5.2, and it is decided once per frame rather than
+    ;; per ant because the camera is orthographic: every ant in the world
+    ;; is the same number of pixels across.
+    ;;
+    ;; Three tiers.  Below *ANT-DISC-PIXELS* an ant is the plain disc it
+    ;; has always been — at three pixels the legs are noise, and an
+    ;; analytic circle antialiases better than ninety triangles ever
+    ;; will.  Above it the vector body; above *ANT-DETAIL-PIXELS* the legs
+    ;; and antennae as well.  The middle tier is a *range* of the same
+    ;; index buffer, not a second mesh, so the two cannot disagree.
+    (let* ((px-per-m (/ (float (view-vw v) 1.0f0) (- x1 x0)))
+           (r-px (* *ant-radius* px-per-m))
+           (vector-ants (>= r-px *ant-disc-pixels*))
+           (count (upload-bodies r w :skip-ants vector-ants))
+           (p (renderer-body-program r)))
       (when (plusp count)
         (gl:use-program p)
         (gl:uniformf (gl:get-uniform-location p "u_bounds") x0 y0 x1 y1)
         (%gl:bind-buffer-base :shader-storage-buffer 0 (renderer-body-ssbo r))
         (gl:bind-vertex-array (renderer-empty-vao r))
-        (%gl:draw-arrays-instanced :triangle-strip 0 4 count)))
+        (%gl:draw-arrays-instanced :triangle-strip 0 4 count))
+
+      ;; --- the ants, as ants (§5.2) ----------------------------------
+      (when vector-ants
+        (let ((n (upload-ants r w))
+              (m (renderer-ant-mesh r))
+              (q (renderer-ant-program r)))
+          (when (plusp n)
+            (let* ((full (>= r-px *ant-detail-pixels*))
+                   (first-index (if full 0 (ant-mesh-under-count m)))
+                   (n-index (if full
+                                (ant-mesh-nindex m)
+                                (ant-mesh-body-count m))))
+              (gl:use-program q)
+              (gl:uniformf (gl:get-uniform-location q "u_bounds") x0 y0 x1 y1)
+              (gl:uniformf (gl:get-uniform-location q "u_world")
+                           (world-width w) (world-height w))
+              ;; The same texture the field pass left bound on unit 0 —
+              ;; the antennae read the trail the ants are walking on.
+              (gl:active-texture :texture0)
+              (gl:bind-texture :texture-2d (renderer-field-tex r))
+              (gl:uniformi (gl:get-uniform-location q "u_field") 0)
+              (gl:uniformf (gl:get-uniform-location q "u_px_per_m") px-per-m)
+              (gl:uniformf (gl:get-uniform-location q "u_seconds")
+                           (world-seconds w))
+              (gl:uniformf (gl:get-uniform-location q "u_stride")
+                           (/ *gait-stride* *ant-radius*))
+              (gl:uniformf (gl:get-uniform-location q "u_k") *choice-k*)
+              (%gl:bind-buffer-base :shader-storage-buffer 1
+                                    (renderer-ant-ssbo r))
+              (gl:bind-vertex-array (renderer-ant-vao r))
+              (%gl:draw-elements-instanced :triangles n-index :unsigned-int
+                                           (cffi:make-pointer
+                                            (* first-index 4))
+                                           n))))))
 
     (gl:bind-vertex-array 0)
     (gl:use-program 0)

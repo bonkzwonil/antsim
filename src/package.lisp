@@ -20,6 +20,7 @@
    ;; params — the Lasius niger set (§3.1); all rebindable, see params.lisp
    #:*cell-size* #:*motion-dt* #:*pheromone-dt* #:*colony-dt*
    #:*ant-radius* #:*walk-speed* #:*walk-speed-laden* #:*turn-sigma*
+   #:*gait-stride* #:*ant-disc-pixels* #:*ant-detail-pixels*
    #:*sensor-offset* #:*sensor-spread*
    #:*choice-n* #:*choice-k* #:*choice-eavesdrop*
    #:*trail-tau* #:*trail-cap* #:*trail-deposit* #:*trail-quality-threshold*
@@ -83,6 +84,7 @@
    #:ants-crop #:ants-load-quality #:ants-energy #:ants-age
    #:ants-hvx #:ants-hvy #:ants-px #:ants-py #:ants-count-state
    #:ants-trailed #:ants-exit #:ants-smelled #:ants-cast #:ants-resolve
+   #:ants-gait
    #:path-integration-step!
    #:spawn-ant #:kill-ant
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+
@@ -112,8 +114,16 @@
    ;; render/offscreen
    #:offscreen #:make-offscreen #:destroy-offscreen #:with-offscreen
    #:offscreen-fbo #:offscreen-width #:offscreen-height
+   #:offscreen-samples #:offscreen-resolve-fbo #:resolve-offscreen
+   #:*msaa-samples*
    #:bind-offscreen #:read-offscreen #:capture-offscreen
    #:compile-shader #:link-program
+   ;; render/antmesh — the articulated ant (§5.2)
+   #:ant-mesh #:build-ant-mesh #:ant-mesh-verts #:ant-mesh-index
+   #:ant-mesh-nvert #:ant-mesh-nindex
+   #:ant-mesh-under-count #:ant-mesh-body-count
+   #:+ant-vertex-floats+ #:*legs*
+   #:*ant-vertex-glsl* #:*ant-fragment-glsl* #:build-ant-vertex-glsl
    ;; render/smoke — the M0 acceptance frame
    #:draw-smoke-frame #:render-smoke-png #:m0-smoke
    ;; render/view — the ortho camera (§5.5)
@@ -123,7 +133,8 @@
    #:view-zoom-at! #:view-pan-pixels!
    ;; render/renderer — the 2D scene (§5.1)
    #:renderer #:make-renderer #:destroy-renderer
-   #:upload-field #:upload-bodies #:draw-world #:render-world-png
+   #:upload-field #:upload-bodies #:upload-ants #:draw-world
+   #:ant-display-state #:ant-display-flick #:render-world-png
    ;; render/hud — screen-space overlay (§5.1)
    #:hud #:make-hud #:destroy-hud #:hud-reset #:hud-quad #:hud-text
    #:hud-bar #:hud-draw #:build-font #:*font-3x5*

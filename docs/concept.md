@@ -1405,6 +1405,41 @@ work, no buffer rewrite for animation.
 UBO and lerp between them. Cheaper, easier to art-direct, loses the
 world-planted foot. Decide during the M3 spike.
 
+**As built (M3): the fallback was not needed.** The two-link solve is
+eight lines of GLSL and the whole vertex program is under two hundred,
+so the planted foot is kept. Two decisions the spike settled that this
+section had not anticipated:
+
+- **The skeleton is generated into the shader, not written twice.** The
+  leg attachments, link lengths, bend directions and tripod assignment
+  live once, in the file that builds the mesh, and the vertex program's
+  `const` tables are formatted from them at load. A mesh and an
+  articulation that disagree about where a hip is produce a leg that
+  detaches from the body at some phases and not others, which is a bug
+  that looks like a rendering glitch and is actually a data-duplication
+  bug.
+- **The instance record is two `vec4`s, not the seven fields listed
+  above.** `(x, y, heading, phase)` and `(radius, state, load, flick)` —
+  `flick` being how recently this ant put its gaster down, which is read
+  off the distance-since-last-packet the deposit rule already keeps
+  rather than recorded as an event. Nothing new is stored, and the
+  drawing cannot disagree with the mechanism about when a deposit
+  happened.
+
+**Level of detail is three tiers, not two.** The third is the M2 disc,
+kept rather than replaced: below about four pixels of radius an ant goes
+back to being the analytically antialiased circle of §3.11, because at
+that size legs are noise and a circle antialiases better than ninety
+triangles. The middle tier — body segments, no appendages — is a
+*range* of the full mesh's index buffer rather than a second mesh, so
+the simplified ant cannot drift away from the detailed one.
+
+**The vector ant is what made the target multisampled.** Every earlier
+primitive antialiased itself, so nothing had ever asked the framebuffer
+for coverage; a leg drawn a pixel and a quarter wide cannot, and six
+staircases per ant crawling over a still frame read as a shimmer rather
+than as a gait. It fixed the obstacle edges at the same time (§5.1).
+
 **Level of detail.** Zoomed out, an ant is a few pixels and the legs are
 noise. Two meshes — full and simplified body-only — selected by
 pixels-per-ant. The simple mesh is essentially waldameisen's approach, so
@@ -1764,6 +1799,46 @@ genuinely novel piece of engineering in the project, and it gets its own
 milestone because it deserves the room to be got right. Note the
 collision model does not change *shape*: the disc stays, the drawing gets
 legs (§3.11).
+
+**The first half is built.** Everything in that list ships, and the way
+it ships is the one §5.2 specified rather than the fallback: the legs are
+solved in the vertex shader from a stride phase, not lerped between baked
+poses, so the stance foot is genuinely planted in world space. Three
+findings are worth carrying out of it.
+
+*The stride is not a free parameter.* A planted foot only stays planted
+if the drawn sweep of the leg equals the ground the body covered, so the
+step length sets the step *rate* too and the two cannot be tuned apart.
+That collides with legibility from both sides — the honest rate at 4 mm
+is 10-20 Hz, which is a blur, and a longer stride needs longer links
+until the ant stops looking like an ant — and `*gait-stride*` is where
+those two pressures meet. It is recorded as a parameter with that
+reasoning attached rather than as a number in a shader.
+
+*One float of model state, and the model does not read it.* The phase has
+to live in the ant table because it is a history — a frame cannot see how
+far anything moved — and it is closed over **actual net displacement**,
+the same quantity path integration uses and the opposite of the attempted
+step that deposition uses (§3.3). Both are right: an ant wedged in a jam
+is still walking, gaster still touching down, and its feet are still not
+covering ground. Two rules disagreeing about the same tick, on purpose,
+is worth a test each.
+
+*The renderer needed multisampling, and nothing before it had.* Every
+earlier primitive antialiased itself — the disc analytically, the field
+as a texture — so the target had never been asked for coverage. A leg is
+a pixel and a quarter wide and a triangle mesh cannot do that trick, so
+`*msaa-samples*` is now on for every render in the project. It fixed the
+obstacle edges as a side effect, which had had the same staircase for the
+same reason since M2 and had simply been lived with.
+
+The level of detail is three tiers rather than §5.2's two, and the extra
+one is the M2 disc: below about four pixels an ant goes back to being the
+circle it was, which is both the better picture and the guarantee that
+every published figure is still drawn by the shader that drew it. The
+threshold sits clear of the sizes the documentation actually renders at,
+because a figure whose whole look flips when someone renders it eight
+pixels wider is not a figure.
 
 It does change what happens when two discs meet, and that is the second
 half of this milestone. The non-overlap rule is symmetric — two ants

@@ -1454,6 +1454,38 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
           small UBO and lerp. Cheaper, easier to art-direct, loses the world-planted
           foot. Decide during the M3 spike.
         </p>
+        <p>
+          <b>As built (M3): the fallback was not needed.</b> The two-link solve is
+          eight lines of GLSL, so the planted foot is kept. Two things the spike
+          settled that were not anticipated here. The skeleton — hips, link lengths,
+          bend directions, tripod assignment — is <em>generated into</em> the shader
+          from the file that builds the mesh rather than written out twice, because a
+          mesh and an articulation that disagree about where a hip is produce a leg
+          that detaches at some phases and not others, which looks like a rendering
+          glitch and is a data-duplication bug. And the instance record came out as
+          two <code>vec4</code>s, <code>(x, y, heading, phase)</code> and
+          <code>(radius, state, load, flick)</code> — <code>flick</code> being how
+          recently this ant put its gaster down, read off the
+          distance-since-last-packet the deposit rule already keeps rather than
+          recorded as an event, so the drawing cannot disagree with the mechanism
+          about when a deposit happened.
+        </p>
+        <p>
+          The level of detail came out as three tiers rather than two: the third is
+          the M2 disc, <em>kept</em> rather than replaced, because below about four
+          pixels of radius legs are noise and an analytically antialiased circle beats
+          ninety triangles. That is also what guarantees every published figure is
+          still drawn by the shader that drew it. The middle tier is a <em>range</em>
+          of the full mesh's index buffer rather than a second mesh.
+        </p>
+        <p>
+          And the vector ant is what finally made the render target
+          <b>multisampled</b>. Every earlier primitive antialiased itself, so nothing
+          had ever asked the framebuffer for coverage; a leg is drawn a pixel and a
+          quarter wide and a triangle mesh cannot do that trick. It fixed the obstacle
+          edges as a side effect, which had had the same staircase for the same reason
+          since M2 and had simply been lived with.
+        </p>
 
         <h4>Legibility touches, all of them real behaviour</h4>
         <ul>
@@ -1644,11 +1676,15 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
             what keeps arena size, ant count and render scale from having to be guessed
             up front. <em>First time you can watch a trail form, at whatever scale you
             like.</em></div></li>
-          <li><span class="tag">M3</span><div><b>The ant model.</b>
+          <li><span class="tag">M3</span><div><b>The ant model, and how ants meet.</b>
             The vector ant, the tripod gait rig, VS articulation, LOD, antennae,
             payload, state tint. The one genuinely novel piece of engineering in the
             project. Note the collision model does not change: the disc stays, the
-            drawing gets legs.</div></li>
+            drawing gets legs. <em>The first half is built</em> — all of that ships,
+            articulated in the vertex shader with the world-planted foot rather than
+            the baked-pose fallback. The second half is the one still open: turning
+            an overlap into an <em>encounter</em>, and the lane formation that rides
+            on it.</div></li>
           <li><span class="tag">M4</span><div><b>Scenarios and behaviour depth.</b>
             JSON loading, richer scenes, then the deferred half of §3.9 in dependency
             order: response thresholds and age polyethism, trophallaxis, the no-entry

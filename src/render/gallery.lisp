@@ -96,6 +96,17 @@ under different conditions would make the figure a decoration."
     ;; Detail: mid-route traffic, outbound pale and laden returners warm.
     (gallery-shot w "05-traffic" :width 360 :height 360
                                  :cx 0.33f0 :cy 0.30f0 :span 0.18f0)
+    ;; Detail: close enough that an ant is an ant (§5.2).  The same
+    ;; stretch of trail as the frame above, at the zoom where the level of
+    ;; detail hands over to the articulated body — legs, antennae,
+    ;; mandibles, a swollen crop on the ants carrying one.
+    ;;
+    ;; Worth taking from the running scenario rather than from a posed
+    ;; specimen, because the two things this milestone is *for* are only
+    ;; visible in traffic: every ant is at its own point in its own gait,
+    ;; and every ant is pointing where it is actually going.
+    (gallery-shot w "15-vector-ant" :width 640 :height 400
+                                    :cx 0.3205f0 :cy 0.305f0 :span 0.045f0)
     ;; Detail: the obstacle's right-hand end, where the route has to
     ;; squeeze past it.  Nothing in the model knows about bottlenecks;
     ;; this is the non-overlap rule and the deposition rule feeding each

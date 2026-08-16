@@ -706,6 +706,91 @@ order-dependent collision pass, or a deposit applied in place."
           (c (snapshot 12345)))
       (is (not (equalp a c)) "changing the seed changed nothing"))))
 
+;;; ------------------------------------------------------ the gait (§5.2)
+;;;
+;;; The stride phase is display state and the only piece of it the model
+;;; carries, so it is worth being exact about what it promises: it is a
+;;; *distance*, not a clock.  That promise is the whole of the walk cue —
+;;; a foot planted in world space is only planted if the phase it is
+;;; derived from advanced by exactly the ground the ant covered — and
+;;; nothing in the renderer can check it, because a frame cannot see how
+;;; far anything moved.
+
+(test gait-phase-advances-with-distance-not-with-time
+  "Two ants, same number of ticks, different distances covered: the
+phase must follow the distance.  Tie it to the clock instead and every
+ant moonwalks, which is precisely the failure §5.2 exists to avoid."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 40))
+         (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.20f0 :stock 100.0f0))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w)))
+    (ant:spawn-ant w c)
+    (setf (aref (ant:ants-gait a) 0) 0.0f0)
+    (let ((bi (aref (ant:ants-body a) 0)))
+      ;; Walk it by hand, so the distance is known exactly rather than
+      ;; whatever the walk happened to produce.
+      (flet ((move (dx)
+               (setf (aref (ant:ants-px a) 0) (aref (ant:bodies-x b) bi)
+                     (aref (ant:ants-py a) 0) (aref (ant:bodies-y b) bi))
+               (incf (aref (ant:bodies-x b) bi) dx)
+               (ant:path-integration-step! w)))
+        (let ((s ant:*gait-stride*))
+          ;; a quarter of a stride is a quarter of a cycle
+          (move (* 0.25f0 s))
+          (is (< (abs (- (aref (ant:ants-gait a) 0) 0.25f0)) 1.0f-4)
+              "phase ~,4f after a quarter stride" (aref (ant:ants-gait a) 0))
+          ;; standing still advances nothing, however many ticks pass
+          (dotimes (i 20) (move 0.0f0))
+          (is (< (abs (- (aref (ant:ants-gait a) 0) 0.25f0)) 1.0f-4)
+              "phase moved while the ant stood still: ~,4f"
+              (aref (ant:ants-gait a) 0))
+          ;; and it wraps rather than growing without bound
+          (dotimes (i 40) (move (* 0.37f0 s)))
+          (let ((p (aref (ant:ants-gait a) 0)))
+            (is (and (<= 0.0f0 p) (< p 1.0f0)) "phase ~,4f left [0,1)" p)))))))
+
+(test gait-phase-follows-the-ground-covered-not-the-step-attempted
+  "The other half of the same promise, and the one that matters in a
+jam: an ant shoved back to where it started has not walked, and its feet
+must say so.  Deposition takes the opposite view of the same tick (§3.3)
+and both are right — which is exactly why this is worth pinning down."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 40))
+         (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.20f0 :stock 100.0f0))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w)))
+    (ant:spawn-ant w c)
+    (setf (aref (ant:ants-gait a) 0) 0.0f0)
+    (let* ((bi (aref (ant:ants-body a) 0))
+           (x0 (aref (ant:bodies-x b) bi)))
+      ;; the tick started here, the ant tried to move, and the solver put
+      ;; it back: net displacement zero
+      (setf (aref (ant:ants-px a) 0) x0
+            (aref (ant:ants-py a) 0) (aref (ant:bodies-y b) bi)
+            (aref (ant:bodies-x b) bi) x0)
+      (ant:path-integration-step! w)
+      (is (= 0.0f0 (aref (ant:ants-gait a) 0))
+          "a stalled ant's legs kept moving: ~,4f"
+          (aref (ant:ants-gait a) 0)))))
+
+(test a-cohort-does-not-step-in-unison
+  "Newborns get their phase from their id (§5.2).  Zero would work and
+looks wrong: a batch of workers emerging together would march in step,
+which is a thing ants conspicuously do not do and the eye catches at
+once."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 200))
+         (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.20f0 :stock 500.0f0))
+         (a (ant:world-ants w)))
+    (dotimes (i 60) (ant:spawn-ant w c))
+    (let ((phases (loop for i below 60 collect (aref (ant:ants-gait a) i))))
+      (is (every (lambda (p) (and (<= 0.0f0 p) (< p 1.0f0))) phases))
+      ;; spread over the cycle, not clustered at one point
+      (is (> (- (reduce #'max phases) (reduce #'min phases)) 0.8f0)
+          "phases span only ~,3f of the cycle"
+          (- (reduce #'max phases) (reduce #'min phases)))
+      (is (> (length (remove-duplicates phases)) 50)
+          "only ~d distinct phases in 60 ants"
+          (length (remove-duplicates phases))))))
+
 (test a-colony-with-no-food-dies-out
   "§3.8 acceptance row: a nest placed out of foraging range starves.
 Stock falls, births stop, the population decays.  Extinction is a

@@ -138,3 +138,109 @@ renderer that silently drew nothing still produces a valid PNG."
                        "nothing bright: the trail and bodies did not draw")))
             (ant:destroy-renderer r)
             (ant:destroy-offscreen o)))))))
+
+;;; ------------------------------------------------- level of detail (§5.2)
+
+(defun %ant-reach (radius-px &key (size 360))
+  "Draw one ant, alone, at RADIUS-PX on screen, and answer how far its
+drawing reaches from its own centre — in ant radii.
+
+A silhouette measurement rather than a pixel comparison, because that is
+what the level of detail actually decides: a disc reaches to 1, a body
+reaches past its gaster, and only a full ant has legs sticking out."
+  (let* ((span (/ (* ant:*ant-radius* size) radius-px))
+         (world (* 8.0 span))
+         (mid (* 0.5 world))
+         (w (ant:make-world :width world :height world :capacity 8 :seed 3))
+         ;; The nest is put in a far corner rather than moved afterwards:
+         ;; it is a body in the table like any other, and only ADD-COLONY
+         ;; puts it somewhere.  Out of frame it cannot be measured.
+         (c (ant:add-colony w :nest-x (* 0.06 world) :nest-y (* 0.06 world)
+                              :nest-r (* 0.01 world) :capacity 8 :stock 5.0f0))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w)))
+    (ant:spawn-ant w c)
+    (let ((bi (aref (ant:ants-body a) 0)))
+      ;; dead centre, facing along +x, mid-stride, and *not* resting, so
+      ;; the body kind is the one the drawing path expects
+      (setf (aref (ant:bodies-x b) bi) mid
+            (aref (ant:bodies-y b) bi) mid
+            (aref (ant:bodies-kind b) bi) ant:+body-ant+
+            (aref (ant:ants-heading a) 0) 0.0f0
+            (aref (ant:ants-gait a) 0) 0.15f0
+            (aref (ant:ants-state a) 0) ant:+ant-outbound+))
+    (ant:with-headless-gl (ctx :width size :height size)
+      (let ((o (ant:make-offscreen size size))
+            (r (ant:make-renderer
+                :field-width (ant:field-w (ant:colony-field c))
+                :field-height (ant:field-h (ant:colony-field c))
+                :body-capacity 64)))
+        (unwind-protect
+             (progn
+               (ant:bind-offscreen o)
+               (gl:clear-color 0.0 0.0 0.0 1.0)
+               (gl:clear :color-buffer-bit)
+               (ant:draw-world r w (ant:make-view :cx mid :cy mid :span span
+                                                  :vw size :vh size))
+               (gl:finish)
+               (ant:capture-offscreen
+                o (test-png-path (format nil "lod-~d.png" (round radius-px))))
+               (let ((px (ant:read-offscreen o))
+                     (far 0.0f0)
+                     (half (/ size 2.0f0)))
+                 (dotimes (i (* size size))
+                   ;; the ground is a very dark grid; the ant is not
+                   (when (> (+ (aref px (* i 3)) (aref px (+ 1 (* i 3)))
+                               (aref px (+ 2 (* i 3))))
+                            170)
+                     (let* ((x (- (mod i size) half))
+                            (y (- (floor i size) half))
+                            (d (/ (sqrt (+ (* x x) (* y y))) radius-px)))
+                       (setf far (max far (float d 1.0f0))))))
+                 far))
+          (ant:destroy-renderer r)
+          (ant:destroy-offscreen o))))))
+
+(test level-of-detail-picks-the-right-ant
+  "§5.2's three tiers, measured rather than asserted.  Zoomed out an ant
+is the disc of §3.11 and reaches exactly its own radius; closer in it is
+a body, which is longer than it is round; closer still it grows legs and
+antennae, which reach well past everything else.
+
+This is also the regression test for the published figures: every
+whole-arena picture in the README is at about three pixels per ant, and
+the first row is the assertion that those pictures are still drawn by the
+shader that drew them before this milestone."
+  (with-gl-or-skip
+    ;; The three geometries, each forced, and all measured at the same
+    ;; generous zoom.  Measuring them at their own zoom levels instead
+    ;; sounds more faithful and answers nothing: the disc tier is a few
+    ;; pixels across by definition, and at four pixels a silhouette
+    ;; rounds to the same number whatever shape it is.
+    (let ((disc (let ((ant:*ant-disc-pixels* 1.0f6)) (%ant-reach 14.0)))
+          (body (let ((ant:*ant-detail-pixels* 1.0f6)) (%ant-reach 14.0)))
+          (full (%ant-reach 14.0)))
+      (format t "~&;; LOD reach, in ant radii: disc ~,2f | body ~,2f | full ~,2f~%"
+              disc body full)
+      ;; A disc reaches its own radius and no further, by construction.
+      (is (< disc 1.15) "the disc tier reaches ~,2f radii — that is not a disc"
+          disc)
+      ;; The body is longer than it is round: the gaster hangs off the back.
+      (is (> body (* 1.08 disc))
+          "the body tier reaches ~,2f radii against the disc's ~,2f — no body"
+          body disc)
+      ;; And the legs and antennae reach well past all of it.
+      (is (> full (* 1.25 body))
+          "the full ant reaches ~,2f radii against the body's ~,2f — no limbs"
+          full body)
+      (is (> full 1.4) "the full ant reaches only ~,2f radii" full))
+    ;; And now the thresholds themselves, which is the half that protects
+    ;; the published figures: every whole-arena picture in the README is
+    ;; at about three pixels per ant, and at three pixels an ant must
+    ;; still be the disc that drew those pictures.
+    (let ((small (%ant-reach 2.5))
+          (large (%ant-reach 14.0)))
+      (is (< small 1.3) "at 2.5 px the ant reaches ~,2f radii — it grew legs"
+          small)
+      (is (> large 1.4) "at 14 px the ant reaches ~,2f radii — it did not"
+          large))))

@@ -127,6 +127,12 @@ initial condition rather than merely a convenient one."
                  (aref (ants-px a) i) sx
                  (aref (ants-py a) i) sy
                  (aref (ants-trailed a) i) 0.0f0
+                 ;; Its own point in the tripod cycle (§5.2).  Zero would
+                 ;; work and looks wrong: a cohort emerging together would
+                 ;; step in unison, which is a thing ants conspicuously do
+                 ;; not do, and the eye catches it immediately.  Drawn
+                 ;; from the ant's id, so it costs no stream and repeats.
+                 (aref (ants-gait a) i) (rnd01 id 0 94 seed)
                  (aref (ants-smelled a) i) 0.0f0
                  (aref (ants-cast a) i) 0
                  ;; It is standing in the nest, which is the one place
@@ -886,7 +892,23 @@ leak."
                                              +stream-pi+ seed))))
           (declare (type f32 mx my ex))
           (decf (aref (ants-hvx a) i) (* mx (+ 1.0f0 ex)))
-          (decf (aref (ants-hvy a) i) (* my (+ 1.0f0 ex)))))))
+          (decf (aref (ants-hvy a) i) (* my (+ 1.0f0 ex)))
+          ;; And, off the same displacement, the stride phase of §5.2.
+          ;;
+          ;; It rides here rather than in a pass of its own because this
+          ;; is the one place in the tick that knows how far an ant
+          ;; actually got — which is exactly what a planted foot needs and
+          ;; what the *attempted* step (used for deposition, §3.3) is
+          ;; deliberately not.  An ant wedged in a jam deposits at full
+          ;; rate and its legs stop moving, and both of those are correct.
+          ;;
+          ;; Kept as a phase in [0,1) rather than as a distance so it
+          ;; cannot lose precision in a colony that runs for an hour, and
+          ;; so the renderer needs no wrap of its own.
+          (setf (aref (ants-gait a) i)
+                (mod (+ (aref (ants-gait a) i)
+                        (/ (sqrt (+ (* mx mx) (* my my))) *gait-stride*))
+                     1.0f0))))))
   (values))
 
 (defun colony-feed! (w)

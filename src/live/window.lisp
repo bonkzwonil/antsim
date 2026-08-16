@@ -433,7 +433,16 @@ Returns the world, so a session can keep poking at it afterwards."
                           :context-version-major 4
                           :context-version-minor 5
                           :opengl-profile :opengl-core-profile
+                          ;; The window draws into framebuffer 0 and not
+                          ;; into the multisampled offscreen target, so it
+                          ;; has to ask for its own samples or the ant of
+                          ;; §5.2 is the one thing in the project that is
+                          ;; aliased — in the one place it is actually
+                          ;; moving, where a staircase on a leg reads as a
+                          ;; twitch rather than as a step.
+                          :samples *msaa-samples*
                           :opengl-forward-compat t)
+    (when (plusp *msaa-samples*) (gl:enable :multisample))
     (unless (gl:get-string :version)
       (error "GL reports no version string — the libGL trap (§5.4). ~
               Run under: guix shell glfw nvda@580 -- ..."))
