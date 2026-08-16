@@ -1109,7 +1109,26 @@ stops producing brood, and decays."
   ;; queueing against a pile that is no longer there.
   (let ((b (world-bodies w)))
     (dolist (f (world-foods w))
-      (setf (aref (bodies-r b) (food-body f)) (food-current-radius f))))
+      (setf (aref (bodies-r b) (food-body f)) (food-current-radius f)))
+    ;; A source that is gone should stop being anything at all.  At zero
+    ;; amount its radius is zero, but a zero-radius body is still a body:
+    ;; the renderer draws a point where the pile was, so an exhausted
+    ;; source left a small dot sitting in the arena for the rest of the
+    ;; run, which reads as a source that is somehow still there.
+    ;;
+    ;; Only sources that cannot come back.  A renewing source at zero is
+    ;; empty *now* and will refill on a later colony tick, so removing it
+    ;; would delete a scenario's feature rather than tidy a leftover.
+    (when (some (lambda (f)
+                  (and (food-empty-p f) (<= (food-renew f) 0.0f0)))
+                (world-foods w))
+      (setf (world-foods w)
+            (remove-if (lambda (f)
+                         (when (and (food-empty-p f)
+                                    (<= (food-renew f) 0.0f0))
+                           (bodies-free! b (food-body f))
+                           t))
+                       (world-foods w)))))
   (bodies-resolve! (world-bodies w) (world-obstacles w))
   (path-integration-step! w)
   ;; after the drain, so a meal is measured against what the ant has

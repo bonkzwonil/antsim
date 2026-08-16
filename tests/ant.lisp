@@ -364,6 +364,42 @@ flaky."
         (is (> hx 0.0f0) "home vector points away from the nest in x")
         (is (> hy 0.0f0) "home vector points away from the nest in y")))))
 
+(test an-exhausted-source-stops-being-a-source
+  "Reported from the window: a stripped pile left a small dot sitting in
+the arena for the rest of the run.
+
+At zero amount a source's radius is zero, but a zero-radius body is still
+a *body* — it keeps its slot and the renderer still puts a point where
+the pile was, which reads as a source that is somehow still there.
+
+A renewing source must survive the same test, because at zero it is empty
+*now* and will refill on a later colony tick.  Removing it would delete a
+scenario's feature rather than tidy a leftover, and the two cases look
+identical at the moment the amount hits zero."
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 2000
+                            :seed 5))
+         (c (ant:add-colony w :nest-x 0.2f0 :nest-y 0.2f0 :nest-r 0.02f0
+                              :stock 500.0f0))
+         (f (ant:add-food w 0.25f0 0.28f0 0.01f0 60.0f0))
+         (bi (ant:food-body f))
+         (b (ant:world-bodies w)))
+    (ant:world-seed-population! w c 150)
+    (is (= 1 (length (ant:world-foods w))))
+    (loop repeat 40 until (ant:food-empty-p f)
+          do (ant:world-run! w 1200))
+    (is-true (ant:food-empty-p f) "the colony never stripped the source")
+    (ant:world-run! w 5)
+    (is (= 0 (length (ant:world-foods w)))
+        "an exhausted source is still in the world's food list")
+    (is (= ant:+body-free+ (aref (ant:bodies-kind b) bi))
+        "an exhausted source still holds a body slot"))
+  ;; and the case that must NOT be removed
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 64 :seed 5)))
+    (ant:add-food w 0.2f0 0.2f0 0.01f0 0.0f0 :renew 1.0f0)
+    (ant:world-run! w 10)
+    (is (= 1 (length (ant:world-foods w)))
+        "a renewing source was removed while empty; it was going to refill")))
+
 (test food-depletes-and-the-trail-dies
   "§3.8 acceptance row, both halves of it.
 
