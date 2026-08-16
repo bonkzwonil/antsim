@@ -111,8 +111,9 @@ live:
 ## scenarios cannot drift away from the font and spelling something else
 ## is a one-line change.
 ##
-##   scenarios/antsim.json        1.00 x 0.72 m
-##   scenarios/antsim-large.json  5.00 x 3.60 m — the same, five times over
+##   scenarios/antsim.json           1.00 x 0.72 m
+##   scenarios/antsim-overload.json  the same arena, far too many ants
+##   scenarios/antsim-large.json     5.00 x 3.60 m — five times over
 ##
 ## Only the geometry is five times bigger.  The ant is not scaled, which
 ## is the whole reason the large one is a different experiment rather than
