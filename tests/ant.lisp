@@ -167,6 +167,125 @@ seed (§3.4)."
             (is (< arrived (round (* 4 (/ out 0.001f0))))
                 "took ~d ticks to cover ~,3f m; that is not homing" arrived out)))))))
 
+(defun %walled-homing-run (steps &key (ticks 20000))
+  "Put one laden ant above a wall, its nest below, and let it try to get
+home.  Returns the tick it arrived on, or NIL.
+
+The wall does not span the arena: there is a way round its left end, so
+the only question the run asks is whether the ant finds it."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16))
+         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.2f0 :nest-r 0.02f0
+                              :stock 1.0f6))
+         (a (ant:world-ants w))
+         (ant:*homing-scan-steps* steps))
+    (ant:add-obstacle w '(0.30 0.40 0.90 0.40 0.90 0.45 0.30 0.45))
+    (ant:world-seed-population! w c 1)
+    (let* ((b (ant:world-bodies w))
+           (bi (aref (ant:ants-body a) 0)))
+      (setf (aref (ant:bodies-x b) bi) 0.5f0
+            (aref (ant:bodies-y b) bi) 0.6f0
+            ;; nest straight down, i.e. straight through the wall
+            (aref (ant:ants-hvx a) 0) 0.0f0
+            (aref (ant:ants-hvy a) 0) -0.4f0
+            (aref (ant:ants-crop a) 0) 1.0f0
+            (aref (ant:ants-load-quality a) 0) 1.0f0
+            (aref (ant:ants-state a) 0) ant:+ant-returning+)
+      (dotimes (k ticks)
+        (setf (aref (ant:ants-energy a) 0) 1.0f0) ; isolate navigation
+        (ant:world-step! w)
+        (when (= ant:+ant-in-nest+ (aref (ant:ants-state a) 0))
+          (return k))))))
+
+(test a-laden-ant-gets-round-a-wall
+  "§3.2/§3.4 regression, and the most expensive bug this model has had.
+
+The home vector points *through* obstacles.  For a long time the ant
+followed it there: it pressed against the surface, the collision pass
+removed only the component into the wall so it slid along the face, and
+because deposition counts attempted motion it marked the face while
+sliding.  The mark recruited others, so a route grew along the obstacle
+with dead ants on it, and colonies starved beside full sources.
+
+Two full suites passed throughout.  Nothing here is subtle to watch and
+nothing was measurable to assert, which is exactly why this test exists:
+one ant, one wall, does it get home.
+
+The scan disabled is asserted too.  A regression test for a navigation
+rule is worth very little if it also passes without the rule — and this
+one very nearly did, twice, through two different failures that each
+left the ant walking millimetres per thousand ticks."
+  (let ((with (%walled-homing-run 12))
+        (without (%walled-homing-run 0)))
+    (is-true with
+             "never got round the wall in 20000 ticks with the scan on")
+    (is-false without
+              "arrived at tick ~a with the scan off, so this test does not
+test the scan" without)
+    (when with
+      ;; It has to walk about 0.4 m round the end of the wall and back,
+      ;; so a few thousand ticks is the honest bar; the point is that it
+      ;; is a journey and not a wait.
+      (is (< with 6000) "took ~d ticks, which is loitering, not walking"
+          with))))
+
+(defparameter +uturn-run-ticks+ 4000)
+
+(defun %trail-departure-tick (lost seed)
+  "Walk one outbound ant along a short trail that stops dead, and return
+the tick it first gets 2 cm past the end — or +UTURN-RUN-TICKS+ if it
+never does.
+
+The trail runs west to east and ends at x = 0.40 with open ground
+beyond, so an ant following it eastward walks off the end.  Nothing
+stops it leaving; the question is how long it stays."
+  (let* ((ant:*trail-lost-threshold* lost)
+         (w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16
+                            :seed seed))
+         (c (ant:add-colony w :nest-x 0.1f0 :nest-y 0.5f0 :nest-r 0.02f0
+                              :stock 1.0f6))
+         (a (ant:world-ants w))
+         (f (ant:colony-field c)))
+    (ant:world-seed-population! w c 1)
+    (loop for x from 0.20f0 below 0.40f0 by 0.005f0
+          do (ant:field-deposit! f x 0.5f0 300.0f0))
+    (ant:field-step! f)                 ; deposits become concentration
+    (let* ((b (ant:world-bodies w))
+           (bi (aref (ant:ants-body a) 0)))
+      (setf (aref (ant:bodies-x b) bi) 0.30f0
+            (aref (ant:bodies-y b) bi) 0.5f0
+            (aref (ant:ants-heading a) 0) 0.0f0   ; walking east, along it
+            (aref (ant:ants-crop a) 0) 0.0f0
+            (aref (ant:ants-state a) 0) ant:+ant-outbound+)
+      (or (dotimes (k +uturn-run-ticks+)
+            (setf (aref (ant:ants-energy a) 0) 1.0f0) ; isolate navigation
+            (ant:world-step! w)
+            (when (> (aref (ant:bodies-x b) bi) 0.42f0)
+              (return k)))
+          +uturn-run-ticks+))))
+
+(test an-ant-that-loses-a-trail-turns-round
+  "§3.2: an ant following a trail that runs out turns about and casts
+rather than carrying on, and the point of it is that trails hold their
+ants — so that is what is asserted.
+
+Not the about-face itself, which would be testing that the line of code
+that adds pi adds pi.  The claim worth defending is the consequence: an
+ant that U-turns stays with a trail markedly longer than one that walks
+off the end and keeps going.
+
+Summed over seeds rather than judged per seed.  A single ant on a single
+seed leaves early or late for reasons that have nothing to do with this
+rule — measured, one seed is three times *worse* with U-turns and
+another never leaves at all — and reading either of those alone would be
+reading noise."
+  (let ((with 0) (without 0))
+    (dolist (seed '(1 2 3 4 5 6))
+      (incf with (%trail-departure-tick 0.15f0 seed))
+      (incf without (%trail-departure-tick 0.0f0 seed)))
+    (is (> with (* 3/2 without))
+        "stayed ~d ticks with U-turns against ~d without, over six seeds; ~
+the trail is not holding its ants" with without)))
+
 (test path-integration-tracks-actual-displacement
   "Regression, and an expensive one to have found.  The home vector must
 close over where the ant *ended up*, not over the steps it meant to

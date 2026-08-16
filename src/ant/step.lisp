@@ -31,6 +31,15 @@ Reusing a stream after conditioning on it is the one way a counter-based
 RNG can still surprise you, because the draws look independent and are
 not.  One stream, one question.")
 
+(defconstant +stream-uturn+ 7
+  "Scatter on the about-face an ant makes when it loses a trail.")
+
+(defconstant +stream-hand+ 6
+  "Which way an ant turns when the way home is shut — see ANT-HANDEDNESS.
+
+Drawn on the ant's id alone, with no tick, so it is a fixed property of
+the individual rather than a per-tick coin flip.")
+
 (declaim (inline wrap-angle angle-toward choice-weight))
 
 (defun choice-weight (base n)
@@ -114,6 +123,8 @@ initial condition rather than merely a convenient one."
                  (aref (ants-px a) i) sx
                  (aref (ants-py a) i) sy
                  (aref (ants-trailed a) i) 0.0f0
+                 (aref (ants-smelled a) i) 0.0f0
+                 (aref (ants-cast a) i) 0
                  ;; A newborn has no route to be faithful to, so its exit
                  ;; bearing is simply random — which is what makes the
                  ;; naive ants the colony's explorers (§3.4).
@@ -173,6 +184,89 @@ makes the change measurable rather than merely asserted."
   (declare (type field f) (type f32 x y avoid)
            (optimize (speed 3) (safety 0)))
   (if (field-blocked-p f x y) (- 1.0f0 avoid) 1.0f0))
+
+(defconstant +bearing-step+ 0.2617994f0
+  "15 degrees — the increment *homing-scan-steps* counts in.")
+
+(declaim (inline ant-handedness))
+(defun ant-handedness (id seed)
+  "-1 or +1, fixed for the life of the ant: which way it goes round when
+the way home is shut.
+
+The first version derived the side from the ant's current heading, on the
+argument that an ant already sliding one way should keep going.  That
+reasoning is sound and the implementation of it cannot work, because the
+heading is not a stable quantity to hang commitment on: an ant stalled
+against a wall is laying pheromone under itself, the trail term then
+steers it into its own mark, and the side derived from the heading flips
+with it.  Measured, the ant oscillated between due left and due right for
+20 000 ticks and travelled 12 mm.
+
+Handedness fixes it by not depending on anything that moves.  It is drawn
+from the id and the world seed only — no tick — so it is decided once,
+per individual, and no feedback can reach it.  It is also the more
+defensible model: lateralisation is documented in ants, including a
+population-level turning bias in wall-following, and an even split here
+means a colony meeting an obstacle sends ants round both ends instead of
+committing all of them to one."
+  (declare (type (unsigned-byte 32) id seed) (optimize (speed 3) (safety 0)))
+  (if (< (rnd01 id 0 +stream-hand+ seed) 0.5f0) -1.0f0 1.0f0))
+
+(defun clear-bearing (f x y bearing prefer off)
+  "BEARING if an antenna held that way is over open ground, else the
+nearest direction that is.
+
+The home vector points through walls, and until now a returning ant
+followed it through them: it pressed against the surface, slid along it
+because the collision pass removes only the component into it, marked the
+surface while sliding because deposition counts the attempted step, and
+so laid a road along the obstacle that recruited outbound ants onto the
+same wall.  Antennal veto in CHOOSE-TURN cannot reach that, because the
+homing term overwrites the heading afterwards — the ants walking into the
+wall are not choosing to.
+
+The scan opens toward PREFER — the ant's handedness, -1 or +1 — and that
+asymmetry is the whole of the edge-following.  Scanned symmetrically, an
+ant meeting a wall square on finds the same deflection either way and
+takes a different one every tick, so it dithers on the spot; opened to
+one side, it walks the edge until the nest comes clear.  Nothing here
+follows edges on purpose — it is what wanting to go home looks like when
+the direct way is shut.
+
+Beyond *homing-scan-steps* increments the ant gives up and keeps the
+bearing it had.  At the default that is a right angle: parallel to a wall
+square across its way, and no further.  An ant in a pocket needs to walk
+*away* from the nest to get out, which a bearing cannot express however
+wide the scan; that is route memory (§3.4)."
+  (declare (type field f) (type f32 x y bearing prefer off)
+           (optimize (speed 3) (safety 1)))
+  (flet ((clear-p (ang)
+           (declare (type f32 ang))
+           (not (field-blocked-p f (+ x (* off (cos ang)))
+                                 (+ y (* off (sin ang)))))))
+    (if (clear-p bearing)
+        bearing
+        (let ((steps *homing-scan-steps*))
+          (declare (type fixnum steps))
+          ;; The whole of the preferred side before any of the other one.
+          ;;
+          ;; Interleaving them — trying prefer and -prefer at each
+          ;; deflection in turn, which is the obvious way to find the
+          ;; smallest turn — reintroduces the dithering by another route.
+          ;; An ant resting on a wall bobs a couple of millimetres, that
+          ;; is enough to move one antennal sample across a cell
+          ;; boundary, and the ant is handed the opposite direction: a
+          ;; 150-degree reversal for two millimetres of vertical noise.
+          ;; Measured, it walked 8 mm in 20 000 ticks.  Committing to a
+          ;; side costs a wider turn now and again and is the only
+          ;; version that goes anywhere.
+          (dolist (side (list prefer (- prefer)) bearing)
+            (declare (type f32 side))
+            (loop for s of-type fixnum from 1 to steps
+                  for ang of-type f32
+                    = (wrap-angle (+ bearing (* side s +bearing-step+)))
+                  when (clear-p ang)
+                    do (return-from clear-bearing ang)))))))
 
 (defun choose-turn (w colony-id id tick x y heading)
   "Sample three headings through the antennae and pick one, with the
@@ -461,8 +555,63 @@ switch into and no switching logic to get wrong (§3.5)."
                                 (* *trail-turn-gain* smell bias)))
                      noise (* *turn-sigma*
                               (- 1.0f0 (* *trail-noise-suppression* smell))
+                              (if (plusp (aref (ants-cast a) i))
+                                  *uturn-cast-gain*
+                                  1.0f0)
                               (rnd-normal id tick +stream-turn+ seed)))
                (setf heading (wrap-angle (+ heading turn noise)))
+
+               ;; U-turn on losing a trail (§3.2).
+               ;;
+               ;; An ant that was following a trail and finds it gone
+               ;; turns about and casts, rather than carrying on into
+               ;; open ground.  This is observed in L. niger and it is a
+               ;; large part of why trails are stable: the ants actively
+               ;; re-find them, so a trail does not have to be strong
+               ;; enough to hold every ant on every tick.
+               ;;
+               ;; Outbound ants only.  A returning ant that loses the
+               ;; trail is not lost — it has a home vector, which is a
+               ;; second navigation system doing exactly this job — and
+               ;; turning it round would fight the very term that gets it
+               ;; home.  Being clueless without a trail is specifically
+               ;; the outbound ant's problem.
+               ;;
+               ;; The trigger is an edge, not a level: it fires on the
+               ;; tick the smell crosses down through the threshold, so
+               ;; an ant in open ground that never had a trail never
+               ;; U-turns, and one already casting is not re-triggered
+               ;; every tick.  That is what ANTS-SMELLED is for.
+               ;; Two levels, not one.  "Was on a trail" is
+               ;; *trail-follow-threshold* against a memory that decays
+               ;; over a second or so; "is off it" is
+               ;; *trail-lost-threshold* against the reading now.  A
+               ;; single level tested against last tick's reading fires
+               ;; on every faint trail an ant brushes past, and measured
+               ;; that cost 28% of the food delivered.
+               (let ((prev (aref (ants-smelled a) i))
+                     (lost *trail-lost-threshold*))
+                 (declare (type f32 prev lost))
+                 (setf (aref (ants-smelled a) i)
+                       (max smell (* prev *trail-memory-decay*)))
+                 (cond
+                   ((plusp (aref (ants-cast a) i))
+                    (decf (aref (ants-cast a) i)))
+                   ((and (not returning)
+                         (> lost 0.0f0)
+                         (>= prev *trail-follow-threshold*)
+                         (< smell lost))
+                    ;; and it is no longer on the trail it remembers, so
+                    ;; forget it — otherwise the latch is still armed
+                    ;; when the casting ends and the ant U-turns again.
+                    (setf (aref (ants-smelled a) i) 0.0f0)
+                    (setf (aref (ants-cast a) i)
+                          (min 255 (max 0 *uturn-ticks*)))
+                    (setf heading
+                          (wrap-angle
+                           (+ heading 3.1415927f0
+                              (* 0.5f0 (rnd-normal id tick +stream-uturn+
+                                                   seed))))))))
                ;; homing urge: total for a returning ant, and growing as
                ;; energy falls for an outbound one (§3.5)
                (let* ((hv-len (sqrt (+ (* hvx hvx) (* hvy hvy))))
@@ -505,8 +654,18 @@ switch into and no switching logic to get wrong (§3.5)."
                                            (max 1.0f-6 ethr)))))))
                  (declare (type f32 hv-len urge ethr))
                  (when (and (> hv-len 1.0f-4) (> urge 0.0f0))
+                   ;; Home on the bearing if it is walkable and on the
+                   ;; nearest walkable direction if it is not — the same
+                   ;; antennal veto the choice function got, applied to
+                   ;; the term that actually steers a laden ant.  See
+                   ;; CLEAR-BEARING for why the veto in CHOOSE-TURN could
+                   ;; not reach these ants.
                    (setf heading
-                         (angle-toward heading (atan hvy hvx)
+                         (angle-toward heading
+                                       (clear-bearing (colony-field c) x y
+                                                      (atan hvy hvx)
+                                                      (ant-handedness id seed)
+                                                      *sensor-offset*)
                                        (min 1.0f0 (/ urge (+ 1.0f0 urge)))))))
                (setf (aref (ants-heading a) i) heading)
 

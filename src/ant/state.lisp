@@ -66,6 +66,22 @@
   ;; has one — random at birth, replaced by the real bearing after a
   ;; successful trip — so there is no "no memory" case to special-case.
   (exit nil :type (or null f32v))
+  ;; The strongest trail this ant has smelled lately, 0..1, decaying a
+  ;; little every tick (§3.2).  An ant cannot notice it has lost a trail
+  ;; without remembering that it had one.
+  ;;
+  ;; A decaying maximum rather than simply the previous tick's reading,
+  ;; and the difference is the whole behaviour.  Losing a trail is an
+  ;; edge between two *levels* — properly on it, then properly off it —
+  ;; and one tick of memory cannot span those, because the smell falls
+  ;; through the middle gradually and the tick that crosses the lower
+  ;; level always has a reading just above it.  With a one-tick memory
+  ;; the rule instead fires whenever an ant brushes any faint trail and
+  ;; leaves it, which is most of what ants do.
+  (smelled nil :type (or null f32v))
+  ;; Ticks of casting left after a U-turn.  Zero for an ant that is
+  ;; walking normally, which is nearly all of them nearly all the time.
+  (cast nil :type (or null u8v))
   (free nil :type (or null fixv))
   (nfree 0 :type fixnum))
 
@@ -80,6 +96,7 @@
               :px (mkf32 capacity) :py (mkf32 capacity)
               :trailed (mkf32 capacity)
               :exit (mkf32 capacity)
+              :smelled (mkf32 capacity) :cast (mku8 capacity)
               :free (mkfix capacity)))
 
 (declaim (inline ant-live-p))

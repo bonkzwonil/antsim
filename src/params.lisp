@@ -350,6 +350,107 @@ the sample points and the terrain mask both already exist — the field
 carries the mask because a blocked cell cannot hold pheromone (§3.3).  So
 this costs three array reads and adds no new sense.")
 
+(defparameter *homing-scan-steps* 12
+  "How far around a blocked bearing a homing ant will look, in 15-degree
+steps (§3.2).  0 disables the scan; 12 is a half turn, the most a
+deflection can ever be.
+
+*obstacle-avoidance* gave the antennae a veto over the *choice function*
+and nothing else, and for a laden ant the choice function is not what
+decides where it goes.  The homing term runs afterwards and rotates the
+heading halfway to the nest bearing every tick, so whatever the antennae
+reported is overwritten before the ant moves.  A returning ant therefore
+walked into a wall standing between it and the nest and kept walking into
+it: the collision pass removed only the component into the surface, the
+ant slid along the face, deposition counted the attempted step, and the
+false road so laid recruited outbound ants onto the same wall.  Ants died
+strung out along the edge with the source still full.  Fixing the choice
+function alone could not touch this, because the ants doing it were not
+choosing.
+
+So the bearing gets the same veto: if the nest lies through terrain, the
+ant homes on the nearest walkable direction instead.  The scan is not
+symmetric — it opens toward whichever side the ant's current heading is
+already on.  Without that an ant meeting a wall head-on finds equal
+deflections both ways and picks a different one each tick, dithering in
+place; with it, the first turn commits and the ant walks the edge until
+the bearing comes clear.  That is edge-following as a consequence of
+still trying to go home, rather than a wall-following rule of its own.
+
+A half turn rather than the right angle this first had.  A right angle is
+the intuitive cap — turn until parallel to the wall, no further — and it
+is wrong, because it is measured from the *bearing* and the bearing is
+not perpendicular to the wall except at one instant.  Let the ant drift a
+few centimetres along the surface and the tangent moves outside the arc,
+so the scan finds nothing on the near side and hands the ant a large turn
+the other way; measured, it walked 8 mm in 20 000 ticks.  With the full
+half turn available and one side scanned before the other, the first
+clear direction *is* the tangent, whatever angle the bearing happens to
+make with the wall.
+
+It still does not make the home vector a path.  The ant is choosing a
+direction from where it stands, with no memory of where it has been, so a
+concavity that needs a long detour is still a trap — it walks in, the
+bearing comes clear, it turns back to the wall.  The fix for that is
+route memory (§3.4), not a wider scan.")
+
+(defparameter *trail-lost-threshold* 0.0f0
+  "How faint a trail has to get before an outbound ant decides it has
+lost the one it was following, as C/(k+C) of the best antenna (§3.2).
+0 disables U-turns altogether, **which is the default**, and the reason
+is measurement rather than doubt about the behaviour.
+
+0.15 is the calibrated value if you want them on: C of about 3.5 against
+*choice-k* = 20 — well under the strength of a used route and well over
+the stray packets an ant meets crossing open ground, so the edge fires
+when a trail genuinely runs out and not when one is merely thin.
+
+At 0.15 the rule does what it claims.  One ant walked off the end of a
+trail stays with it three times longer, summed over six seeds, and on
+one of them never leaves at all — that is the acceptance test.  What it
+does not do is pay: over four seeds it is neutral on the double bridge
+(2364 units of food against 2368) and costs about 4% in the open
+foraging arena (2333 against 2435, population 682 against 708),
+consistently in every seed.
+
+Holding ants on a known trail and letting them wander off it are the
+same trade seen from two sides, and this model is already stable enough
+at the trail-following end that the extra grip costs more in lost
+exploration than it returns.  Left off, implemented, and measured, so
+that the number is here to argue with rather than an omission to
+rediscover.")
+
+(defparameter *trail-follow-threshold* 0.5f0
+  "How strong a trail has to have been for an ant to count as having
+*followed* it, on the same C/(k+C) scale (§3.2).  0.5 is C = k = 20 —
+the concentration at which the choice function's preference for a
+marked direction is already decisive.
+
+The pair matters more than either number.  With one level an ant U-turns
+whenever it crosses and leaves any faint mark, which on a used route is
+most ticks; with two it U-turns only after leaving something it was
+genuinely committed to.")
+
+(defparameter *trail-memory-decay* 0.93f0
+  "Per-tick decay on an ant's memory of the last trail it smelled.
+[cal] Half-lives in about ten ticks, half a second, so the ant is still
+'on a trail it just lost' for roughly a body length of walking and not
+much more.")
+
+(defparameter *uturn-ticks* 40
+  "How long an ant casts about after losing a trail, motion ticks.  [cal]
+40 is two seconds at 20 Hz.")
+
+(defparameter *uturn-cast-gain* 3.0f0
+  "How much wider an ant's heading noise is while casting.  [cal]
+
+The U-turn alone only sends the ant back the way it came, which finds
+the trail again only if it left the trail travelling forwards.  Real
+ants that lose a trail turn *and* sweep — the turn puts them back over
+the ground they know, the sweep is what re-acquires the line.  Written
+as a multiplier on the existing noise rather than a new search mode,
+because a wider correlated random walk is what casting is.")
+
 (defparameter *nest-exit-scatter* 0.5f0
   "Spread, radians, on the bearing an ant sets off from the nest (§3.4).
 
@@ -541,6 +642,9 @@ relaxation from chasing floating-point noise forever.")
                *brood-per-stock* *nest-upkeep*
                *pi-noise* *homing-weight-low-energy* *nest-arrival-radius*
                *nest-exit-scatter* *obstacle-avoidance*
+               *trail-lost-threshold* *trail-follow-threshold*
+               *trail-memory-decay* *uturn-cast-gain*
                *relax-slop*))
 
-(declaim (type fixnum *max-age-ticks* *relax-iterations*))
+(declaim (type fixnum *max-age-ticks* *relax-iterations* *homing-scan-steps*
+               *uturn-ticks*))

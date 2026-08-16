@@ -146,10 +146,103 @@ path is locally straight and globally diffusive.
   Measured on the double bridge over four seeds: **571 units of food
   delivered against 367**, +55%, with the population up 28% and deaths down
   11%. Both §3.8 bridge rows are unaffected.
+
+  **That fixed half of it, and the half it could not reach was the larger
+  one.** The veto applies to the choice function, and a laden ant is not
+  steered by the choice function. The homing term runs afterwards and
+  rotates the heading halfway to the nest bearing every tick, so whatever
+  the antennae reported is overwritten before the ant moves. An ant whose
+  nest lay through a wall therefore still walked into it, still slid, still
+  marked the surface while sliding — and the false road so laid recruited
+  ants that *could* feel walls onto the same wall anyway. Watching it, this
+  is a column of ants leaving a good trail at a corner to stream along an
+  obstacle edge and fan out, clueless, at its far end, while exhausted ones
+  pile against the face behind them and die there with the source still
+  full. It was invisible to the choice function because the ants doing it
+  were not choosing.
+
+  So the bearing gets the veto too (§3.4): if the nest lies through
+  terrain, the ant homes on the nearest walkable direction instead,
+  scanned in 15-degree steps.
+
+  Two details are the whole of it, and both were got wrong first, in ways
+  worth keeping because each *looked* right and each left the ant walking
+  millimetres per thousand ticks.
+
+  - **The ant commits to a side.** Scanned symmetrically it finds equal
+    deflections either way and takes a different one every tick, dithering
+    on the spot. The first fix derived the side from the ant's current
+    heading — an ant already sliding one way should keep going — and that
+    cannot work, because a stalled ant is laying pheromone under itself
+    and the trail term then steers it into its own mark, so the heading is
+    the one quantity that is *not* stable. The side is now fixed per
+    individual, drawn from the ant's id and nothing else. That is also the
+    better model: lateralisation is documented in ants, and an even split
+    sends a colony meeting an obstacle round both ends instead of all one
+    way. The preferred side is scanned to exhaustion before the other is
+    tried at all; interleaving them reintroduces the dither, because two
+    millimetres of vertical bob moves one antennal sample across a cell
+    boundary and hands the ant a 150-degree reversal.
+  - **The cap is a half turn, not a right angle.** A right angle is the
+    intuitive limit — turn until parallel to the wall, no further — and it
+    is wrong, because the arc is measured from the *bearing*, which is
+    perpendicular to the wall for exactly one instant. Let the ant slide a
+    few centimetres and the wall's tangent falls outside the arc. With the
+    full half turn available and one side scanned first, the first clear
+    direction simply *is* the tangent, whatever angle the bearing happens
+    to make.
+
+  Following an edge is thereby a consequence of still trying to go home,
+  not a rule of its own — which is what makes it thigmotaxis rather than a
+  hack.
+
+  Measured the same way, over four seeds: **2368 units of food delivered
+  against 571**, more than four times as much, with the population up from
+  181 to 488 — and deaths falling from 126 per run to **0.5**. That last
+  number is the diagnosis confirming itself: essentially every death in
+  this scenario was an ant stranded on a wall. Both §3.8 bridge rows still
+  pass.
+
+  The single-ant regression test is the one that matters, though, because
+  neither failure was visible to the suite: one laden ant, one wall
+  between it and its nest, does it get home. It asserts the disabled case
+  too — a navigation test that also passes without the navigation rule is
+  worth nothing, and this one nearly was, twice.
 - **U-turns.** An ant that loses a trail it was following performs a
   characteristic U-turn and casts about, rather than continuing. This is
   observed in *L. niger* and is a large part of why trails are stable: the
   ants actively re-find them.
+
+  **Built.** An outbound ant that was on a trail and is now off one turns
+  about and walks with three times its usual heading noise for two
+  seconds — the turn puts it back over ground it knows, the casting is
+  what re-acquires the line. Outbound only: a returning ant that loses the
+  trail is not lost, because it has a home vector, and turning it round
+  would fight the term that gets it home.
+
+  The trigger needs two levels and that is the entire difficulty.
+  Written with one — was the smell above the threshold last tick, is it
+  below now — it fires whenever an ant brushes any faint mark and leaves
+  it, which on a used route is most ticks. Measured, that cost **28% of
+  the food delivered**. The smell has to fall through the middle
+  gradually, so the tick that crosses a level always has a reading just
+  above it, and one tick of memory cannot express "was properly on a
+  trail" at all. What works is a decaying maximum: the ant remembers the
+  strongest trail it has smelled for about half a second, and U-turns only
+  on leaving something it was committed to.
+
+  **Off by default, and that is a result rather than a hedge.** It works:
+  an ant walked off the end of a trail stays with it **three times
+  longer**, summed over six seeds, and on one of them never leaves at
+  all. It does not pay: over four seeds it is neutral on the double
+  bridge (2364 units against 2368) and costs about **4%** in the open
+  foraging arena (2333 against 2435, population 682 against 708), in the
+  same direction in every seed. Holding ants on a known trail and letting
+  them wander off it are one trade seen from two sides, and this model is
+  already grippy enough at the trail-following end that the extra hold
+  costs more exploration than it returns. `*trail-lost-threshold*` turns
+  it on; the numbers are recorded so the choice can be argued with
+  instead of rediscovered.
 - **Search spirals.** An ant returning on a home vector that does not find
   the nest switches to an expanding spiral/loop search — the documented
   systematic search of a homing ant that has arrived at the wrong place.
@@ -313,6 +406,19 @@ navigation systems in parallel and weights them by confidence:
    whole recruitment cascade has no seed.
    - PI accumulates error. Model it: add a small proportional noise per
      step, so long trips come home imprecisely and trigger a search spiral.
+   - **A vector cannot route.** The home vector points *through* whatever
+     stands between the ant and the nest, and for a long time the ant
+     followed it there — which is the wall-following failure §3.2
+     describes, and it was the single most expensive bug in the model. The
+     bearing is now vetoed by the antennae like any other direction: if the
+     nest lies through terrain the ant homes on the nearest walkable
+     direction instead (`*homing-scan-steps*`). That walks an ant along an
+     obstacle and off its end, and it is deliberately not more than that.
+     The ant chooses a direction from where it stands with no memory of
+     where it has been, so a concavity that needs a long detour is still a
+     trap: it walks out, the bearing comes clear, it turns back into the
+     pocket. That case needs the route memory below, and the honest
+     statement is that the model does not have it yet.
 2. **Trail following.** §3.3. Used when trail concentration exceeds the
    detection threshold.
 3. **Landmark / route memory.** A learned association between a remembered
@@ -565,7 +671,9 @@ acceptance list*. Everything below passes that test.
 | Response thresholds, age polyethism | *later* | M1 has one task. Age still accumulates and still kills — it just does not yet steer behaviour. |
 | Trophallaxis between ants | *later* | M1 unloads the crop straight into nest stock. The ant–ant transfer is the only mechanism in the model needing pairwise coupling, and skipping it keeps the M1 tick embarrassingly parallel. |
 | Landmark / route memory | *later* | The *Formica* mode; irrelevant to a mass recruiter. |
-| U-turns, search spirals, thigmotaxis | *later* | Real, measured, and all three make trails *more* stable — so M1 passing without them is the stronger result. |
+| Thigmotaxis | **built, M2.1** | Not an addition but a *correction*: the model had wall-following nobody wrote, and it was starving colonies. See §3.2. |
+| U-turns | **built, M2.1, off** | Works — trail residence ×3 — and does not pay: neutral on the bridge, −4% foraging. §3.2. |
+| Search spirals | *later* | Real, measured, and it makes trails *more* stable — so M1 passing without it is the stronger result. |
 | Necrophoresis | *later* | Corpses accumulate in M1 and nothing clears them. A behaviour, not a mechanism — it needs only a new task and a midden. |
 | Multiple colonies | *later* | The data model supports them from day one (§3.12); M1 runs one, because nothing in §3.8's core rows needs two. |
 
