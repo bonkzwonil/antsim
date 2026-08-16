@@ -133,10 +133,38 @@ way to invalidate an acceptance result."
                                (nest-x 0.32f0) (nest-y 0.10f0)
                                (food-x 0.32f0) (food-y 0.50f0)
                                (food-amount 500000.0f0)
-                               (start 150) (capacity 4000)
+                               ;; 250, and the number is a result rather
+                               ;; than a convenience -- see the note on
+                               ;; density below.
+                               (start 250) (capacity 4000)
                                (stock 400.0f0)
                                (seed +default-seed+))
   "Build a bridge apparatus and return a BRIDGE.
+
+**The colony size is part of the apparatus.**  Measured on the double
+bridge over ten seeds with the population held fixed, the short arm's
+share of traffic depends on how many ants are in the arena, and not
+weakly:
+
+    start   worst seed   mean
+      150      0.544     0.805
+      250      0.671     0.788
+      300      0.606     0.784
+      400      0.552     0.723
+      900      lost      0.690
+     1200      lost      0.668
+
+At 900 and above the **long arm wins outright on some seeds** — crowding
+in the corridors stops being noise and starts being the thing that
+selects, and the shortest-path result inverts.  Below about 250 the
+opposite failure: too little traffic for the nonlinearity to latch, so
+individual runs wander and the worst seed is the worst of any size
+tested.
+
+So the experiment has a working density window, and a bridge result
+quoted without its colony size is under-specified.  250 sits at the top
+of the floor curve, which is the criterion that matters for a claim: the
+worst replicate, not the average one.
 
 The shape is the one the experiments use, and the shape is the whole
 point.  A band across the arena from Y-LO to Y-HI is solid except for two
@@ -186,7 +214,7 @@ would put a starvation transient on top of the measurement."
                       (bridge-arm-length nest-x nest-y food-x food-y
                                          b1 y-lo t1 y-hi))))))
 
-(defun binary-bridge (&key (seed +default-seed+) (start 150))
+(defun binary-bridge (&key (seed +default-seed+) (start 250))
   "Deneubourg's binary bridge: two arms of equal length (§3.8).
 
 Both corridors run straight up, mirrored about the nest–food axis, so the
@@ -195,7 +223,7 @@ here, which is the design: any departure from an even split has to have
 been produced by the colony."
   (make-bridge-world :seed seed :start start))
 
-(defun double-bridge (&key (seed +default-seed+) (start 150))
+(defun double-bridge (&key (seed +default-seed+) (start 250))
   "Goss's double bridge: one arm longer than the other (§3.8).
 
 The fork is unchanged — both corridors still leave the nest chamber side

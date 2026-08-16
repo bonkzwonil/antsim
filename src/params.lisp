@@ -593,7 +593,24 @@ foragers and draws as a crowd many times the size of the nest.
 
 The nest entrance body is already exempt from collision for exactly this
 reason — making it solid would seal the colony in — so this is the same
-exemption applied to the same fiction, one level further in.")
+exemption applied to the same fiction, one level further in.
+
+It also pays, once the colony is regulated: 2400 units of food against
+2296, with departing ants leaving 27% closer to the exit bearing they
+remember (0.308 rad against 0.420).  The mechanism came from watching the
+toggle rather than from the numbers — a crowded nest shoves the ants
+resting in it, so a departing forager no longer sets off from the spot it
+arrived at, and the route fidelity of §3.4 is corrupted before it takes a
+step.
+
+An earlier A/B had this costing 10-14%, and that measurement was taken
+before brood regulation, on a colony that grew unbounded past 600 ants.
+A nest crowd at that size is not the same phenomenon.  An A/B is only
+valid against the model it was run on.
+
+Left switchable rather than settled, and bound to N in the live window:
+passing runs smoother, colliding looks better, and nothing in the model
+ranks those against each other.")
 
 (defparameter *forager-expendability* 1.0f0
   "How far the give-up threshold falls below the departure threshold when

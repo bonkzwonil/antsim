@@ -249,6 +249,118 @@ feedback term:
   scale should re-check it. Above 25 the cap never binds at all, which is
   the honest upper bound on what this apparatus can say about a queen.
 
+### The double bridge has a working density window
+
+The acceptance row began failing on one seed of three — short-arm share
+0.590 against a 0.60 bar — after the colony rules shipped. Four
+explanations were tried; three were wrong.
+
+**Wrong: the colony rules weakened selection.** Six seeds across four
+configurations, and the short arm won all 24. The shipped rules *raise*
+the mean share (0.790 → 0.817) and widen the spread. Growth was not
+biasing the result, it was adding variance.
+
+**Wrong: growth floods the arms, so fix the population.** Correct
+science — Deneubourg and Goss ran fixed colonies — and it made the
+failing seed *worse*, 0.590 → 0.544.
+
+**Wrong: a fixed colony needs to be bigger to supply the traffic the
+nonlinearity feeds on.** The opposite:
+
+| start | 1 | 2 | 3 | 4 | 5 | 6 | mean | min |
+|---|---|---|---|---|---|---|---|---|
+| 150 | 0.544 | 0.973 | 0.975 | 0.724 | 0.974 | 0.676 | 0.811 | 0.544 |
+| **300** | 0.839 | 0.833 | 0.822 | 0.606 | 0.864 | 0.714 | 0.780 | **0.606** |
+| 600 | 0.763 | 0.624 | 0.750 | 0.748 | 0.673 | 0.745 | 0.717 | 0.624 |
+| 900 | 0.717 | **0.463** | 0.791 | 0.748 | 0.603 | 0.818 | 0.690 | lost |
+| 1200 | 0.696 | 0.783 | **0.308** | 0.772 | 0.722 | 0.727 | 0.668 | lost |
+
+At 900 and 1200 ants the **long arm wins outright** on some seeds. The
+shortest-path result does not merely weaken with crowding, it inverts.
+
+**Right, apparently: the apparatus has a density window.** Too few ants
+and the nonlinearity never latches, so individual runs wander — 150 has
+the best mean and the worst single seed. Too many and the corridors jam
+and congestion decides instead of length. Around 300 the spread is by far
+the tightest and nothing is lost.
+
+That is a property of the experiment worth stating in its own right, and
+it is not a knob: it says a bridge result quoted without its colony size
+is under-specified.
+
+### Trail decay — free in outcome, threefold in appearance
+
+`*trail-decay-scale*` divides the literature tau, so a *lower* number is a
+*slower* decay. Five seeds, two scenarios.
+
+| decay | foraging: mins to strip | foraging: peak trail | bridge: eaten |
+|---|---|---|---|
+| 30 (current) | 26.8 | 129 549 | 2602 |
+| 20 | 27.3 | 193 422 | 2475 |
+| 15 | 26.7 | 245 086 | 2685 |
+| 10 | 26.0 | 302 274 | 2341 |
+| 5 | 27.2 | 393 118 | 2826 |
+
+Time to strip the source moves by 1.3 minutes across a **sixfold** change
+in decay rate — noise. Food on the bridge is non-monotonic, also noise.
+Peak trail mass triples.
+
+So this parameter is nearly free in outcome and dominant in appearance,
+which makes it a legitimate aesthetic choice rather than a performance
+one — an unusual position for a parameter in this model and worth saying
+plainly.
+
+**One cost is not measured here.** Evaporation is the colony's only way
+to forget. Time-to-strip says nothing about the aftermath: how long a
+road outlives a dead source, or how quickly a colony can abandon one and
+re-route. A slower decay lengthens exactly the sequence the README calls
+"the road outlives the source", which is visually the best thing in the
+simulation and is also, precisely, a loss of adaptability. Anyone
+changing this should measure the aftermath, not the harvest.
+
+**The first attempt at this measurement was worthless** and is kept as a
+lesson: it used *food eaten* on a scenario with a finite source, so every
+setting scored an identical 2500 — the whole source — and the parameter
+looked to have no effect at all. A saturated metric does not report "no
+difference", it reports nothing.
+
+### The nest crowd, explained — and an A/B that expired
+
+Resting ants were given their own body kind so they leave the ant-ant
+collision pass: the nest disc is a *door*, the real thing is a chamber
+system going down, and a 2 cm disc cannot hold the hundreds of workers a
+mature colony rests in it. Measured against the *unregulated* colony this
+cost 10–14% of food delivered, for no reason any measurement could
+supply, so it was shipped switchable rather than on — an unexplained cost
+that size is as likely to be a bug in the change as a property of it.
+
+Watching the toggle live supplied the mechanism the numbers could not.
+A crowded nest **shoves** resting ants, so a departing ant no longer sets
+off from the spot it arrived at, and the exit bearing it remembers
+(§3.4) stops matching the direction it actually leaves in. It wanders
+instead of returning to the source.
+
+That is measurable, and it holds:
+
+| resting ants | eaten | exit error (rad) |
+|---|---|---|
+| blocking | 2296 | 0.420 |
+| passing | **2400** | **0.308** |
+
+4.5% more food, and departures 27% closer to the remembered bearing.
+
+**The earlier 14% was not wrong, it had expired.** It was measured before
+brood regulation shipped, when the colony grew unbounded past 600 ants,
+and a nest crowd at that population is a different phenomenon from a nest
+crowd at a regulated one. An A/B is only valid against the model it was
+run on, and this model changed underneath it.
+
+Kept as a live toggle (**N**) regardless, at the user's suggestion:
+passing runs smoother, colliding looks better, and the model has no basis
+for ranking "delivers more food" against "reads right on screen". A
+parameter whose honest answer is *it depends what you are looking at*
+should stay visible rather than be buried in a default.
+
 ## Mistakes worth not repeating
 
 - **Measuring a stale tree.** Two runs were read, or nearly read, from
