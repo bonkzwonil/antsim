@@ -1729,11 +1729,37 @@ The measurements themselves live in
 a change, and the four ways a measurement was got wrong before it was got
 right.
 
-**M3 — the ant model.** The vector ant, the tripod gait rig, VS
-articulation, LOD, antennae, payload, state tint. The one genuinely novel
-piece of engineering in the project, and it gets its own milestone because
-it deserves the room to be got right. Note the collision model does not
-change: the disc stays, the drawing gets legs (§3.11).
+**M3 — the ant model, and how ants meet.** The vector ant, the tripod
+gait rig, VS articulation, LOD, antennae, payload, state tint. The one
+genuinely novel piece of engineering in the project, and it gets its own
+milestone because it deserves the room to be got right. Note the
+collision model does not change *shape*: the disc stays, the drawing gets
+legs (§3.11).
+
+It does change what happens when two discs meet, and that is the second
+half of this milestone. The non-overlap rule is symmetric — two ants
+head-on push each other apart and neither prefers a side — so opposing
+streams gridlock at pinch points instead of sorting themselves out.
+Because deposition counts the step an ant *attempted*, the stall marks
+the ground, the mark recruits more ants into it, and nothing in that loop
+measures progress. Measured, it is very likely what makes §3.8's density
+window bite: past about 900 ants on the double bridge the *long* arm
+starts winning, because congestion has overtaken pheromone as the
+route-selector.
+
+Lane formation is the fix worth building rather than the damping term
+that would also work. It is documented in this exact species (Dussutour,
+Fourcassié, Helbing & Deneubourg, *Nature* 2004), it turns crowding into
+organisation rather than merely removing gridlock, and — the reason it
+belongs *here* — an ant that chooses a side on encounter is an ant whose
+antennae and body orientation start to matter, which is precisely what
+the rest of this milestone is building. The two halves are the same
+subject approached from opposite ends: what an ant looks like, and what
+it does when it meets another one.
+
+The candidates and their costs are in §3.11; the short version is that
+lane formation leaves the published figures alone and depositing by
+actual displacement would not.
 
 **M4 — scenarios and behaviour depth.** JSON loading, richer scenes, and
 then the deferred half of §3.9 in dependency order: response thresholds and
