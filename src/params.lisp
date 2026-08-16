@@ -868,8 +868,21 @@ Two properties matter and neither is optional:
     needs no ordering to be maintained.
 
 This is trophallaxis without the pairwise coupling §3.9 defers — the
-recipient side of it, which is the side that matters for whether the
-colony lives.")
+recipient side of it.
+
+**It ships as modelling rather than as a fix, and the distinction is
+recorded because the measurement is otherwise puzzling.** The collapse
+described above was a *pre-queen* phenomenon: bounding the lay rate and
+delaying brood emergence (§3.10) removed the unbounded growth that drove
+the ratchet, so by the time this was built the failure no longer
+occurred. Measured against the current model it changes nothing — deaths
+985 against 983 — because there is nothing left for it to change.
+
+A trough that every resting ant sips from at once is still not a
+defensible account of trophallaxis, and individual service needs no
+colony-wide read, so nothing argues against it either. But it is not
+load-bearing, and a future reader deserves to know that rather than
+inferring a benefit from its existence.")
 
 (defparameter *nest-feed-rate* 0.002f0
   "Energy per motion tick a resting ant draws from the colony's stock.

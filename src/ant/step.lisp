@@ -145,6 +145,7 @@ initial condition rather than merely a convenient one."
                  ;; It is standing in the nest, which is the one place
                  ;; this reading is legitimate.
                  (aref (ants-resolve a) i) (colony-giveup-threshold c)
+                 (aref (ants-waited a) i) 0
                  ;; A newborn has no route to be faithful to, so its exit
                  ;; bearing is simply random — which is what makes the
                  ;; naive ants the colony's explorers (§3.4).
@@ -497,6 +498,17 @@ switch into and no switching logic to get wrong (§3.5)."
                  (when (and (> want 0.0f0) (> (colony-stock c) want))
                    (decf (colony-stock c) want)
                    (incf (aref (ants-energy a) i) want))))
+             ;; How long this ant has been waiting to be fed: resting,
+             ;; and still under the bar it needs to set out.  Cleared the
+             ;; moment it can work again, so the number always means
+             ;; "unbroken ticks spent unable to leave", not a lifetime
+             ;; total.
+             (if (<= (aref (ants-energy a) i) (colony-energy-threshold c))
+                 (let ((w0 (aref (ants-waited a) i)))
+                   (declare (type (unsigned-byte 32) w0))
+                   (when (< w0 4294967295) (setf (aref (ants-waited a) i) (1+ w0))))
+                 (setf (aref (ants-waited a) i) 0))
+
              ;; Whether to set out, and the bar for doing so, both move
              ;; with how hungry the colony is (COLONY-FORAGE-URGENCY).  A
              ;; nest with a full larder trickles foragers out; one with an
@@ -1011,7 +1023,8 @@ tick would cost more than the scan it replaces."
             (let ((want (min (- 1.0f0 beste) (colony-stock c))))
               (declare (type f32 want))
               (decf (colony-stock c) want)
-              (incf (aref (ants-energy a) best) want)))))))
+              (incf (aref (ants-energy a) best) want)
+              (setf (aref (ants-waited a) best) 0)))))))
   (values))
 
 (defun colony-step! (w c)

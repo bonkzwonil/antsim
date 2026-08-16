@@ -16,6 +16,10 @@ between the model described here and the much smaller thing M1 actually
 builds, because a design this deep ships nothing without one.
 
 
+> Every tunable is a `defparameter` in `src/params.lisp`;
+> [config.md](config.md) lists them with their defaults, which are off,
+> and how to override them from a scenario file or the live window.
+>
 > Measurements live in [experiments.md](experiments.md) — a lab notebook
 > recording the runs behind the decisions here, including the ones that
 > decided against a change. Every behavioural change carries an

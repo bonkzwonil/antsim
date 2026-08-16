@@ -106,6 +106,16 @@
   ;; commits.  A colony that is fed while this ant is out does not reach
   ;; across the arena and change its mind for it.
   (resolve nil :type (or null f32v))
+  ;; Ticks spent resting in the nest below the bar it needs to set out —
+  ;; that is, waiting to be fed before it can work again (§3.5).
+  ;;
+  ;; Displayed rather than acted on, for now.  It is also the number a
+  ;; forager would need in order to learn how the colony is doing without
+  ;; reading anything colony-wide: an ant that asks for food and is not
+  ;; served has been told the larder is thin, and that is the only channel
+  ;; a real ant has.  Watching it is the cheapest way to find out whether
+  ;; it carries the signal before anything is made to depend on it.
+  (waited nil :type (or null u32v))
   ;; Ticks of casting left after a U-turn.  Zero for an ant that is
   ;; walking normally, which is nearly all of them nearly all the time.
   (cast nil :type (or null u8v))
@@ -125,7 +135,7 @@
               :gait (mkf32 capacity)
               :exit (mkf32 capacity)
               :smelled (mkf32 capacity) :cast (mku8 capacity)
-              :resolve (mkf32 capacity)
+              :resolve (mkf32 capacity) :waited (mku32 capacity)
               :free (mkfix capacity)))
 
 (declaim (inline ant-live-p))
