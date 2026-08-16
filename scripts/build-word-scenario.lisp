@@ -55,7 +55,7 @@ down, which is a fine way to notice you did it."
                                    (push (list x0 y0 x1 y1) out))))))
     (nreverse out)))
 
-(defun emit (path)
+(defun emit (path &key (start 400) (stock 900.0) (seed 20260816) note)
   (with-open-file (s path :direction :output :if-exists :supersede)
     (let ((rects (word-rects *word*)))
       (format s "{~%  \"name\": \"antsim\",~%~%")
@@ -63,7 +63,12 @@ down, which is a fine way to notice you did it."
       (format s "  \"_what2\": \"same 3x5 font the HUD draws with. The nest sits below\",~%")
       (format s "  \"_what3\": \"the word and the food above it, so every trail has to\",~%")
       (format s "  \"_what4\": \"thread the lettering. Generated from the font itself by\",~%")
-      (format s "  \"_what5\": \"scripts/build-word-scenario.lisp -- do not hand-edit.\",~%~%")
+      (format s "  \"_what5\": \"scripts/build-word-scenario.lisp -- do not hand-edit.\",~%")
+      (when note
+        (loop for line in note
+              for i from 1
+              do (format s "  \"_why~d\": \"~a\",~%" i line)))
+      (format s "~%")
       (format s "  \"world\": { \"width\": ~,3f, \"height\": ~,3f, \"capacity\": 8000 },~%~%"
               *world-w* *world-h*)
       (format s "  \"obstacles\": [~%")
@@ -76,8 +81,8 @@ down, which is a fine way to notice you did it."
       (format s "    { \"id\": \"home\",~%")
       (format s "      \"nest\": { \"x\": ~,3f, \"y\": 0.075, \"r\": 0.022 },~%"
               (* 0.5f0 *world-w*))
-      (format s "      \"capacity\": 6000,~%      \"start\": 400,~%")
-      (format s "      \"stock\": 900.0 }~%  ],~%~%")
+      (format s "      \"capacity\": 6000,~%      \"start\": ~d,~%" start)
+      (format s "      \"stock\": ~,1f }~%  ],~%~%" stock)
       ;; Two sources rather than one, left and right of centre, so the
       ;; colony threads the word in two places and the picture has a trail
       ;; through more of the lettering than a single road would give.
@@ -98,7 +103,22 @@ down, which is a fine way to notice you did it."
       (format s "    { \"x\": ~,3f, \"y\": ~,3f, \"r\": 0.030, \"amount\": 60000.0, \"quality\": 1.0 }~%"
               (* 0.72f0 *world-w*) (- *world-h* 0.06f0))
       (format s "  ],~%~%")
-      (format s "  \"seed\": 20260816,~%  \"duration_s\": 3600~%}~%")
+      (format s "  \"seed\": ~d,~%  \"duration_s\": 3600~%}~%" seed)
       (format t "~&~a: ~d rects, ~d letters~%" path (length rects) (length *word*)))))
 
 (emit #p"scenarios/antsim.json")
+
+;; The same arena, overloaded: a colony far too large for the income its
+;; geometry allows.  This is the regime in which how the nest *distributes*
+;; scarce food decides whether it lives, and it is the regime every earlier
+;; measurement of that question missed -- those runs started small and grew
+;; healthily, so the feeding rule could not matter either way.
+(emit #p"scenarios/antsim-overload.json"
+      :start 1400 :stock 40.0 :seed 4035347294
+      :note (list "1400 ants on 40 units of stock: metabolism exceeds income"
+                  "from the first tick, so the only question left is how the"
+                  "nest shares what little arrives.  At nest_meals_per_tick 0"
+                  "-- the old communal sip -- it stabilises, then from about"
+                  "T2800 oscillates at stock 0 with an exhausted nest, and"
+                  "never recovers.  With meals it does.  Reported from the"
+                  "window; the seed is the one it was seen on."))
