@@ -225,8 +225,8 @@ nest. That is the first ants home, laying the first pheromone.
 ![Forty seconds: the first thread](docs/images/01-searching.png)
 
 By **5 minutes** that thread has become a road — in fact two of them, which is
-the frame [above](#what-emerges). The total is 73 610 and the population has
-grown from 150 to 267: the first turn of the loop that drives everything after
+the frame [above](#what-emerges). The total is 78 263 and the population has
+grown from 150 to 266: the first turn of the loop that drives everything after
 it, where food comes in, workers are made, and more workers thicken the trail.
 
 Everything in the pictures above grew from those first ants, by the ants' own
@@ -235,12 +235,12 @@ stronger is stronger.
 
 ## How it ends
 
-The source in this scenario is finite, and it runs out after **24 minutes**.
+The source in this scenario is finite, and it runs out after **23 minutes**.
 What happens over the next six is the part worth watching.
 
 ### The road outlives the source
 
-At the moment the source empties, the trail is at full strength — 79 838 units
+At the moment the source empties, the trail is at full strength — 91 580 units
 — and the colony is still pouring ants onto it.
 
 ![The source has just run out](docs/images/09-abandoned.png)
@@ -250,20 +250,20 @@ whatever pheromone is in front of it; an ant deposits only when it is carrying
 food. So the traffic continues and the renewal stops, and evaporation starts
 taking the road out from under the ants still walking it.
 
-**Two minutes later** the trail is down to 10 805 — 86% gone — and the ants are
+**Two minutes later** the trail is down to 12 426 — 86% gone — and the ants are
 still packed along the line where it was, including a knot where the food used
 to be. Not one of them is orange, because there is nothing left to carry.
 
 ![Two minutes on: walking a road that is dissolving](docs/images/10-fading.png)
 
-**Six minutes** and it is 198, from 79 838. The structure is simply gone, and
+**Six minutes** and it is 228, from 91 580. The structure is simply gone, and
 with it every trace of where the food had been. The colony disperses back into
 the random walk it started with — and the red ants are the ones that no longer
 have the reserve to try again.
 
 ![Six minutes on: nothing left](docs/images/11-collapsed.png)
 
-The population is *rising* through all three frames — 747, 773, 793 — because
+The population is *rising* through all three frames — 750, 782, 811 — because
 the colony is still converting its stored food into workers while its road
 dissolves. It is at its largest a few minutes after it has already lost.
 
