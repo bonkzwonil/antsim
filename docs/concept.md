@@ -1761,6 +1761,25 @@ The candidates and their costs are in §3.11; the short version is that
 lane formation leaves the published figures alone and depositing by
 actual displacement would not.
 
+**What this buys that is not in M3.** Lane formation needs the broad
+phase to report *encounters* — this ant met that ant, at this bearing —
+where today it reports only overlaps to be resolved. That is the same
+thing the social-information channel of §3.4 needs, and it is the
+expensive part of it: once an encounter is an event the model can see,
+what the two ants exchange is a rule rather than an infrastructure.
+
+The exchange itself is **explicitly not in M3**. Ants meeting on a trail
+antennate and share food, and the content is navigational — a laden ant
+coming the other way is current evidence that there is food behind her,
+where pheromone is an average over the last several minutes. It is the
+fast channel this model lacks, it is the reason a colony can react to a
+source appearing faster than a field can carry the news, and it is a
+milestone's worth of work on its own.
+
+Worth stating because the two are easy to conflate and the order matters:
+M3 builds the *event*, because it needs it for the physical half anyway.
+Whatever rides on that event comes later, and comes cheaply.
+
 **M4 — scenarios and behaviour depth.** JSON loading, richer scenes, and
 then the deferred half of §3.9 in dependency order: response thresholds and
 age polyethism, trophallaxis, the no-entry and alarm fields, necrophoresis

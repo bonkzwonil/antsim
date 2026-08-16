@@ -377,9 +377,17 @@ should stay visible rather than be buried in a default.
   parameter here. The unmeasured half is the *aftermath* — how long a road
   outlives a dead source — since evaporation is the colony's only way to
   forget.
-- **Encounter-based recruitment** (§3.4). The fast channel the model
-  lacks: a laden ant meeting an outbound one carries current information,
-  where pheromone is an average over minutes.
+- **Encounter-based recruitment** (§3.4) — descoped, and noteworthy.
+  The fast channel the model lacks: a laden ant meeting an outbound one
+  carries *current* information, where pheromone is an average over the
+  last several minutes. Ants antennate and share food on meeting, and the
+  content is navigational.
+
+  It shares its expensive half with lane formation: both need the broad
+  phase to report **encounters** rather than only overlaps. M3 builds that
+  event for the physical half regardless, so whatever rides on it
+  afterwards is a rule rather than an infrastructure. Order matters and
+  the two are easy to conflate.
 
 ## Mistakes worth not repeating
 
