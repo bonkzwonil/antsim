@@ -31,6 +31,22 @@ triangles, articulated in the vertex shader from eight floats per ant. The legs
 do not slide, because the stride is driven by distance walked rather than by the
 clock. [More in the diary](docs/DIARY.md#traffic--and-an-ant-close-enough).*</sub>
 
+## Why Common Lisp
+
+Because a simulation is an experiment, and an experiment needs an off switch.
+All 65 parameters of this model are special variables, so an A/B is a `let`
+around the run rather than a configuration mechanism — and when the binding
+ends, so does the change. Everything else is lexically scoped, and the language
+tells the two apart at a glance.
+
+SBCL then compiles straight to machine code — no VM, no JIT warm-up — and with
+types declared the numeric core runs level with C and occasionally past it. So
+the exploratory half and the tight loop are the same language in the same file,
+and over SLIME you can recompile one function into a colony that is already
+running instead of starting the twenty simulated minutes again.
+
+**[The full argument, with the code it rests on →](docs/WHYLISP.md)**
+
 ## It reproduces the published experiments
 
 The point of building on real behavioural science is that the results are
@@ -174,6 +190,8 @@ and a result are different things.
 - **[docs/DIARY.md](docs/DIARY.md)** — what a run actually looks like, frame by
   frame, and the eight failures that were caught by watching rather than by
   counting.
+- **[docs/WHYLISP.md](docs/WHYLISP.md)** — why Common Lisp and SBCL are the
+  right tools for this, argued against the code rather than in the abstract.
 - **[docs/config.md](docs/config.md)** — every switch, its default, and where to
   set it.
 
@@ -205,5 +223,3 @@ The full record, including what shipped switched **off** and why, is
 ## Copyright and licence
 
 Copyright © 2026 Mathias Menzel-Nielsen. All rights reserved.
-
-No licence has been chosen yet, so no rights are granted.

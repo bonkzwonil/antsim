@@ -102,6 +102,9 @@ Edit that file, then `make page`. -->
       align-items: start;
     }
   }
+  @media (min-width: 680px) {
+    .results { grid-template-columns: repeat(3, 1fr); }
+  }
   main { min-width: 0; }
 
   /* --------------------------------------------------------------- masthead */
@@ -131,6 +134,8 @@ Edit that file, then `make page`. -->
     margin: 20px 0 0;
     text-wrap: pretty;
   }
+  /* The second standfirst is the claim, set a shade smaller than the first. */
+  .standfirst + .standfirst { margin-top: 16px; font-size: clamp(17px, 1.8vw, 19px); }
 
   /* ------------------------------------------------------------ the banner */
   .banner {
@@ -422,7 +427,69 @@ Edit that file, then `make page`. -->
   .ms li:first-child { border-top: 1px solid var(--rule); }
   .ms .tag { font-family: var(--mono); font-size: 13px; color: var(--accent); padding-top: 2px; }
   .ms .tag.far { color: var(--ink-3); }
+  .ms .tag.done { color: var(--teal); }
   .ms b { display: block; margin-bottom: 3px; }
+  .ms .state {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--teal); font-weight: 400;
+    white-space: nowrap;
+  }
+  .ms .state.open { color: var(--accent); }
+  .ms .state.later { color: var(--ink-3); }
+
+  /* --------------------------------------------------------------- links
+     The masthead's outward row: repository, the prose documents, the code
+     itself.  A design document nobody can get from the thing it describes
+     is a pamphlet, so these sit above the fold rather than in a footer. */
+  .links {
+    list-style: none; padding: 0;
+    margin: 30px 0 0;
+    display: flex; flex-wrap: wrap;
+    border-top: 1px solid var(--rule);
+  }
+  .links li {
+    margin: 0; flex: 1 1 210px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .links a {
+    display: block; padding: 14px 24px 15px 0;
+    text-decoration: none; color: var(--ink-2);
+  }
+  .links a b {
+    display: block; margin-bottom: 2px; font-weight: 400;
+    font-family: var(--mono); font-size: 12.5px; color: var(--accent);
+  }
+  .links a span { font-size: 14.5px; color: var(--ink-3); }
+  .links a:hover b { text-decoration: underline; text-underline-offset: 2px; }
+  .links a:hover span { color: var(--ink-2); }
+
+  /* Inline source-file reference: <a class="src"> */
+  .src {
+    font-family: var(--mono); font-size: .92em;
+    text-decoration-thickness: 1px; text-underline-offset: 2px;
+  }
+
+  /* --------------------------------------------------------- result cards
+     The numbers the acceptance rows assert, given the weight of a figure
+     rather than a sentence, because they are the whole claim of §3.8. */
+  .results {
+    list-style: none; padding: 0; margin: 26px 0 0;
+    display: grid; gap: 1px;
+    grid-template-columns: 1fr;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+  .results li { margin: 0; padding: 20px 22px; background: var(--surface); }
+  .results .big {
+    font-family: var(--mono); font-size: 30px; line-height: 1.1;
+    color: var(--accent); display: block;
+  }
+  .results .what {
+    display: block; margin-top: 8px; font-size: 15px; color: var(--ink);
+  }
+  .results .sub {
+    display: block; margin-top: 6px; font-size: 13.5px; color: var(--ink-3);
+  }
 
   footer {
     margin-top: 80px;
@@ -448,12 +515,17 @@ Edit that file, then `make page`. -->
 <div class="shell">
 
   <header class="masthead">
-    <p class="eyebrow">Concept · rev. 2 · 15 August 2026 · not yet implemented</p>
+    <p class="eyebrow">Design document · rev. 3 · 17 August 2026 · built, and running</p>
     <h1 class="wordmark">antsim</h1>
     <p class="standfirst">
       A top-down, GL-rendered colony of individual ants — foraging, recruiting,
       breeding, tiring and starving — where every behaviour on screen is a
       mechanism someone measured in a real ant.
+    </p>
+    <p class="standfirst">
+      It is built. The two founding experiments of the field — Deneubourg's
+      binary bridge and Goss's double bridge — run on this model, in the test
+      suite, against the papers' own criteria, and both pass.
     </p>
 
     <div class="banner">
@@ -470,8 +542,48 @@ Edit that file, then `make page`. -->
       <div><dt>Stack</dt><dd>SBCL 2.6.4 · OpenGL 4.5 core</dd></div>
       <div><dt>Verified on</dt><dd>RTX 3070, driver 580.159.04</dd></div>
       <div><dt>Reference species</dt><dd><em>Lasius niger</em></dd></div>
-      <div><dt>Repository</dt><dd>bonk/antsim · branch <code>concept</code></dd></div>
+      <div><dt>Milestone</dt><dd>M3 — the vector ant ships, the encounter does not</dd></div>
+      <div><dt>Suite</dt><dd>43 022 checks · 95 renderer checks · 0 failures</dd></div>
+      <div><dt>Author</dt><dd>Mathias Menzel-Nielsen</dd></div>
+      <div><dt>Copyright</dt><dd>© 2026 — all rights reserved</dd></div>
     </dl>
+
+    <ul class="links">
+      <li><a href="https://github.com/bonkzwonil/antsim">
+        <b>github.com/bonkzwonil/antsim →</b>
+        <span>The repository. Clone it and <code>make live</code>.</span></a></li>
+      <li><a href="https://github.com/bonkzwonil/antsim#readme">
+        <b>README →</b>
+        <span>What it is, how to run it, what the experiments say.</span></a></li>
+      <li><a href="https://github.com/bonkzwonil/antsim/blob/main/docs/experiments.md">
+        <b>experiments.md →</b>
+        <span>The measurement log, including the results that were wrong.</span></a></li>
+      <li><a href="https://github.com/bonkzwonil/antsim/blob/main/docs/DIARY.md">
+        <b>DIARY.md →</b>
+        <span>A run frame by frame, and the bugs only watching caught.</span></a></li>
+      <li><a href="https://github.com/bonkzwonil/antsim/blob/main/docs/config.md">
+        <b>config.md →</b>
+        <span>Every switch in the model, its default, and where to set it.</span></a></li>
+      <li><a href="https://github.com/bonkzwonil/antsim/tree/main/src">
+        <b>src/ →</b>
+        <span>The source. Roughly every claim below links into it.</span></a></li>
+    </ul>
+
+    <div class="callout rule">
+      <p><b>Why Common Lisp, and why SBCL?</b> Because a simulation is an
+      experiment, and an experiment needs an off switch. All 65 parameters of
+      this model are special variables, so an A/B is a <code>let</code> around
+      the run rather than a configuration mechanism — and when the binding ends,
+      so does the change. Everything else is lexically scoped, and the language
+      tells the two apart at a glance.</p>
+      <p>Meanwhile SBCL compiles straight to machine code — no VM, no JIT
+      warm-up — and with types declared the numeric core runs level with C and
+      occasionally past it. So the exploratory half and the tight loop are the
+      same language in the same file, and over SLIME you can recompile one
+      function into a colony that is already running rather than starting the
+      twenty simulated minutes again.
+      <a href="#why-lisp">The full argument, with the code it rests on →</a></p>
+    </div>
   </header>
 
   <div class="cols">
@@ -486,9 +598,10 @@ Edit that file, then `make page`. -->
         <li><a href="#s5"><span>05</span> Rendering</a></li>
         <li><a href="#s6"><span>06</span> Scenario file</a></li>
         <li><a href="#s7"><span>07</span> Milestones</a></li>
-        <li><a href="#s8"><span>08</span> Risks</a></li>
-        <li><a href="#s9"><span>09</span> Decisions</a></li>
-        <li><a href="#s10"><span>10</span> Sources</a></li>
+        <li><a href="#s8"><span>08</span> What it does</a></li>
+        <li><a href="#s9"><span>09</span> Risks</a></li>
+        <li><a href="#s10"><span>10</span> Decisions</a></li>
+        <li><a href="#s11"><span>11</span> Sources</a></li>
       </ol>
     </nav>
 
@@ -514,6 +627,13 @@ Edit that file, then `make page`. -->
           the explicit cut between the model described here and the much smaller
           thing M1 actually builds, because a design this deep ships nothing
           without one.
+        </p>
+        <p>
+          That cut has since been built and gone past. If you would rather see
+          what the model does than what it was meant to do,
+          <strong><a href="#s8">§8 is the section to read first</a></strong>: the
+          two published experiments with their numbers, and pictures generated
+          from the runs those numbers come from.
         </p>
 
         <h3>It is not waldameisen</h3>
@@ -1240,6 +1360,137 @@ C ← min(C, C_max)      <span class="c">; saturation — a real trail is not un
       <section id="s4">
         <h2><span class="num">04</span>Architecture</h2>
 
+        <h3 id="why-lisp">Why Common Lisp, and why SBCL</h3>
+        <p class="lead">
+          Not nostalgia, and not because the author likes parentheses. Four
+          properties of this language and this implementation are load-bearing
+          for <em>simulation</em> specifically, and each one is visible in the
+          code rather than asserted here.
+        </p>
+
+        <p>
+          <b>An experiment needs an off switch, and dynamic binding is one.</b>
+          Every parameter in the model — all 65 of them, catalogued in
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/docs/config.md">config.md</a>
+          — is a special variable in
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/src/params.lisp">src/params.lisp</a>.
+          So an A/B is not a configuration system, a builder object or a
+          threaded-through options struct. It is a <code>let</code>:
+        </p>
+<pre><span class="c">;; the gallery pins the published experiments to the acceptance protocol</span>
+(<span class="k">let</span> ((*brood-investment* 0.0f0)
+      (*max-age-ticks* 2000000000)
+      (*resting-ants-block* <span class="k">nil</span>))
+  (bridge-run! b (* 1200 (<span class="k">floor</span> minutes 2)))
+  (bridge-reset-counts! b)
+  (bridge-run! b (* 1200 (<span class="k">ceiling</span> minutes 2))))</pre>
+        <p>
+          The binding has dynamic extent, so the change ends exactly where the
+          form does — no teardown to forget, no global left mutated for the next
+          caller. That is not a stylistic preference: the rest of that same
+          gallery run renders its foraging pictures with
+          <code>*resting-ants-block*</code> bound <em>on</em>, and the two bridge
+          frames came back byte-for-byte identical to the previous run, which is
+          how one knows the isolation held. The whole of
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/docs/experiments.md">experiments.md</a>
+          is measurements made this way.
+        </p>
+
+        <p>
+          <b>The REPL is the instrument, not a convenience.</b> A colony worth
+          looking at costs twenty simulated minutes to grow. In a compile-run-exit
+          language, every question you think of after it has grown costs you the
+          colony. Here <code>make repl</code> leaves the world in a variable:
+          inspect an individual ant, recompile the rule that decides whether it
+          turns, and call it again on the <em>same</em> world. Several of the
+          findings in the diary — the nest quietly filling with ants that were
+          not leaving, the departure bearing pointing backwards — were found by
+          poking a running world, not by reading a log.
+        </p>
+        <p>
+          Over SLIME and Swank this stops being a terminal prompt and becomes an
+          environment. The editor talks to the running image: compile a single
+          function with a keystroke and it is live in the world already in
+          memory, jump to the definition of anything, inspect a structure by
+          clicking through it, and when something signals you get the condition
+          with a live stack and a set of restarts to choose from rather than a
+          process that has already exited and a stack trace of where it used to
+          be. It is a genuinely <em>playful</em> way to work, and playfulness is
+          not a frivolous property for a project whose whole method is watching a
+          thing run and asking it questions.
+        </p>
+
+        <p>
+          <b>It compiles to bare metal.</b> SBCL emits native machine code
+          ahead of time — no bytecode VM, no interpreter, no JIT waiting to
+          notice that a loop is hot. There is no warm-up, so the first tick of a
+          run costs what the millionth does, which is what makes a
+          <em>deterministic</em> benchmark of a simulation meaningful at all.
+        </p>
+        <p>
+          With types declared, the numeric core is genuinely fast — competitive
+          with C on this kind of work and sometimes ahead of it, because the
+          compiler sees the whole program and inlines across file boundaries
+          that a C translation unit would hide. The model is
+          structure-of-arrays over unboxed vectors — <code>f32v</code>,
+          <code>u32v</code>, <code>fixv</code>, defined in
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/src/util.lisp">src/util.lisp</a>
+          — and the inner loops in
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/src/world/bodies.lisp">bodies.lisp</a>
+          and
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/src/world/geom.lisp">geom.lisp</a>
+          carry <code>(optimize (speed 3) (safety 0))</code> with the array types
+          declared, so the collision pass over a few thousand discs is arithmetic
+          on float vectors rather than a walk over a graph of objects. Ask SBCL
+          for the disassembly of any of them and you get the instructions.
+        </p>
+        <p>
+          The part that matters for a project like this one is that you choose
+          <em>per function</em>. The exploratory code and the tight loop live in
+          the same file, in the same language, with no foreign-function boundary
+          and no second build system between them. Nothing has to be rewritten in
+          another language once it turns out to be hot.
+        </p>
+
+        <p>
+          <b>Two scopes, and the language tells them apart.</b> Everything is
+          lexically scoped by default — closures close over exactly what the text
+          says they close over, which is why the RNG can be a pure function and
+          why a rule can be redefined without wondering what else was watching a
+          variable. Dynamic scope is the deliberate exception, requested by
+          declaration and marked in the name by the <code>*earmuffs*</code>
+          convention, so the 65 parameters above are visibly the ones with
+          run-wide extent and everything else is visibly not. Most languages
+          offer one of these. Having both, distinguishable at a glance, is
+          precisely what makes the <code>let</code>-as-experiment pattern safe
+          rather than a global-mutation trap.
+        </p>
+
+        <p>
+          <b>Determinism is a design decision the language does not fight.</b>
+          §4.4 covers the counter-based RNG:
+          <code>*random-state*</code> is banned from simulation code because a
+          stateful generator makes a threaded run irreproducible the instant two
+          threads draw from it. What matters here is that the replacement is
+          ordinary code in
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/src/rng.lisp">src/rng.lisp</a>
+          — a pure function of <code>(id, tick, stream, seed)</code> — and that
+          the test suite pins its exact output, so a well-meaning improvement to
+          the mixing cannot silently invalidate a stored run.
+        </p>
+
+        <div class="callout">
+          <p>
+            The honest counterweight: the GL binding is a foreign-function
+            layer, the ecosystem for it is thin, and §5.4 exists because getting
+            a headless context up on the right <code>libGL</code> took real work.
+            None of that is Lisp being unsuitable — it is a small ecosystem, and
+            the cost is paid once at the boundary. The numeric core, which is
+            where the science lives, has no foreign dependency at all and runs in
+            CI without a GPU.
+          </p>
+        </div>
+
         <h3>4.1 &ensp;Systems</h3>
         <p>
           Mirrors waldameisen's split, for the same reason: the numeric core stays
@@ -1728,12 +1979,12 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
       <section id="s7">
         <h2><span class="num">07</span>Milestones</h2>
         <ol class="ms">
-          <li><span class="tag">M0</span><div><b>The stack stands up.</b>
+          <li><span class="tag done">M0</span><div><b>The stack stands up. <span class="state">done</span></b>
             ASDF systems, package, <code>util</code>/<code>rng</code>/<code>pool</code>
             carried over, FiveAM wired, Makefile with the guix GPU targets. A headless
             context comes up and writes a non-black PNG. <em>Proves the toolchain
             before any design is committed to it.</em></div></li>
-          <li><span class="tag">M1</span><div><b>The core simulation, no renderer.</b>
+          <li><span class="tag done">M1</span><div><b>The core simulation, no renderer. <span class="state">both defining rows pass</span></b>
             Exactly the §3.9 cut and nothing past it: the ant and body tables, CRW
             movement, disc collision with Jacobi relaxation, one trail field per colony,
             the choice function, path integration, the four-state machine, food
@@ -1741,7 +1992,7 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
             pass</em> — verified numerically with no picture involved. This is the
             milestone that decides whether the science is right, and it deliberately
             does not depend on a single line of GL.</div></li>
-          <li><span class="tag">M2</span><div><b>The renderer, and the window.</b>
+          <li><span class="tag done">M2</span><div><b>The renderer, and the window. <span class="state">signed off</span></b>
             Ortho camera, pheromone field texture, obstacle polygons, food, nests, ants
             as simple discs. Headless PNG gallery <em>and</em> <code>antsim/live</code>
             on GLFW with cursor-anchored wheel zoom, right-drag pan, pause and time
@@ -1749,7 +2000,7 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
             what keeps arena size, ant count and render scale from having to be guessed
             up front. <em>First time you can watch a trail form, at whatever scale you
             like.</em></div></li>
-          <li><span class="tag">M3</span><div><b>The ant model, and how ants meet.</b>
+          <li><span class="tag">M3</span><div><b>The ant model, and how ants meet. <span class="state open">half built — current</span></b>
             The vector ant, the tripod gait rig, VS articulation, LOD, antennae,
             payload, state tint. The one genuinely novel piece of engineering in the
             project. Note the collision model does not change: the disc stays, the
@@ -1758,16 +2009,16 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
             the baked-pose fallback. The second half is the one still open: turning
             an overlap into an <em>encounter</em>, and the lane formation that rides
             on it.</div></li>
-          <li><span class="tag">M4</span><div><b>Scenarios and behaviour depth.</b>
+          <li><span class="tag">M4</span><div><b>Scenarios and behaviour depth. <span class="state later">next</span></b>
             JSON loading, richer scenes, then the deferred half of §3.9 in dependency
             order: response thresholds and age polyethism, trophallaxis, the no-entry
             and alarm fields, necrophoresis and middens, U-turns and search spirals.
             Multiple colonies and the ε competition scenario.</div></li>
-          <li><span class="tag">M5</span><div><b>Interaction.</b>
+          <li><span class="tag">M5</span><div><b>Interaction. <span class="state later">partly, early</span></b>
             Click an ant to inspect it, drop food, place obstacles, poke the nest and
             watch the alarm field propagate. The window already exists from M2; this is
             what you can <em>do</em> to a running world.</div></li>
-          <li><span class="tag">M6</span><div><b>Polish.</b>
+          <li><span class="tag">M6</span><div><b>Polish. <span class="state later">later</span></b>
             Colour, time-lapse capture, the <em>Formica</em> parameter set as a
             contrasting species, a gallery document like
             <code>docs/M2-renderer.md</code>.</div></li>
@@ -1783,7 +2034,171 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
 
       <!-- ============================================================ 8 -->
       <section id="s8">
-        <h2><span class="num">08</span>Risks</h2>
+        <h2><span class="num">08</span>What it actually does</h2>
+        <p class="lead">
+          Everything above this line is design. This section is the model
+          running — the same numbers the acceptance suite asserts on, and
+          pictures generated by <code>make gallery</code> rather than
+          screenshotted, so they cannot drift away from what the code does.
+        </p>
+
+        <h3>The two published experiments</h3>
+        <p>
+          Both are laboratory apparatus with printed outcomes, and both are in
+          the suite as experiments rather than as unit tests — run on the model,
+          scored by the papers' own criteria. Sixteen seeds each, fixed colony,
+          six minutes to commit and six minutes measured.
+        </p>
+
+        <ul class="results">
+          <li>
+            <span class="big">9 / 7</span>
+            <span class="what">Deneubourg's binary bridge (1990) — which arm the
+              colony commits to, across sixteen seeds.</span>
+            <span class="sub">Two arms of <em>equal</em> length, so any departure
+              from an even split is the colony's own doing. Mean busiest arm
+              0.944. The result is that it <em>makes a choice</em>, not that it
+              has a preference — a model that always picked arm A would look
+              like a pass and be broken.</span>
+          </li>
+          <li>
+            <span class="big">16 / 16</span>
+            <span class="what">Goss's double bridge (1989) — replicates in which
+              the <em>short</em> arm wins.</span>
+            <span class="sub">One arm 1.73× longer. Mean share 0.814. Nothing in
+              the model measures a distance: ants on the short arm simply close
+              the round trip sooner, so they deposit sooner, and §3.3's
+              nonlinearity amplifies the head start into a commitment.</span>
+          </li>
+          <li>
+            <span class="big">43 022</span>
+            <span class="what">Checks in the core suite, plus 95 in the renderer
+              suite. Zero failures.</span>
+            <span class="sub">Neither needs a GPU: the renderer suite runs on
+              llvmpipe in software, which is what CI uses (§5.4).</span>
+          </li>
+        </ul>
+
+        <figure>
+          <div class="fig-frame">
+            <img src="images/14-hero.png" alt="The double bridge apparatus rendered from a run: two corridors between nest and food, the shorter one carrying nearly all the traffic.">
+          </div>
+          <figcaption>
+            Goss's double bridge, rendered from the apparatus the acceptance row
+            asserts on. Two routes between the same two points; the traffic has
+            collapsed onto the short one. Every mark is a pheromone packet an ant
+            deposited — the scenario format cannot express a trail, and no
+            function exists to paint one.
+          </figcaption>
+        </figure>
+
+        <figure>
+          <div class="fig-frame">
+            <img src="images/12-binary-bridge.png" alt="The binary bridge: two identical corridors, one of them carrying nearly all the traffic.">
+          </div>
+          <figcaption>
+            The binary bridge. The two corridors are identical — the asymmetry
+            <em>is</em> the result, and which side it lands on changes with the
+            seed. Watch it live with
+            <code>SCENARIO=scenarios/deneubourg-binary-bridge.json make live</code>
+            and successive runs pick different arms.
+          </figcaption>
+        </figure>
+
+        <h3>The density window, which was not designed</h3>
+        <p>
+          The double bridge only works over a range of colony sizes. Past about
+          900 ants the corridors congest, congestion starts deciding the route
+          instead of pheromone, and the <em>long</em> arm wins outright — the
+          shortest-path result does not weaken, it inverts. Below roughly 250
+          there is too little traffic for the nonlinearity to latch onto and
+          individual runs wander.
+        </p>
+        <p>
+          This is a property of the apparatus rather than a knob, and it says
+          something the papers do not: <b>a bridge result quoted without its
+          colony size is under-specified.</b> Three explanations were tried and
+          were wrong before this one; all four are recorded in
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/docs/experiments.md#the-double-bridge-has-a-working-density-window">experiments.md</a>,
+          wrong ones included, because a negative result has a shelf life and the
+          reasoning is worth more than the verdict.
+        </p>
+
+        <h3>The ant, close enough</h3>
+        <figure>
+          <div class="fig-frame">
+            <img src="images/15-vector-ant.png" alt="Ants on a trail at four and a half centimetres: six legs, antennae, mandibles, and swollen gasters on the ones carrying food.">
+          </div>
+          <figcaption>
+            §5.2 built, at 4.5 cm. Six legs on an alternating tripod, antennae
+            sweeping the pheromone field they stand on, mandibles, a swollen
+            gaster on the ants carrying a load. One mesh of ninety-odd triangles,
+            articulated in the vertex shader from eight floats per ant — animating
+            a colony rewrites no geometry and makes no GL call in the loop. The
+            legs do not slide, because the stride advances with distance walked
+            rather than with the clock.
+          </figcaption>
+        </figure>
+
+        <h3>A colony that runs out</h3>
+        <figure>
+          <div class="fig-frame">
+            <img src="images/06-aftermath.png" alt="An arena empty of pheromone, with pale corpses packed in a rosette around the nest entrance.">
+          </div>
+          <figcaption>
+            Sixty minutes into the <code>foraging</code> scenario, after a finite
+            source has run dry. Two §3.8 rows in one frame — trail death and
+            colony extinction. The corpses came home to die and stay where they
+            fell; nothing removes them, because necrophoresis is a later
+            milestone. The full sequence, with the pheromone totals at each step,
+            is in
+            <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/docs/DIARY.md">DIARY.md</a>.
+          </figcaption>
+        </figure>
+
+        <h3>Scenarios that ship</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th style="width:34%">Scenario</th><th>What it is for</th></tr></thead>
+            <tbody>
+              <tr><td><code>foraging</code></td><td>A source that visibly empties, and a colony that starves when it does.</td></tr>
+              <tr><td><code>deneubourg-binary-bridge</code></td><td>Equal arms. The winner changes between runs — that is the result.</td></tr>
+              <tr><td><code>goss-double-bridge</code></td><td>Unequal arms. The short one wins every time.</td></tr>
+              <tr><td><code>antsim</code></td><td>The project's name spelled in solid terrain, on a 1.00 × 0.72 m arena.</td></tr>
+              <tr><td><code>antsim-large</code></td><td>The same word five times over. Every <em>length</em> scales and the ant does not, so the same journey costs five times the energy.</td></tr>
+              <tr><td><code>antsim-overload</code></td><td>1400 ants on 40 units of stock: metabolism exceeds income from the first tick.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <figure>
+          <div class="fig-frame">
+            <img src="images/15-antsim.png" alt="The word ANTSIM spelled in obstacles, with two ant trails threading between the letters from a nest below to two food sources above.">
+          </div>
+          <figcaption>
+            <code>scenarios/antsim.json</code>, generated from the same 3×5 font
+            the HUD draws with rather than transcribed from it. The nest is below
+            the word and the sources above, so every trail has to thread the
+            lettering. Nothing in the simulation can see the word.
+          </figcaption>
+        </figure>
+
+        <div class="callout">
+          <p>
+            <b>Where to start if you want to run it.</b> <code>make test</code>
+            needs no GPU and takes a couple of minutes. <code>make acceptance</code>
+            runs the two experiments above. <code>make live</code> opens the
+            window, which draws a fresh seed each session and prints it, so any
+            run worth keeping can be replayed with <code>SEED=</code>. The
+            <a href="https://github.com/bonkzwonil/antsim#readme">README</a> has
+            the rest.
+          </p>
+        </div>
+      </section>
+
+      <!-- ============================================================ 9 -->
+      <section id="s9">
+        <h2><span class="num">09</span>Risks</h2>
         <div class="tw">
           <table>
             <thead><tr><th style="width:30%">Risk</th><th style="width:12%">Level</th><th>Mitigation</th></tr></thead>
@@ -1802,8 +2217,8 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
       </section>
 
       <!-- ============================================================ 9 -->
-      <section id="s9">
-        <h2><span class="num">09</span>Decisions</h2>
+      <section id="s10">
+        <h2><span class="num">10</span>Decisions</h2>
 
         <h3>Settled</h3>
         <ol class="decisions">
@@ -1840,8 +2255,8 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
       </section>
 
       <!-- =========================================================== 10 -->
-      <section id="s10">
-        <h2><span class="num">10</span>Sources, and what still needs checking</h2>
+      <section id="s11">
+        <h2><span class="num">11</span>Sources, and what still needs checking</h2>
         <div class="callout warn">
           <p>The mechanisms are well established. <strong>Several specific constants
             below are from memory and must be verified against the papers before they
@@ -1902,9 +2317,10 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
       </section>
 
       <footer>
-        <span>antsim — concept rev. 2, 15 August 2026</span>
-        <span>Source of truth: <code>README.md</code> on branch <code>concept</code></span>
-        <span>Next step: M0</span>
+        <span>antsim — design document rev. 3, 17 August 2026</span>
+        <span><a href="https://github.com/bonkzwonil/antsim">github.com/bonkzwonil/antsim</a></span>
+        <span>Next step: M3's encounter event</span>
+        <span>© 2026 Mathias Menzel-Nielsen — all rights reserved</span>
       </footer>
 
     </main>
