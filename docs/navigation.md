@@ -1,10 +1,27 @@
 # Navigation, phase 2 — the vector is not the route
 
-A concept for a later phase, expanding §3.4 of `concept.md`. Nothing here
-is built. It is written now because the failure it addresses is already
-visible in the window, and because the fix that suggests itself first —
-make the home vector cleverer — is the wrong one, and that is worth
-recording before someone spends a week on it.
+A concept expanding §3.4 of `concept.md`. It is written the way it is
+because the fix that suggests itself first — make the home vector
+cleverer — is the wrong one, and that was worth recording before someone
+spent a week on it.
+
+> **Status: Layers 0 and 3 are built (M3.2); Layers 1 and 2 are not.**
+>
+> Layer 0 is `STALL-STEP!` and the five fields it reads
+> (`ANTS-H0X`/`H0Y`, `WALKED`, `WINDOW`, `STALLED`); Layer 3 is the
+> no-entry field on every colony, with three deposition sites and the two
+> prohibitions §4.4 argued for. Together with M3's encounter rules they
+> measure at **+7.6% food over six seeds, positive on every one**
+> (`*antennal-range*`).
+>
+> The two layers in the middle — the detour commitment latch and the
+> ant's private memory of corners — are the ones that turn "do not go
+> back in there" into "go round it *this way*", and they are still
+> designs. The chemistry landed before the route memory because it turned
+> out to share a mechanism with the stall window: an ant that can tell it
+> is getting nowhere is an ant with something to say, and the field is
+> where it says it. That was not the order §8 below proposed, and §8 is
+> left as written so the two can be compared.
 
 ## 1. Where this starts
 

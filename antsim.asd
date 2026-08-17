@@ -8,7 +8,7 @@
 (defsystem "antsim"
   :description "A 2D ant colony simulation on real behavioural science — numeric core."
   :author "Mathias Menzel-Nielsen"
-  :version "0.3.0"        ; milestone M3, first half — the vector ant
+  :version "0.3.1"        ; milestone M3 — the vector ant, and how ants meet
   :depends-on ()                        ; core stays dependency-free (sb-thread only)
   :serial t
   :pathname "src"
