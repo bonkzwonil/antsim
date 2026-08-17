@@ -499,6 +499,18 @@ of range. So that file restates the forager's range, scaled by exactly the
 factor the geometry is, and the two are then the same experiment at two sizes.
 The numbers are in [experiments.md](docs/experiments.md).
 
+Five times the length is **twenty-five times the area**, and the population
+answers to the area rather than to the trail: an ant finds food by covering
+ground, and how inhabited the arena looks is ants per square metre. Measured,
+more ants is better on every axis and free in deaths — at 10 000 the colony
+finds the source in four minutes instead of eight and eats four times as much
+as at 2 000. What caps it is not biology but the tick budget, and the cost is
+superlinear because crowding is quadratic in local density: five times the ants
+is fourteen times the work, and 10 000 runs at 0.44× real time before a single
+frame is drawn. So 5 000 ships — comfortably faster than real time, and one
+number in the generator for anyone who would rather have the crowd than the
+frame rate.
+
 The two also differ in a way worth watching for: at 3.5 cm a gap between letters
 is fourteen ants abreast and the lettering shapes the traffic, while at 17.5 cm
 it is seventy and stops being a bottleneck at all. In the small arena the *word*

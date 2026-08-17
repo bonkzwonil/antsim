@@ -32,14 +32,27 @@
 ;;;;     never the problem; *finding the source in the first place*, by
 ;;;;     correlated random walk, across three metres, is.
 ;;;;
-;;;;   * A trail five times longer needs about five times the traffic to
-;;;;     hold it up, because evaporation runs on a clock and does not care
-;;;;     how far away the food is.  Population is therefore set by trail
-;;;;     length, not by area — scaling it by area (x25) would be a crowd,
-;;;;     scaling it not at all would be a colony that cannot keep a road
-;;;;     open.
+;;;;   * The arena is five times longer but **twenty-five times bigger**,
+;;;;     and population has to answer to both.  Holding a road open is a
+;;;;     length problem — evaporation runs on a clock that does not care
+;;;;     how far the food is, so a trail five times longer wants about
+;;;;     five times the traffic.  *Finding* the food in the first place is
+;;;;     an area problem, and so is how full the arena looks.
 ;;;;
-;;;; The numbers below were measured on the scaled arena, not derived; see
+;;;;     Measured, the area answer is the better one: at 10 000 ants the
+;;;;     colony finds the source sooner, holds a trail three times
+;;;;     stronger and eats four times as much as at 2 000, with no deaths
+;;;;     either way.  What rules it out is not biology but the tick
+;;;;     budget, and the cost is superlinear — five times the ants is
+;;;;     fourteen times the work, because crowding is quadratic in local
+;;;;     density.  10 000 runs at 0.44x real time *before* anything is
+;;;;     drawn, and `make live` opens at 4x compression.
+;;;;
+;;;;     So 5 000: two and a half times the shipped density, comfortably
+;;;;     above real time, and one number to change if you would rather
+;;;;     have the crowd than the frame rate.
+;;;;
+;;;; The numbers here were measured on the scaled arena, not derived; see
 ;;;; docs/experiments.md.
 
 (require :asdf)
@@ -186,21 +199,24 @@ down, which is a fine way to notice you did it."
                   "never recovers.  With meals it does.  Reported from the"
                   "window; the seed is the one it was seen on."))
 
-;;; Five times over.  Population and stock are *not* multiplied by the area
-;;; (x25) — see the header: what a colony has to pay for is the length of
-;;; the road it keeps open, not the size of the box it is in.  The food
-;;; sources are five times wider, which is what keeps the queue at a source
-;;; the same fraction of the colony as it is in the small arena.
+;;; Five times over in every length — and therefore twenty-five times the
+;;; area, which is what sets the population.  5000 is twelve and a half
+;;; times the small colony rather than five: the arena is a box, not a
+;;; road, and both finding the food and looking inhabited scale with the
+;;; box.  It is not the full 25x for the reason in the header, and the
+;;; reason is the tick budget rather than the biology.
 (emit #p"scenarios/antsim-large.json"
       :scale 5.0f0
-      :start 2000
-      :stock 4500.0f0
-      :capacity 12000
-      :world-capacity 20000
+      :start 5000
+      :stock 11000.0f0
+      :capacity 16000
+      :world-capacity 24000
       :food-amount 150000.0f0
-      :note (list "Five times the small antsim.json in every length."
-                  "The ant is NOT scaled -- see the script header. A journey"
-                  "five times longer costs five times the energy out of the"
-                  "same fixed tank, which is why this file restates the"
-                  "forager's range in its `ant` block. At the default it"
-                  "starves: 8 units eaten in 30 minutes, 2000 ants to 26."))
+      :note (list "Five times the small antsim.json in every length, so"
+                  "twenty-five times the area -- and the population answers"
+                  "to the area, not to the trail length. The ant is NOT"
+                  "scaled: a journey five times longer costs five times the"
+                  "energy out of the same fixed tank, which is why this file"
+                  "restates the forager's range in its `ant` block. At the"
+                  "default range it starves -- 8 units eaten in 30 minutes,"
+                  "2000 ants down to 26."))

@@ -642,17 +642,50 @@ asserts that ratio against the geometry ratio, because the failure it
 guards is silent: get it wrong and the two scenarios still both run,
 they just stop being comparable.
 
-Two things that came out of it and are *not* corrections:
+**Population answers to the area, and the first version of this entry got
+that wrong.** It argued population from trail length — a road five times
+longer needs five times the traffic to hold it against an evaporation
+clock — and shipped 2000. That reasoning is right about *maintaining* a
+trail and silent about the two things that scale with the box instead:
+**finding** the food, which an ant does by covering ground, and how
+inhabited the arena looks, which is ants per square metre. Five times the
+length is twenty-five times the area.
 
-- **Population is set by trail length, not by area.** The area is 25×;
-  the population is 5×, because what a colony pays for is holding a road
-  open against evaporation, and evaporation runs on a clock that does not
-  know how far away the food is. 25× would have been a crowd.
-- **The doorways get easier, not harder.** A gap between letters is 17.5
-  cm instead of 3.5 cm — seventy ants abreast instead of fourteen — so
-  the lettering stops being a bottleneck. The small file is the one where
-  the word shapes the traffic; the large one is where the *distance*
-  does. They are worth having both.
+Measured on the same arena, 30 minutes, only the colony changed:
+
+| population | trail found | trail @30 min | eaten @30 min | died |
+|---|---|---|---|---|
+| 2000 (×5, by length) | 8 min | 438 k | 734 | 0 |
+| 5000 (×12) | ~7 min | **1 170 k** | **1765** | 0 |
+| 10000 (×25, by area) | ~4 min | 1 332 k | **2950** | 0 |
+
+More ants is better on every axis and costs nothing in deaths. What rules
+out the full ×25 is **not biology but the tick budget**, and the cost is
+superlinear because crowding is quadratic in local density:
+
+| population | headless tick rate, before any drawing |
+|---|---|
+| 2000 | 6.3× real time |
+| 5000 | 1.5× |
+| 10000 | **0.44×** |
+
+Five times the ants is fourteen times the work. At 10000 the simulation
+is slower than real time before a single frame is drawn, and `make live`
+opens at 4× compression — so the scenario that exists to be *watched*
+would be the one you cannot watch.
+
+**5000 ships**: two and a half times the density of the first attempt,
+still comfortably faster than real time, and one number in the script for
+anyone who would rather have the crowd than the frame rate. The honest
+summary is that this is a performance ceiling wearing a modelling
+argument, and it is written down that way so nobody later mistakes it for
+a claim about ants.
+
+One thing that is *not* a correction: **the doorways get easier, not
+harder.** A gap between letters is 17.5 cm instead of 3.5 cm — seventy
+ants abreast instead of fourteen — so the lettering stops being a
+bottleneck. The small file is the one where the word shapes the traffic;
+the large one is where the *distance* does. They are worth having both.
 
 ## On the list, not yet measured
 

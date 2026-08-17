@@ -6,14 +6,16 @@
   "_what3": "the word and the food above it, so every trail has to",
   "_what4": "thread the lettering. Generated from the font itself by",
   "_what5": "scripts/build-word-scenario.lisp -- do not hand-edit.",
-  "_why1": "Five times the small antsim.json in every length.",
-  "_why2": "The ant is NOT scaled -- see the script header. A journey",
-  "_why3": "five times longer costs five times the energy out of the",
-  "_why4": "same fixed tank, which is why this file restates the",
-  "_why5": "forager's range in its `ant` block. At the default it",
-  "_why6": "starves: 8 units eaten in 30 minutes, 2000 ants to 26.",
+  "_why1": "Five times the small antsim.json in every length, so",
+  "_why2": "twenty-five times the area -- and the population answers",
+  "_why3": "to the area, not to the trail length. The ant is NOT",
+  "_why4": "scaled: a journey five times longer costs five times the",
+  "_why5": "energy out of the same fixed tank, which is why this file",
+  "_why6": "restates the forager's range in its `ant` block. At the",
+  "_why7": "default range it starves -- 8 units eaten in 30 minutes,",
+  "_why8": "2000 ants down to 26.",
 
-  "world": { "width": 5.000, "height": 3.600, "capacity": 20000 },
+  "world": { "width": 5.000, "height": 3.600, "capacity": 24000 },
 
   "obstacles": [
     { "rect": { "x0": 0.4875, "y0": 2.2000, "x1": 0.6625, "y1": 2.3750 } },
@@ -85,9 +87,9 @@
   "colonies": [
     { "id": "home",
       "nest": { "x": 2.500, "y": 0.375, "r": 0.110 },
-      "capacity": 12000,
-      "start": 2000,
-      "stock": 4500.0 }
+      "capacity": 16000,
+      "start": 5000,
+      "stock": 11000.0 }
   ],
 
   "food": [
