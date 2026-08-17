@@ -545,27 +545,38 @@ switches the whole windowed policy out and restores per-tick homing
 exactly.  0.25 is the value the idea wants; see the measurement below for
 why it is not the default yet.
 
-**Measured, and it breaks §3.8.**  Binary bridge, busiest-arm share,
-which must reach 0.80 on every replicate:
+**Measured, and it breaks §3.8 at every setting.**  Binary bridge,
+busiest-arm share over the six acceptance replicates, run through the
+published fixture (fixed colony, warm-up, clean measurement window), with
+*wall-veto* off so this is the policy on its own:
 
-    1.00 (off)   passes
-    0.60         0.642 — the colony did not commit
-    0.25         0.637 — the colony did not commit
+    1.00 (off)   0.873 0.890 0.838 0.838 0.886 0.846   min 0.838  ok
+    0.85         0.864 0.941 0.868 0.569 0.981 0.505   min 0.505  FAIL
+    0.60         0.762 0.939 0.848 0.609 0.883 0.670   min 0.609  FAIL
+    0.25         0.840 0.722 0.556 0.721 0.974 0.676   min 0.556  FAIL
+    0.10         0.848 0.608 0.607 0.868 0.942 0.573   min 0.573  FAIL
 
-The same tension as *food-odour-reach*, and worth understanding rather
-than tuning around.  Both bridge experiments are calibrated on a tight
-round trip: an arm wins because ants that took it get back *sooner* and
-lay pheromone *sooner*, so anything that loosens the return leg — letting
-ants wander while they are still technically closing, or turning them
-round when a curved arm reads as backwards over one window — slows the
-feedback below the point where a colony commits inside the run.
+The bar is 0.80 on **every** replicate.  Note what the column does not
+do: it does not improve as the parameter tightens.  0.85 is the worst of
+them and 0.10 is not the worst, so this is not a threshold that wants
+tuning — switching the policy on at all destabilises the commitment, and
+which replicate collapses is close to arbitrary.
 
-So the mechanism is here, argued for, and off.  Turning it on visibly
-improves how ants move in an obstacle field and costs the two published
-rows the model is calibrated against, and that is not a trade to make
-silently.  What it probably needs is a window that scales with the
-journey rather than a fixed 100 ticks, so a 10 cm bridge arm and a 40 cm
-foraging run are not judged on the same stretch of walking.
+The reason is the same one *food-odour-reach* ran into.  Both bridge
+experiments are calibrated on a *tight round trip*: an arm wins because
+the ants that took it get back sooner and lay pheromone sooner, so the
+split is a race between two feedback loops with a small initial
+difference.  Letting a returning ant wander while it is still technically
+closing adds variance to every lap, and variance is exactly what a race
+between two nearly equal loops cannot absorb — the colony still commits,
+but not reliably enough, and not always to the arm it was heading for.
+
+So the mechanism is here, argued for, and off.  A window that scales with
+the journey rather than a fixed hundred ticks is the obvious next thing
+to try — a 10 cm bridge arm and a 40 cm foraging run should not be judged
+on the same stretch of walking — but the sweep above says that is a
+hypothesis and not a fix, because the failure is not shaped like a
+mis-set bar.
 
 **Homing is a medium-run constraint, not a steering command.**  The old
 rule rotated a returning ant halfway to the nest bearing *every tick*,
