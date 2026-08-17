@@ -458,6 +458,14 @@ navigation systems in parallel and weights them by confidence:
      trap: it walks out, the bearing comes clear, it turns back into the
      pocket. That case needs the route memory below, and the honest
      statement is that the model does not have it yet.
+   - **The phase that fixes it is designed, in `docs/navigation.md`.**
+     Four layers in dependency order: use the home vector's *length*,
+     which is computed every tick and thrown away; latch a detour and
+     hold it until that length says the ant is making progress again;
+     remember the corner it got round, in nest-centred coordinates; and
+     mark obstructing faces with the no-entry repellent §3.9 already
+     schedules. The same document argues that modelling PI *error*
+     faithfully is not worth doing at this arena scale, and why.
 2. **Trail following.** §3.3. Used when trail concentration exceeds the
    detection threshold.
 3. **Landmark / route memory.** A learned association between a remembered
@@ -1995,6 +2003,13 @@ then the deferred half of §3.9 in dependency order: response thresholds and
 age polyethism, trophallaxis, the no-entry and alarm fields, necrophoresis
 and middens, U-turns and search spirals. Multiple colonies and the ε
 competition scenario.
+
+The no-entry field in that list is not a loose end. `docs/navigation.md`
+designs it as the colony-wide half of obstacle memory, and puts three
+cheaper layers in front of it that fix §3.4's concavity trap with no new
+chemistry at all. The first of those is a day's work and produces a plot,
+which makes it a good place to *start* M4 rather than something M4 gets
+to eventually.
 
 **M5 — interaction.** Click an ant to inspect its state, drop food, place
 obstacles, poke the nest and watch the alarm field propagate. The window
