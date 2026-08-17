@@ -1,20 +1,17 @@
 # Why Common Lisp, and why SBCL
 
-Not nostalgia, and not because the author likes parentheses.
-
-Five properties of this language and this implementation are load-bearing for
-*simulation* specifically. Each one is visible in the code rather than asserted
-here, and each is linked to the file it lives in.
+Not nostalgia, and not because the author likes parentheses. Four properties of
+this language and this implementation are load-bearing for *simulation*
+specifically, and each is visible in the code rather than asserted here.
 
 ---
 
-## 1. An experiment needs an off switch, and dynamic binding is one
+## 1. Ad-hoc experiments that are still perfectly controlled
 
-Every parameter in the model — all 65 of them, catalogued in
-[config.md](config.md) — is a special variable in
-[`src/params.lisp`](../src/params.lisp). So an A/B is not a configuration
-system, a builder object, or an options struct threaded through nine call
-frames. It is a `let`:
+All 65 parameters of the model are `defparameter`s in
+[`src/params.lisp`](../src/params.lisp) — special, and catalogued in
+[config.md](config.md). So an A/B is not a configuration system, a builder
+object, or an options struct threaded through nine call frames. It is a `let`:
 
 ```lisp
 ;; the gallery pins the published experiments to the acceptance protocol
@@ -26,38 +23,53 @@ frames. It is a `let`:
   (bridge-run! b (* 1200 (ceiling minutes 2))))
 ```
 
-The binding has **dynamic extent**, so the change ends exactly where the form
-does. There is no teardown to forget and no global left mutated for whoever
-calls next.
+Every frame the body calls into sees it without being handed a thing. Nothing
+global is mutated, the rebinding is per thread, and it is gone when the form
+ends.
 
-That is not a stylistic preference, and there is a receipt for it. The same
-gallery run renders its foraging pictures with `*resting-ants-block*` bound
-**on** and the two bridge frames with it bound **off** — and when the gallery
-was regenerated, those two bridge frames came back byte-for-byte identical to
-the previous run. The isolation held, and the file system proved it.
+So the arrangement is **ad hoc** — declared at the call site, for exactly this
+run, with no ceremony and nothing to register — and at the same time **perfectly
+controlled**: side-effect free, thread-safe, and incapable of leaking into the
+next run. Two experiments can run concurrently in two threads without touching
+each other. Maximum flexibility and total isolation, from one binding form.
 
-The whole of [experiments.md](experiments.md) is measurements made this way.
-When a mechanism turns out not to pay, it ships switched off with its number
-recorded rather than being deleted — which is only cheap because "switched off"
-is a default binding rather than a code path.
+Most languages make you choose one or the other. You cannot do this in Python:
+there the same manoeuvre is either mutating a module global and restoring it in a
+`finally` — shared by every thread, so concurrent runs corrupt each other — or
+plumbing the parameter through every call site by hand. `contextvars` buys back
+the isolation, but only for variables declared as such up front, with `set` and
+`reset` tokens to carry around. Here it is `let`, and it works on any special.
 
-## 2. Two scopes, and the language tells them apart
+And it composes with the live image, which is where it stops being a tidiness
+argument. At a SLIME REPL you can take a colony that is *already running* —
+grown, with its trail laid, at whatever tick it has reached — and put it into
+different physics for the next call, by wrapping that call in a different `let`:
 
-Everything is **lexically scoped by default**. Closures close over exactly what
-the text says they close over, which is why the RNG can be a pure function, and
-why redefining a rule does not mean auditing what else was watching a variable.
+```lisp
+(defparameter *w* (gallery-world))
+(world-run! *w* 24000)                                   ; grow one, 20 min
 
-**Dynamic scope is the deliberate exception** — requested by declaration, and
-marked in the name by the `*earmuffs*` convention. So the 65 parameters above
-are visibly the ones with run-wide extent, and everything else is visibly not.
+(let ((*resting-ants-block* t))    (world-run! *w* 1200)) ; same colony,
+(let ((*trail-decay-scale* 3.0f0)) (world-run! *w* 1200)) ; different world
+```
 
-Most languages give you one of these. Having both, distinguishable at a glance,
-is precisely what makes the `let`-as-experiment pattern of §1 safe instead of a
-global-mutation trap. The convention is doing real work: `*resting-ants-block*`
-announces that it is rebindable and run-scoped, and a lexical `b` announces that
-it is not.
+The colony is the same object at the same tick; only the conditions around the
+next call changed, and they change back. The experimental condition is a property
+of the **call**, not of the world or of how it was constructed — so a question
+you think of twenty simulated minutes in does not cost you the twenty minutes.
 
-## 3. The REPL is the instrument, not a convenience
+Receipt: the same gallery run renders its foraging pictures with
+`*resting-ants-block*` bound **on** and the two bridge frames with it bound
+**off**, and when the gallery was regenerated those two bridge frames came back
+byte-for-byte identical to the previous run. The isolation held, and the file
+system proved it.
+
+The whole of [experiments.md](experiments.md) is measurements made this way. When
+a mechanism turns out not to pay it ships switched off with its number recorded
+rather than deleted — which is cheap only because "off" is a default binding
+rather than a code path.
+
+## 2. The REPL is the instrument, not a convenience
 
 A colony worth looking at costs twenty simulated minutes to grow. In a
 compile-run-exit language, every question you think of *after* it has grown
@@ -90,7 +102,7 @@ It is a genuinely *playful* way to work. That is not a frivolous property for a
 project whose entire method is watching a thing run and asking it questions —
 [the renderer exists](DIARY.md#what-the-window-found) on exactly that argument.
 
-## 4. It compiles to bare metal
+## 3. It compiles to bare metal
 
 SBCL emits **native machine code ahead of time**. No bytecode VM, no
 interpreter, no JIT waiting to notice that a loop is hot. There is no warm-up,
@@ -115,7 +127,7 @@ language, with no foreign-function boundary and no second build system between
 them. Nothing has to be rewritten in another language once it turns out to be
 hot — you add a declaration to the function you already have.
 
-## 5. Determinism is a design decision the language does not fight
+## 4. Determinism is a design decision the language does not fight
 
 `*random-state*` is banned from simulation code. A stateful generator makes a
 threaded run irreproducible the instant two threads draw from it, and this model

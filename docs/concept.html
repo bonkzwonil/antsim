@@ -556,18 +556,20 @@
     </ul>
 
     <div class="callout rule">
-      <p><b>Why Common Lisp, and why SBCL?</b> Because a simulation is an
-      experiment, and an experiment needs an off switch. All 65 parameters of
-      this model are special variables, so an A/B is a <code>let</code> around
-      the run rather than a configuration mechanism — and when the binding ends,
-      so does the change. Everything else is lexically scoped, and the language
-      tells the two apart at a glance.</p>
-      <p>Meanwhile SBCL compiles straight to machine code — no VM, no JIT
-      warm-up — and with types declared the numeric core runs level with C and
-      occasionally past it. So the exploratory half and the tight loop are the
-      same language in the same file, and over SLIME you can recompile one
-      function into a colony that is already running rather than starting the
-      twenty simulated minutes again.
+      <p><b>Why Common Lisp, and why SBCL?</b> All 65 parameters of this model
+      are specials, so an experiment is a <code>let</code> around the run rather
+      than a configuration mechanism. Every frame the body calls into sees it,
+      nothing global is mutated, the rebinding is per thread, and it is gone when
+      the form ends — <em>ad hoc and perfectly controlled at once</em>:
+      side-effect free, thread-safe, and incapable of leaking into the next run.
+      You cannot do this in Python.</p>
+      <p>It composes with the live image, which is the part that matters. At a
+      SLIME REPL you can take a colony that is <em>already running</em> and put
+      it into different physics for the next call, just by wrapping that call in
+      a different <code>let</code> — same object, same tick, conditions restored
+      afterwards. Meanwhile SBCL compiles all of it straight to machine code,
+      with no VM and no JIT warm-up, and with types declared the numeric core
+      runs level with C.
       <a href="#why-lisp">The full argument, with the code it rests on →</a></p>
     </div>
   </header>
@@ -1355,11 +1357,11 @@ C ← min(C, C_max)      <span class="c">; saturation — a real trail is not un
         </p>
 
         <p>
-          <b>An experiment needs an off switch, and dynamic binding is one.</b>
-          Every parameter in the model — all 65 of them, catalogued in
-          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/docs/config.md">config.md</a>
-          — is a special variable in
-          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/src/params.lisp">src/params.lisp</a>.
+          <b>Ad-hoc experiments that are still perfectly controlled.</b> All 65
+          parameters of the model are <code>defparameter</code>s in
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/src/params.lisp">src/params.lisp</a>
+          — special, and catalogued in
+          <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/docs/config.md">config.md</a>.
           So an A/B is not a configuration system, a builder object or a
           threaded-through options struct. It is a <code>let</code>:
         </p>
@@ -1371,13 +1373,50 @@ C ← min(C, C_max)      <span class="c">; saturation — a real trail is not un
   (bridge-reset-counts! b)
   (bridge-run! b (* 1200 (<span class="k">ceiling</span> minutes 2))))</pre>
         <p>
-          The binding has dynamic extent, so the change ends exactly where the
-          form does — no teardown to forget, no global left mutated for the next
-          caller. That is not a stylistic preference: the rest of that same
-          gallery run renders its foraging pictures with
-          <code>*resting-ants-block*</code> bound <em>on</em>, and the two bridge
-          frames came back byte-for-byte identical to the previous run, which is
-          how one knows the isolation held. The whole of
+          Every frame the body calls into sees it without being handed a thing.
+          Nothing global is mutated, the rebinding is per thread, and it is gone
+          when the form ends. So the arrangement is <b>ad hoc</b> — declared at
+          the call site, for exactly this run, with nothing to register — and at
+          the same time <b>perfectly controlled</b>: side-effect free,
+          thread-safe, and incapable of leaking into the next run. Two
+          experiments can run concurrently in two threads without touching each
+          other.
+        </p>
+        <p>
+          Most languages make you choose one or the other. You cannot do this in
+          Python: there the same manoeuvre is either mutating a module global and
+          restoring it in a <code>finally</code> — shared by every thread, so
+          concurrent runs corrupt each other — or plumbing the parameter through
+          every call site by hand. <code>contextvars</code> buys back the
+          isolation, but only for variables declared as such up front, with
+          <code>set</code> and <code>reset</code> tokens to carry around.
+        </p>
+        <p>
+          And it composes with the live image, which is where it stops being a
+          tidiness argument. At a SLIME REPL you can take a colony that is
+          <em>already running</em> — grown, with its trail laid, at whatever tick
+          it has reached — and put it into different physics for the next call,
+          by wrapping that call in a different <code>let</code>:
+        </p>
+<pre>(<span class="k">defparameter</span> *w* (gallery-world))
+(world-run! *w* 24000)                                   <span class="c">; grow one, 20 min</span>
+
+(<span class="k">let</span> ((*resting-ants-block* <span class="k">t</span>))    (world-run! *w* 1200))  <span class="c">; same colony,</span>
+(<span class="k">let</span> ((*trail-decay-scale* 3.0f0)) (world-run! *w* 1200))  <span class="c">; different world</span></pre>
+        <p>
+          The colony is the same object at the same tick; only the conditions
+          around the next call changed, and they change back. The experimental
+          condition is a property of the <em>call</em> rather than of the world
+          or of how it was constructed — so a question you think of twenty
+          simulated minutes in does not cost you the twenty minutes.
+        </p>
+        <p>
+          There is a receipt for all this. The same gallery run renders its
+          foraging pictures with <code>*resting-ants-block*</code> bound
+          <em>on</em> and the two bridge frames with it bound <em>off</em>, and
+          when the gallery was regenerated those bridge frames came back
+          byte-for-byte identical to the previous run. The isolation held, and
+          the file system proved it. The whole of
           <a class="src" href="https://github.com/bonkzwonil/antsim/blob/main/docs/experiments.md">experiments.md</a>
           is measurements made this way.
         </p>
@@ -1436,20 +1475,6 @@ C ← min(C, C_max)      <span class="c">; saturation — a real trail is not un
           the same file, in the same language, with no foreign-function boundary
           and no second build system between them. Nothing has to be rewritten in
           another language once it turns out to be hot.
-        </p>
-
-        <p>
-          <b>Two scopes, and the language tells them apart.</b> Everything is
-          lexically scoped by default — closures close over exactly what the text
-          says they close over, which is why the RNG can be a pure function and
-          why a rule can be redefined without wondering what else was watching a
-          variable. Dynamic scope is the deliberate exception, requested by
-          declaration and marked in the name by the <code>*earmuffs*</code>
-          convention, so the 65 parameters above are visibly the ones with
-          run-wide extent and everything else is visibly not. Most languages
-          offer one of these. Having both, distinguishable at a glance, is
-          precisely what makes the <code>let</code>-as-experiment pattern safe
-          rather than a global-mutation trap.
         </p>
 
         <p>

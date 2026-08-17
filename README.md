@@ -33,11 +33,21 @@ clock. [More in the diary](docs/DIARY.md#traffic--and-an-ant-close-enough).*</su
 
 ## Why Common Lisp
 
-Because a simulation is an experiment, and an experiment needs an off switch.
-All 65 parameters of this model are special variables, so an A/B is a `let`
-around the run rather than a configuration mechanism — and when the binding
-ends, so does the change. Everything else is lexically scoped, and the language
-tells the two apart at a glance.
+All 65 parameters of this model are specials, so an experiment is a `let` around
+the run rather than a configuration mechanism. Every frame the body calls into
+sees it, nothing global is mutated, the rebinding is per thread, and it is gone
+when the form ends — **ad hoc and perfectly controlled at once**: side-effect
+free, thread-safe, and incapable of leaking into the next run. You cannot do
+this in Python.
+
+It composes with the live image, which is the part that matters. At a SLIME REPL
+you can take a colony that is *already running* and put it into different physics
+for the next call, just by wrapping that call in a different `let` — same object,
+same tick, and the conditions change back afterwards. A question you think of
+twenty simulated minutes in does not cost you the twenty minutes.
+
+SBCL compiles all of it straight to machine code — no VM, no JIT warm-up — and
+with types declared the numeric core runs level with C and occasionally past it.
 
 SBCL then compiles straight to machine code — no VM, no JIT warm-up — and with
 types declared the numeric core runs level with C and occasionally past it. So
@@ -213,3 +223,5 @@ The full record, including what shipped switched **off** and why, is
 ## Copyright and licence
 
 Copyright © 2026 Mathias Menzel-Nielsen. All rights reserved.
+
+<p align="right"><em>Lisp is geil</em></p>
