@@ -121,6 +121,17 @@ otherwise silently swap the readout for a different individual.")
        (setf *resting-ants-block* (not *resting-ants-block*))
        (format t "~&resting ants ~:[pass through each other~;collide~]~%"
                *resting-ants-block*))
+      ;; The crowd, on a key (§3.11, *ant-collision*).  Terrain, food and
+      ;; corpses keep blocking, so the arena is unchanged and the only
+      ;; thing that disappears is ant-ant contact — which makes it a
+      ;; direct way to see how much of a jam is navigation and how much
+      ;; is the solver.  Toggling it live matters more than the number:
+      ;; a pocket that empties the instant ants stop touching is a
+      ;; different diagnosis from one that does not.
+      ((#\c #\C)
+       (setf *ant-collision* (not *ant-collision*))
+       (format t "~&ant-ant contact ~:[OFF — ants pass through each other~;on~]~%"
+               *ant-collision*))
       (t nil))))
 
 (glfw:def-key-callback live-key (window key scancode action mods)
@@ -253,6 +264,7 @@ declining to (§3.5).  So the panel names the second one."
     ("A"     "ADD FOOD")
     ("H"     "HIDE")
     ("N"     "NEST")
+    ("C"     "CONTACT")
     ("Q"     "QUIT"))
   "The key legend, in the order it is drawn.  Kept as data rather than a
 run of HUD-TEXT calls so the panel can size itself to its contents — the
@@ -453,6 +465,9 @@ Controls:
   left-click   inspect the ant under the pointer
   a            drop a food source at the cursor
   n            resting ants: collide with each other, or pass through
+  c            ant-ant contact on or off — terrain, food and corpses
+               still block, so this isolates the crowd from the
+               navigation (see *ant-collision*)
   space        pause
   + / -        time compression, halving and doubling
   home         frame the whole world

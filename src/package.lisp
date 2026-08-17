@@ -55,7 +55,7 @@
    #:*encounter-confidence* #:*confidence-decay*
    #:*encounter-resolve-gain*
    #:*trophallaxis-rate* #:*trophallaxis-threshold*
-   #:*relax-iterations* #:*relax-slop*
+   #:*ant-collision* #:*relax-iterations* #:*relax-slop*
    ;; world/geom — polygons and the broad phase (§3.7, §4.2)
    #:polygon #:make-polygon #:polygon-n #:polygon-verts
    #:polygon-min-x #:polygon-min-y #:polygon-max-x #:polygon-max-y

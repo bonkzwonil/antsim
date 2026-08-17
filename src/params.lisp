@@ -1746,6 +1746,59 @@ thing the repellent would write off is the route to the food.")
 ;;; Bodies (§3.11)
 ;;; --------------------------------------------------------------------
 
+(defparameter *ant-collision* t
+  "Whether two *ants* push each other apart (§3.11).  T is the model; NIL
+lets ants pass through one another freely and is a **diagnostic**, not a
+species variant.
+
+Terrain, food piles and corpses still block either way.  Only the ant-ant
+pair is switched off, because the question it exists to ask is narrow:
+how much of what looks like a navigation failure is actually the crowd?
+
+The case that prompted it.  A single ant escapes a concavity perfectly
+well — it feels the wall, follows the edge, and leaves.  Several ants in
+the same concavity do not, and get worse the more of them there are,
+which is the signature of a feedback rather than of a broken rule.  The
+suspected loop is that the non-overlap solver displaces an ant, the
+displacement changes what its antennae are over and therefore where it
+steers, its neighbours are displaced by the same solver on the same tick
+and steer in response to *it*, and the whole crowd stirs itself.  With
+ant-ant contact off the geometry is unchanged and the crowd is gone, so
+whatever remains is navigation.
+
+This is the same kind of switch as *resting-ants-block* and
+*obstacle-avoidance*: the value of it is that the difference is
+measurable rather than argued about.  It is not a claim that ants are
+ghosts.
+
+**Run, and the answer is no.**  `scenarios/antsim.json`, 12 000 ticks,
+three seeds summed; stuck is ants that travel under 3 cm in 400 ticks:
+
+    contact   stuck   of those against terrain   corpses   food taken
+    on          197                        171        58        1617
+    off         217                        185       114        3259
+
+Ants trapped against terrain are **unchanged** — 171 against 185, if
+anything slightly worse without the crowd.  So the pocket is not a
+crowding artefact and the furball is not the cause of it: take every ant
+out of every other ant's way and the same ants are still stuck in the
+same corners.  What the crowd supplies is the *appearance* — bodies pile
+up where ants are already failing to leave, which is what makes the
+failure look like a jam.
+
+That redirects the work.  Escaping a concavity is a navigation problem —
+Layer 2, remembered corners — and no amount of tuning the collision
+solver or the give-way rules will reach it.  The rules that sort traffic
+are worth having for traffic; they were never going to fix this.
+
+The other number is worth staring at.  Contact costs **half the food** —
+1617 against 3259 — which is the price of congestion everywhere at once:
+the nest entrance, the source, and every metre of trail between them.
+That is not an argument for switching it off, because a colony whose ants
+occupy no space is not a colony and §3.11 exists for good reasons, but it
+does say how large the term is, and nothing in this project had measured
+it before.")
+
 (defparameter *relax-iterations* 3
   "Jacobi relaxation iterations per motion tick.  [cal] §8: the
 constraint is soft, so residual overlap is bounded rather than zero.  If

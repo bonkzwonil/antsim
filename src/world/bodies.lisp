@@ -189,7 +189,14 @@ row measures."
                 (let ((jj (the fixnum j)))
                   (unless (= jj i)
                     (let ((kj (aref kinds jj)))
-                      (when (body-kind-blocking-p kj)
+                      ;; *ant-collision* NIL drops the ant-ant pair only
+                      ;; (see its docstring): terrain, food and corpses
+                      ;; still block, so the arena keeps its shape and the
+                      ;; only thing removed is the crowd.
+                      (when (and (body-kind-blocking-p kj)
+                                 (or *ant-collision*
+                                     (not (and (= ki +body-ant+)
+                                               (= kj +body-ant+)))))
                         (let* ((ex (- xi (aref xs jj)))
                                (ey (- yi (aref ys jj)))
                                (sum (+ ri (aref rs jj)))
