@@ -1053,9 +1053,36 @@ much each party deviates during the avoidance turn, not a rule about
 sides.
 
 Which is why these are three numbers and not a lane assignment.  Nothing
-here says 'walk on the left'.  Lanes are what an asymmetric yield
-produces when there is enough traffic to sort, and if they do not appear
-that is a finding about the model rather than a missing feature.")
+here says 'walk on the left'.
+
+**And measured, lanes do not appear.**  600 ants on a 55 cm trail between
+nest and source, 20 000 ticks, three seeds, mean signed lateral offset of
+the outbound stream against the returning one:
+
+    yield on    0.0027   0.0006   0.0017   mean 0.0017 m
+    yield off   0.0034   0.0010   0.0019   mean 0.0021 m
+
+Two millimetres either way — less than one *ant-radius*, and slightly
+*smaller* with the rule on than without it.  There is no lane structure
+here at all, and the honest reading is that this rule does not produce
+one.
+
+The reason is that it is symmetric in a way the reported behaviour is
+not.  Each ant turns away from where the other actually is, so across a
+population the left and right deflections cancel; the only tie-break is
+ANT-HANDEDNESS, which is a deliberate even split.  A lane needs a shared
+convention or a population-level bias to seed it, and this model has
+neither.  Couzin and Franks' three-lane column also has a geometry doing
+half the work — a dense column with flanks — that a diffuse trail in an
+open arena does not.
+
+What the rule *does* buy is throughput, which is a different claim and
+holds: of the food gain the encounter rules produce, giving way carries
+most of it (see *antennal-range*).  Fewer head-on stalls, not tidier
+traffic.  Left in on that basis, with the lane result recorded here so it
+is argued with rather than rediscovered — and note that a population-level
+turning bias is documented in ants and is the obvious thing to try next,
+against ANT-HANDEDNESS's stated reason for staying even.")
 
 (defparameter *yield-returning* 0.6f0
   "Yield multiplier for an unladen ant on its way home.  [cal] Between

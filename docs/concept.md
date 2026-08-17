@@ -2011,12 +2011,29 @@ and not about *where* — so it buys persistence, a lower give-up
 threshold, and nothing else. One quantity, one consequence, and a test
 that asserts the heading does not move.
 
-*Right of way is a ratio, not a rule about sides.* Nothing in the model
-says walk on the left. Both ants in a head-on meeting turn aside; the
-laden one turns least and the outbound one most, which is the asymmetry
-the traffic literature actually reports. Lanes are what that produces
-when there is enough traffic to sort, so if they appear they are a
-finding rather than a feature — and the tests assert the ratio.
+*Right of way is a ratio, not a rule about sides — and it does not
+produce lanes.* Both ants in a head-on meeting turn aside; the laden one
+turns least and the outbound one most, which is the asymmetry the traffic
+literature reports. The plan above expected lane formation to follow.
+**Measured, it does not.** 600 ants on a 55 cm trail, three seeds: the
+mean lateral offset between the outbound and returning streams is 1.7 mm
+with the rule on and 2.1 mm with it off — less than one ant radius, and
+slightly *worse* with the rule than without.
+
+The reason is that this rule is symmetric in a way the reported behaviour
+is not. Each ant turns away from where the other actually is, so left and
+right deflections cancel across a population; the only tie-break is
+`ANT-HANDEDNESS`, which is a deliberate even split. A lane needs a shared
+convention or a population-level bias to seed it, and there is neither —
+and the army-ant column that the literature describes has a geometry
+doing half the work that a diffuse trail in an open arena does not.
+
+So the throughput claim holds and the organisation claim does not. Giving
+way carries most of the food gain below, which is fewer head-on stalls
+rather than tidier traffic. That is a smaller result than §3.11 hoped for
+and it is the one there is evidence for; a population-level turning bias
+is documented in ants and is the obvious next thing to try, against
+`ANT-HANDEDNESS`'s stated reason for staying even.
 
 *The determinism discipline paid for itself immediately.* Every rule
 reads the state the tick began with and writes to a buffer applied
