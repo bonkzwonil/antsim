@@ -981,6 +981,86 @@ than modelled.  What was wrong was requiring an ant to reach the *centre*
 of a crowd it is part of.")
 
 ;;; --------------------------------------------------------------------
+;;; Knowing you are stuck (§3.4, docs/navigation.md Layer 0)
+;;; --------------------------------------------------------------------
+;;;
+;;; An ant that maintains a home vector is already carrying everything it
+;;; needs to notice that it is getting nowhere, and until now the model
+;;; threw half of it away: the vector's *length* was computed every tick
+;;; and used only for a validity check.  Snapshot it, count the walking
+;;; between snapshots, and three readings fall out of the same two numbers:
+;;;
+;;;     L  >=  |h - h0|  >=  |h0| - |h|
+;;;     walked   got        got closer
+;;;
+;;; The magnitude of the difference and the difference of the magnitudes.
+;;; Both gaps are diagnoses and they are not the same diagnosis, which is
+;;; the reason for taking both:
+;;;
+;;;   L - |h - h0|            walking that went nowhere.  An ant pinned in
+;;;                           a crowd or wedged in a notch — it is stepping
+;;;                           and it is not moving.
+;;;   |h-h0| - (|h0| - |h|)   travel that went somewhere but not homeward.
+;;;                           The concavity trap: real progress, spent
+;;;                           going round rather than back.
+;;;
+;;; The pair is not interchangeable and a metres-denominated test cannot
+;;; stand in for both.  A pinned ant barely displaces at all, so anything
+;;; measured against distance crawls on exactly the case that most needs
+;;; catching; the first gap is denominated in *walking*, which a pinned ant
+;;; still does at full rate.
+;;;
+;;; Both of the ant-oscillation bugs this repository has recorded — 12 mm
+;;; in 20 000 ticks (ANT-HANDEDNESS) and 8 mm in 20 000 ticks
+;;; (*homing-scan-steps*) — are the first gap, and neither ant had any way
+;;; to notice.  This makes them visible from inside the model, which makes
+;;; Layer 0 a diagnostic as much as a sensor.
+
+(defparameter *stall-window* 100
+  "How often an ant compares where it has walked with where it has got
+to, in motion ticks.  [cal] 100 is five seconds at 20 Hz — about 10 cm of
+free walking, so a window is a meaningful fraction of a 1 m arena and
+still short enough that a wedged ant is not wedged for long.
+
+0 disables the whole of Layer 0, which is what makes every consequence of
+it measurable against the model without it rather than merely asserted.
+
+The window has to be long enough that ordinary walking does not trip it.
+Over a handful of ticks the heading noise alone makes L exceed the net
+displacement by a wide margin, so a short window reads every ant as
+pinned; over five seconds a correlated random walk has a persistence
+length of about 20 cm (*turn-sigma*) and still covers most of what it
+walks.")
+
+(defparameter *stall-pinned-fraction* 0.55f0
+  "How much of a window's walking must go nowhere before the ant decides
+it is pinned, as a fraction of the distance walked.  [cal]
+
+At 0.55 an ant that walks 10 cm and displaces less than 4.5 cm of it has
+noticed.  A correlated random walk at these parameters keeps well over
+half of what it walks over a five-second window, so this fires on genuine
+obstruction rather than on tortuosity.
+
+It applies to outbound and returning ants alike, and that is deliberate:
+being wedged has nothing to do with which way an ant is trying to go.")
+
+(defparameter *stall-detour-fraction* 0.5f0
+  "How much of a window's *displacement* may fail to close the range home
+before the ant decides it is detouring, as a fraction of that
+displacement.  [cal]
+
+An ant driving straight at the nest gets closer by exactly as far as it
+moves, so the gap is zero.  One walking a tangent gets no closer at all
+and the ratio is 1.  At 0.5 the trigger sits at 60 degrees off the
+bearing home, sustained for a whole window.
+
+**Returning ants only**, and the restriction is not a detail — it is what
+stops the rule being nonsense.  An outbound ant is *supposed* to walk
+away from the nest; measuring it against homeward progress would mark
+every successful foraging trip in the colony as a detour, and the first
+thing the repellent would write off is the route to the food.")
+
+;;; --------------------------------------------------------------------
 ;;; Bodies (§3.11)
 ;;; --------------------------------------------------------------------
 
@@ -1029,9 +1109,11 @@ relaxation from chasing floating-point noise forever.")
                *brood-investment*
                *trail-lost-threshold* *trail-follow-threshold*
                *trail-memory-decay* *uturn-cast-gain*
+               *stall-pinned-fraction* *stall-detour-fraction*
                *relax-slop*))
 
 (declaim (type fixnum *max-age-ticks* *relax-iterations* *homing-scan-steps*
                *nest-meals-per-tick*
                *uturn-ticks* *brood-development-minutes*
-               *forager-maturity-ticks* *age-shade-ticks*))
+               *forager-maturity-ticks* *age-shade-ticks*
+               *stall-window*))

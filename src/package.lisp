@@ -42,6 +42,7 @@
    #:colony-brood-pipe #:colony-brood-head
    #:*trail-lost-threshold* #:*trail-follow-threshold* #:*trail-memory-decay*
    #:*uturn-ticks* #:*uturn-cast-gain*
+   #:*stall-window* #:*stall-pinned-fraction* #:*stall-detour-fraction*
    #:*relax-iterations* #:*relax-slop*
    ;; world/geom — polygons and the broad phase (§3.7, §4.2)
    #:polygon #:make-polygon #:polygon-n #:polygon-verts
@@ -86,6 +87,9 @@
    #:ants-hvx #:ants-hvy #:ants-px #:ants-py #:ants-count-state
    #:ants-trailed #:ants-exit #:ants-smelled #:ants-cast #:ants-resolve
    #:ants-gait #:ants-waited
+   ;; Layer 0 — one window, three readings (§3.4, docs/navigation.md)
+   #:ants-h0x #:ants-h0y #:ants-walked #:ants-window #:ants-stalled
+   #:stall-reset! #:stall-step!
    #:path-integration-step!
    #:spawn-ant #:kill-ant
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+

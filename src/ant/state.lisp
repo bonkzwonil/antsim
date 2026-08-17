@@ -119,6 +119,40 @@
   ;; Ticks of casting left after a U-turn.  Zero for an ant that is
   ;; walking normally, which is nearly all of them nearly all the time.
   (cast nil :type (or null u8v))
+  ;; --- Layer 0: one window, three readings (§3.4, docs/navigation.md) ---
+  ;;
+  ;; The home vector as it stood at the start of the current window, and
+  ;; the walking done since.  Everything Layer 0 knows comes off these two
+  ;; snapshots and the vector now — see the note above *STALL-WINDOW*.
+  ;;
+  ;; Kept per ant rather than derived, because there is nowhere else it
+  ;; could live: "how far have I walked since I was there" is a history,
+  ;; and no tick can see a history it did not record.
+  (h0x nil :type (or null f32v))
+  (h0y nil :type (or null f32v))
+  ;; Path length walked this window — the ant's own pedometer.
+  ;;
+  ;; The *attempted* step, not the net displacement, and the distinction is
+  ;; the whole of the pinned signal.  An ant shoving against a crowd is
+  ;; walking: its legs are going, its stride integrator is counting, and
+  ;; the fact that none of it becomes ground is exactly what it needs to
+  ;; find out.  Accumulating the achieved displacement instead would make
+  ;; L and |h - h0| the same quantity up to noise, and the first gap would
+  ;; be identically zero — the sensor would be blind to the one case it
+  ;; exists for.  This is the same choice deposition makes (§3.3) and the
+  ;; opposite of the one path integration makes (PATH-INTEGRATION-STEP!),
+  ;; and all three are right for their own reasons.
+  (walked nil :type (or null f32v))
+  ;; Motion ticks since the snapshot.  u16 because the window is a hundred
+  ;; ticks and could not sanely be tens of thousands.
+  (window nil :type (or null u16v))
+  ;; Detour gap accumulated across windows: metres of travel that went
+  ;; somewhere other than homeward.  This is the evidence a returning ant
+  ;; has that the ground behind it is not worth walking, and Layer 3 uses
+  ;; its magnitude directly as the strength of the mark it leaves — so the
+  ;; aversive deposit is proportional to the effort actually wasted and
+  ;; needs no strength parameter of its own.
+  (stalled nil :type (or null f32v))
   (free nil :type (or null fixv))
   (nfree 0 :type fixnum))
 
@@ -136,12 +170,34 @@
               :exit (mkf32 capacity)
               :smelled (mkf32 capacity) :cast (mku8 capacity)
               :resolve (mkf32 capacity) :waited (mku32 capacity)
+              :h0x (mkf32 capacity) :h0y (mkf32 capacity)
+              :walked (mkf32 capacity) :window (mku16 capacity)
+              :stalled (mkf32 capacity)
               :free (mkfix capacity)))
 
 (declaim (inline ant-live-p))
 (defun ant-live-p (a i)
   (declare (type ants a) (type fixnum i))
   (/= (aref (the u8v (ants-state a)) i) +ant-dead+))
+
+(declaim (inline stall-reset!))
+(defun stall-reset! (a i)
+  "Open a fresh Layer 0 window on the ant's present home vector, and
+forget what the last one concluded (§3.4, docs/navigation.md).
+
+Called for any ant that is not walking a foraging leg — resting in the
+nest, or standing at a source — and once more at departure, when the home
+vector is re-fixed under it.  A window is a statement about a stretch of
+walking, and an ant that has stopped walking has no such stretch: leaving
+the snapshot in place would let a resting ant accumulate a stall over the
+minutes it spends in the nest and then act on it the moment it set out."
+  (declare (type ants a) (type fixnum i) (optimize (speed 3) (safety 0)))
+  (setf (aref (the f32v (ants-h0x a)) i) (aref (the f32v (ants-hvx a)) i)
+        (aref (the f32v (ants-h0y a)) i) (aref (the f32v (ants-hvy a)) i)
+        (aref (the f32v (ants-walked a)) i) 0.0f0
+        (aref (the u16v (ants-window a)) i) 0
+        (aref (the f32v (ants-stalled a)) i) 0.0f0)
+  (values))
 
 (defun ants-alloc (a)
   "Claim a slot, or NIL when the table is full.  Full is a legitimate

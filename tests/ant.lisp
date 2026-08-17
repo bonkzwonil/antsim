@@ -936,3 +936,204 @@ that a colony cannot live on nothing."
     (is (< (ant:colony-population c) 60)
         "population ~d did not fall" (ant:colony-population c))
     (is (plusp (ant:colony-died c)))))
+
+;;; ---------------------------------------- Layer 0: the stall window
+;;;
+;;; An ant carrying a home vector already holds everything it needs to
+;;; notice it is getting nowhere, and the model used to throw half of it
+;;; away — the vector's length was computed every tick and read only for a
+;;; validity check.  Snapshot it, count the walking between snapshots, and
+;;; the same two numbers give three readings:
+;;;
+;;;     L  >=  |h - h0|  >=  |h0| - |h|
+;;;
+;;; The two gaps are different diagnoses and the tests below keep them
+;;; apart, because the cheap mistake is to assume one stands in for the
+;;; other.  A pinned ant barely displaces, so a metres-denominated test
+;;; crawls on exactly the case that most needs catching; a detouring ant
+;;; displaces perfectly well and simply does not get home.
+
+(defun %stall-once (&key (state ant:+ant-returning+)
+                         (h0 '(0.4f0 0.0f0)) (h '(0.4f0 0.0f0))
+                         (walked 0.0f0))
+  "Contrive one ant's window, close it, and report what it concluded.
+
+A unit test on the arithmetic rather than a run, deliberately: the three
+readings are a claim about two snapshots, and driving an ant into a real
+corner to produce them would test the corner as much as the rule.
+Returns (values cast stalled)."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
+         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
+         (a (ant:world-ants w)))
+    (ant:world-seed-population! w c 1)
+    (setf (aref (ant:ants-state a) 0) state
+          (aref (ant:ants-h0x a) 0) (first h0)
+          (aref (ant:ants-h0y a) 0) (second h0)
+          (aref (ant:ants-hvx a) 0) (first h)
+          (aref (ant:ants-hvy a) 0) (second h)
+          (aref (ant:ants-walked a) 0) walked
+          (aref (ant:ants-window a) 0) (1- ant:*stall-window*)
+          (aref (ant:ants-cast a) 0) 0
+          (aref (ant:ants-stalled a) 0) 0.0f0)
+    (ant:stall-step! w)
+    (values (aref (ant:ants-cast a) 0)
+            (aref (ant:ants-stalled a) 0))))
+
+(test the-two-gaps-are-different-diagnoses
+  "L - |h-h0| is walking that went nowhere; |h-h0| - (|h0|-|h|) is travel
+that went somewhere other than home.  An ant can have either without the
+other, and if the implementation ever conflates them one of these fails."
+  ;; Walked 20 cm, got 1 cm: pinned, and not detouring — what little
+  ;; ground it made was straight at the nest.
+  (multiple-value-bind (cast stalled)
+      (%stall-once :h0 '(0.40f0 0.0f0) :h '(0.39f0 0.0f0) :walked 0.20f0)
+    (is (plusp cast) "walked 20 cm for 1 cm of ground and did not notice")
+    (is (zerop stalled) "a pinned ant must not book a detour: ~,4f" stalled))
+  ;; Walked 10 cm and displaced all of it, but sideways: the range home is
+  ;; unchanged, so every centimetre was a detour and none of it a stall.
+  (multiple-value-bind (cast stalled)
+      (%stall-once :h0 '(0.40f0 0.0f0) :h '(0.40f0 0.10f0) :walked 0.103f0)
+    (is (zerop cast) "an ant that covered its ground is not pinned")
+    (is (> stalled 0.05f0)
+        "walked 10 cm across the bearing home and booked ~,4f" stalled))
+  ;; And an ant driving straight home is neither.
+  (multiple-value-bind (cast stalled)
+      (%stall-once :h0 '(0.40f0 0.0f0) :h '(0.30f0 0.0f0) :walked 0.102f0)
+    (is (zerop cast))
+    (is (zerop stalled) "a good trip booked a stall of ~,4f" stalled)))
+
+(test the-detour-test-never-fires-on-an-outbound-ant
+  "The one way this rule could be actively harmful.
+
+An outbound ant is *supposed* to walk away from the nest, so its
+homeward progress is negative by design and the detour gap is large on
+every successful trip.  Measured against it, the first thing the colony
+would write off is the route to the food."
+  (multiple-value-bind (cast stalled)
+      (%stall-once :state ant:+ant-outbound+
+                   :h0 '(0.10f0 0.0f0) :h '(0.40f0 0.0f0) :walked 0.31f0)
+    (declare (ignore cast))
+    (is (zerop stalled)
+        "an outbound ant walking 30 cm away from home booked ~,4f" stalled))
+  ;; but it is still pinned if it is pinned — being wedged has nothing to
+  ;; do with which way the ant is trying to go
+  (multiple-value-bind (cast stalled)
+      (%stall-once :state ant:+ant-outbound+
+                   :h0 '(0.40f0 0.0f0) :h '(0.40f0 0.0f0) :walked 0.20f0)
+    (declare (ignore stalled))
+    (is (plusp cast) "a wedged outbound ant must still notice")))
+
+(test a-good-window-clears-the-evidence
+  "The stall is evidence about ground the ant is still on.  An ant that
+escapes a pocket and starts making way must not carry the old verdict
+for the rest of the trip."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
+         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
+         (a (ant:world-ants w)))
+    (ant:world-seed-population! w c 1)
+    (flet ((close-window (h0 h walked)
+             (setf (aref (ant:ants-state a) 0) ant:+ant-returning+
+                   (aref (ant:ants-h0x a) 0) (first h0)
+                   (aref (ant:ants-h0y a) 0) (second h0)
+                   (aref (ant:ants-hvx a) 0) (first h)
+                   (aref (ant:ants-hvy a) 0) (second h)
+                   (aref (ant:ants-walked a) 0) walked
+                   (aref (ant:ants-window a) 0) (1- ant:*stall-window*))
+             (ant:stall-step! w)))
+      ;; two bad windows accumulate
+      (close-window '(0.40f0 0.0f0) '(0.40f0 0.10f0) 0.103f0)
+      (let ((one (aref (ant:ants-stalled a) 0)))
+        (close-window '(0.40f0 0.10f0) '(0.40f0 0.20f0) 0.103f0)
+        (is (> (aref (ant:ants-stalled a) 0) one)
+            "a second bad window did not add to the first"))
+      ;; and one good one wipes the slate
+      (close-window '(0.40f0 0.0f0) '(0.30f0 0.0f0) 0.102f0)
+      (is (zerop (aref (ant:ants-stalled a) 0))
+          "made 10 cm of ground and still carries ~,4f"
+          (aref (ant:ants-stalled a) 0)))))
+
+(test a-resting-ant-carries-no-stall
+  "A window is a statement about a stretch of walking.  An ant that has
+stopped walking has no such stretch, and must not be able to accumulate
+one over the minutes it spends in the nest and then act on it the moment
+it sets out."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
+         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
+         (a (ant:world-ants w)))
+    (ant:world-seed-population! w c 1)
+    (setf (aref (ant:ants-state a) 0) ant:+ant-in-nest+
+          (aref (ant:ants-stalled a) 0) 0.9f0
+          (aref (ant:ants-walked a) 0) 5.0f0
+          (aref (ant:ants-window a) 0) 90)
+    (ant:stall-step! w)
+    (is (zerop (aref (ant:ants-stalled a) 0)))
+    (is (zerop (aref (ant:ants-walked a) 0)))
+    (is (zerop (aref (ant:ants-window a) 0)))
+    ;; and the fresh window is anchored on where it actually is
+    (is (= (aref (ant:ants-h0x a) 0) (aref (ant:ants-hvx a) 0)))
+    (is (= (aref (ant:ants-h0y a) 0) (aref (ant:ants-hvy a) 0)))))
+
+(test the-pedometer-counts-walking-not-ground-made-good
+  "ANTS-WALKED is the step the ant *attempted*, which is the whole of the
+pinned signal: an ant shoving at a wall is walking, and the fact that
+none of it becomes ground is exactly what it needs to find out.  Closed
+over net displacement instead, L and |h-h0| would be the same quantity
+and the first gap would be identically zero.
+
+The arena boundary is the cheap way to hold an ant still while it walks
+at full speed, the same trick PATH-INTEGRATION-TRACKS-ACTUAL-DISPLACEMENT
+uses."
+  (let* ((ant:*stall-window* 0)         ; isolate the pedometer itself
+         (w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
+         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w)))
+    (ant:world-seed-population! w c 1)
+    (let ((bi (aref (ant:ants-body a) 0)))
+      (setf (aref (ant:bodies-x b) bi) 0.0f0
+            (aref (ant:bodies-y b) bi) 0.5f0
+            (aref (ant:ants-state a) 0) ant:+ant-outbound+
+            (aref (ant:ants-walked a) 0) 0.0f0)
+      (dotimes (k 200)
+        (setf (aref (ant:ants-energy a) 0) 1.0f0
+              (aref (ant:ants-heading a) 0) 3.1415927f0)  ; into the wall
+        (ant:world-step! w))
+      (is (< (aref (ant:bodies-x b) bi) 0.02f0)
+          "the ant was supposed to stay pinned at the wall")
+      ;; 200 ticks at ~2 cm/s is about 20 cm of walking, none of it ground
+      (is (> (aref (ant:ants-walked a) 0) 0.15f0)
+          "walked ~,4f m while stepping for 10 s"
+          (aref (ant:ants-walked a) 0)))))
+
+(test a-pinned-ant-notices-it-is-pinned
+  "Both of the ant-oscillation bugs in this repository's history are the
+first gap — 12 mm in 20 000 ticks (ANT-HANDEDNESS) and 8 mm in 20 000
+(*homing-scan-steps*) — and neither ant had any way to notice.  This is
+that way, end to end, on a live tick loop.
+
+The off position is asserted too.  A sensor whose consequence also
+appears without it is not being tested, and *stall-window* = 0 is the
+exact off switch."
+  (flet ((ever-cast (window)
+           (let* ((ant:*stall-window* window)
+                  (w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
+                  (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0
+                                       :stock 1.0f6))
+                  (a (ant:world-ants w))
+                  (b (ant:world-bodies w)))
+             (ant:world-seed-population! w c 1)
+             (let ((bi (aref (ant:ants-body a) 0)))
+               (setf (aref (ant:bodies-x b) bi) 0.0f0
+                     (aref (ant:bodies-y b) bi) 0.5f0
+                     (aref (ant:ants-state a) 0) ant:+ant-outbound+)
+               (dotimes (k 300 nil)
+                 (setf (aref (ant:ants-energy a) 0) 1.0f0
+                       (aref (ant:ants-heading a) 0) 3.1415927f0)
+                 (ant:world-step! w)
+                 (when (plusp (aref (ant:ants-cast a) 0))
+                   (return t)))))))
+    (is-true (ever-cast 100)
+             "walked into a wall for 15 s and never noticed")
+    (is-false (ever-cast 0)
+              "noticed with the window switched off, so this test does
+not test the window")))

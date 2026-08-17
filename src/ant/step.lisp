@@ -154,7 +154,15 @@ initial condition rather than merely a convenient one."
                  ;; and the home vector is the way back from where it
                  ;; actually is, which is not quite the nest centre
                  (aref (ants-hvx a) i) (- (colony-nest-x c) sx)
-                 (aref (ants-hvy a) i) (- (colony-nest-y c) sy))
+                 (aref (ants-hvy a) i) (- (colony-nest-y c) sy)
+                 ;; Layer 0 opens its first window on the same vector, so
+                 ;; the very first comparison is against something true
+                 ;; rather than against the origin.
+                 (aref (ants-h0x a) i) (- (colony-nest-x c) sx)
+                 (aref (ants-h0y a) i) (- (colony-nest-y c) sy)
+                 (aref (ants-walked a) i) 0.0f0
+                 (aref (ants-window a) i) 0
+                 (aref (ants-stalled a) i) 0.0f0)
            (incf (colony-next-id c))
            (incf (colony-population c))
            (incf (colony-born c))
@@ -563,7 +571,13 @@ switch into and no switching logic to get wrong (§3.5)."
                      ;; the window, where it is obvious and where no
                      ;; aggregate statistic showed it.
                      (aref (ants-hvx a) i) (- (colony-nest-x c) x)
-                     (aref (ants-hvy a) i) (- (colony-nest-y c) y))))
+                     (aref (ants-hvy a) i) (- (colony-nest-y c) y))
+               ;; and Layer 0's first window opens on that same corrected
+               ;; vector.  Without this the ant sets out comparing itself
+               ;; against the snapshot taken before departure re-fixed the
+               ;; home vector, so its very first window reports the
+               ;; correction as travel it never made.
+               (stall-reset! a i)))
 
             ;; --- AT-FOOD -------------------------------------------
             ((= state +ant-at-food+)
@@ -792,6 +806,12 @@ switch into and no switching logic to get wrong (§3.5)."
                  (when (/= ny (+ y dy))
                    (setf heading (wrap-angle (- heading))))
                  (setf (aref (ants-heading a) i) heading)
+                 ;; The pedometer, and it counts the step the ant *tried*
+                 ;; to take (ANTS-WALKED).  Taken here, before the arena
+                 ;; clamp and before BODIES-RESOLVE! has had its say, so
+                 ;; that an ant walking on the spot still registers as
+                 ;; walking — which is the entire point of the reading.
+                 (incf (aref (ants-walked a) i) (* speed dt))
                  ;; Path integration happens in PATH-INTEGRATION-STEP!,
                  ;; after collision resolution — see the note there.
                  (setf (aref bxs bi) nx (aref bys bi) ny))
@@ -965,6 +985,98 @@ leak."
                      1.0f0))))))
   (values))
 
+(defun stall-step! (w)
+  "Close each ant's stall window when it falls due, and read the three
+numbers off it (§3.4, docs/navigation.md Layer 0).
+
+      L  >=  |h - h0|  >=  |h0| - |h|
+    walked      got        got closer
+
+Two gaps, two diagnoses, one pair of snapshots.  See the note above
+*STALL-WINDOW* for why both are needed and why neither substitutes for
+the other.
+
+Runs after PATH-INTEGRATION-STEP!, which is not arbitrary: h has to be
+this tick's vector, closed over actual net displacement, or the ant is
+comparing its pedometer against a stale estimate of where it got to.
+
+**The pinned gap drives behaviour and never a deposit, and that
+prohibition is load-bearing.**  The densest crowd in any run is the queue
+at the nest entrance, which §3.11 and *nest-arrival-radius* both record as
+correct and emergent; every ant in it satisfies the pinned test perfectly.
+An ant that marked the ground when it fired would have the colony
+chemically writing off its own front door, and a colony that does that
+starves in a ring around its nest — the same failure widening the arrival
+radius had to fix.  Crowding is not an obstacle.  It clears.
+
+What a pinned ant does instead is cast: the same widened search
+(*uturn-cast-gain*) an ant makes when it loses a trail, which is the
+cheapest thing that can shake a wedged ant loose and adds no mechanism.
+Walking *away* from the nest to escape a pocket is a stronger response
+and a separate layer, because it needs a commitment latch to keep the
+homing term from simply undoing it on the next tick."
+  (declare (type world w) (optimize (speed 3) (safety 1)))
+  (let ((a (world-ants w))
+        (win *stall-window*))
+    (declare (type fixnum win))
+    (when (plusp win)
+      (dotimes (i (ants-n a))
+        (when (ant-live-p a i)
+          (let ((state (aref (the u8v (ants-state a)) i)))
+            (cond
+              ((not (or (= state +ant-outbound+) (= state +ant-returning+)))
+               (stall-reset! a i))
+              (t
+               (let ((k (1+ (aref (the u16v (ants-window a)) i))))
+                 (declare (type fixnum k))
+                 (setf (aref (the u16v (ants-window a)) i) (min 65535 k))
+                 (when (>= k win)
+                   (let* ((hx (aref (the f32v (ants-hvx a)) i))
+                          (hy (aref (the f32v (ants-hvy a)) i))
+                          (zx (aref (the f32v (ants-h0x a)) i))
+                          (zy (aref (the f32v (ants-h0y a)) i))
+                          (l (aref (the f32v (ants-walked a)) i))
+                          (dx (- hx zx)) (dy (- hy zy))
+                          ;; |h - h0|: the magnitude of the difference —
+                          ;; how far the ant actually got, whatever route
+                          ;; it took to get there.
+                          (got (sqrt (+ (* dx dx) (* dy dy))))
+                          (hn (sqrt (+ (* hx hx) (* hy hy))))
+                          (h0n (sqrt (+ (* zx zx) (* zy zy))))
+                          ;; |h0| - |h|: the difference of the magnitudes
+                          ;; — how much of that became range closed on the
+                          ;; nest.  Negative for an ant going the other
+                          ;; way, which is correct and is why the detour
+                          ;; test is restricted to returning ants.
+                          (closer (- h0n hn))
+                          (pinned (- l got))
+                          (detour (- got closer)))
+                     (declare (type f32 hx hy zx zy l dx dy got hn h0n
+                                       closer pinned detour))
+                     ;; Walking that went nowhere.  Behaviour only.
+                     (when (and (> l 1.0f-6)
+                                (> pinned (* *stall-pinned-fraction* l)))
+                       (setf (aref (the u8v (ants-cast a)) i)
+                             (min 255 (max 0 *uturn-ticks*))))
+                     ;; Travel that went somewhere other than homeward.
+                     ;; Returning ants only — an outbound ant is supposed
+                     ;; to be walking away from the nest.
+                     (if (and (= state +ant-returning+)
+                              (> got 1.0f-6)
+                              (> detour (* *stall-detour-fraction* got)))
+                         (incf (aref (the f32v (ants-stalled a)) i) detour)
+                         ;; A window that went well clears the evidence.
+                         ;; Without this an ant that escaped a pocket
+                         ;; would carry the stall for the rest of the trip
+                         ;; and keep acting on ground it has already left.
+                         (setf (aref (the f32v (ants-stalled a)) i) 0.0f0))
+                     ;; and the next window opens on where it is now
+                     (setf (aref (the f32v (ants-h0x a)) i) hx
+                           (aref (the f32v (ants-h0y a)) i) hy
+                           (aref (the f32v (ants-walked a)) i) 0.0f0
+                           (aref (the u16v (ants-window a)) i) 0)))))))))))
+  (values))
+
 (defun colony-feed! (w)
   "Serve meals from each colony's stock: the hungriest resting ants
 first, each restored as far as the larder allows (§3.5).
@@ -1131,6 +1243,9 @@ stops producing brood, and decays."
                        (world-foods w)))))
   (bodies-resolve! (world-bodies w) (world-obstacles w))
   (path-integration-step! w)
+  ;; after path integration, so the window closes on this tick's home
+  ;; vector rather than on last tick's estimate of where the ant got to
+  (stall-step! w)
   ;; after the drain, so a meal is measured against what the ant has
   ;; actually spent this tick
   (colony-feed! w)
