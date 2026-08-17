@@ -186,6 +186,49 @@ Deliberately *not* implemented by lowering k or raising n.  Both would
 have moved trail-following in the same direction while changing the
 choice function itself, which §3.8 is a test of.")
 
+(defparameter *trail-lane-offset* 0.008f0
+  "How far off the centre line of a trail an ant may prefer to walk,
+metres.  Each ant draws its own, uniformly in ±this, and keeps it for
+life (ANT-TRAIL-OFFSET).  0 restores the old behaviour exactly — every
+ant steering to dead centre — which is what makes the difference
+measurable rather than asserted.
+
+The old behaviour was a mistake with a very ordinary cause.  Tropotaxis
+was written to null the difference between the two antennae, and nulling
+that difference *is* the definition of standing on the ridge of the
+gradient — so the rule that makes ants good at following trails also made
+every one of them follow the identical line.  A deposit is a packet 3 cm
+across (*trail-packet-radius*) and the colony was walking it in single
+file, shoulder to shoulder, with nowhere to pass and no width for traffic
+to sort into.  Real trails are broad; this is what makes this one broad.
+
+**Measured**, 400 ants on an 80 cm trail, three seeds.  Band width is the
+mean |lateral offset| of ants in the corridor; blocked is the fraction of
+trail time an ant spends with another same-direction ant inside 8 mm and
+34 degrees of dead ahead — which is the complaint this fixes, quantified:
+
+    lane    band     blocked   food
+    0.000   0.0183   80.0%     877
+    0.004   0.0194   64.6%     852
+    0.008   0.0238   47.0%     834
+    0.012   0.0272   39.9%     739
+
+Eighty percent at zero.  Four ticks in five, an ant on the trail had
+another ant right in front of it going the same way — the colony was
+walking a 3 cm road in single file, and that is what was being watched.
+
+8 mm is a little over half the packet radius, so the band is about as
+wide as the chemical trail actually is and ants do not habitually walk
+where they cannot smell anything.  It nearly halves the blocking.
+
+**It costs about 5% of the food, and the mechanism is not mysterious:**
+ants spread across a road are nearer its edges, so they lose it sooner.
+The same interaction shows up in the U-turn fixture, whose synthetic
+trail is one cell wide and which therefore switches this off to measure
+what it is actually about.  Whether 5% is worth paying for traffic that
+can move is a judgement rather than a measurement, and 0.004 is the
+conservative option at 65% blocked and half the cost.")
+
 (defparameter *trail-noise-suppression* 0.85f0
   "How much of the heading noise a strong trail removes.  [cal] Same
 argument as *trail-turn-gain*, from the other side: a committed
@@ -1093,6 +1136,64 @@ the other two: it has a bearing to hold, but nothing to protect.")
 Outbound ants deviate most from their heading during avoidance, which is
 the asymmetry the whole three-lane structure is reported to rest on.")
 
+(defparameter *yield-overtake* 0.8f0
+  "How hard an ant steps aside to pass a *slower nestmate going the same
+way*, as a multiplier on *yield-rate*.  0 restores queueing, which is how
+this behaved when only head-on meetings were handled.
+
+Leaving this out was a hole, and *speed-spread* had already named it:
+individual pace exists so that there is 'a fast ant behind a slow one',
+and a model that gives ants different speeds and then no way to pass has
+spent the variation on nothing.  What it produced instead was a fast ant
+walking into the back of a slow one and being held there by the collision
+solver — the two then travel as a pair at the slower pace, which is what
+prompted this and is visible from the window.
+
+**Measured, and the aggregate effect is null.**  Fraction of trail time an
+ant spends with a slower same-direction ant inside 8 mm and 34 degrees of
+dead ahead, three seeds on the live-demo arena, against food delivered:
+
+    0.0   33.1%   887        2.0   33.2%   908
+    0.8   34.1%   915        4.0   29.8%   848
+
+So it does work — at 4.0 the blocking measurably falls — but only by
+turning hard enough to cost more food than it returns, and at the shipped
+value the blocking metric does not move at all.
+
+Two things dominate it, and neither is queueing.  **Load**: laden ants
+walk at *walk-speed-laden* and empty ones at *walk-speed*, a 25% gap
+against a ±10% pace spread, so what an ant is carrying explains more of
+its speed than who it is.  Holding load constant lifts the correlation
+between pace and achieved speed from 0.14 to 0.31 — most of the way
+there, and the remainder is the second cause.  **Jostling**: ants on the
+trail achieve about 88% of their nominal speed, and the shortfall is
+collision noise that has nothing to do with the individual.
+
+Kept on anyway, and the reason is the window rather than the table.  An
+ant pressed against the back of another for seconds at a time is visibly
+wrong in a way no aggregate catches, and this project has preferred the
+legible reading before where nothing else ranked the options
+(*resting-ants-block*, *gait-stride*).  It costs nothing measurable.  What
+it is *not* is a fix for uniform-looking speeds — that is the load term,
+and it is doing exactly what it should.
+
+The trigger is that the ant is *gaining*: same direction, in front, within
+antennal reach, and this ant's speed is the greater.  Speed here is the
+pair's own paces and loads, which is a property of the world rather than
+anything either ant knows about the other — the sense being modelled is
+simply antennal contact with something in the way, and catching up is the
+only reason that contact persists.
+
+**Not** the leaf-cutter result, and the difference is a fact about the
+animal rather than a simplification.  On *Atta* trails unladen ants do
+not overtake the laden ones ahead of them, and clusters therefore form
+behind a leader — but an *Atta* forager carrying a leaf fragment is far
+wider than its trail-mates, so that is a statement about the geometry of
+carrying a sail.  A *Lasius* forager carries nectar in its crop and is
+exactly as wide laden as empty, so nothing about it obstructs a passing
+nestmate and the queueing result does not transfer.  Recorded because the
+citation is tempting and would be the wrong species' physics.")
+
 (defparameter *stranger-avoidance* 2.0f0
   "How much harder an ant turns away from a non-nestmate than from a
 nestmate.  [cal]
@@ -1340,6 +1441,40 @@ pinned; over five seconds a correlated random walk has a persistence
 length of about 20 cm (*turn-sigma*) and still covers most of what it
 walks.")
 
+(defparameter *detour-ticks* 400
+  "How long an ant that has decided it is detouring stops steering at the
+nest, in motion ticks (docs/navigation.md Layer 1).  [cal] 400 is twenty
+seconds, about 40 cm of walking — enough to get round a letter-sized
+obstacle.  0 disables the latch, which is the model with Layer 3 and no
+Layer 1 and is exactly what shipped before this.
+
+**Why a latch and not a better bearing.**  CLEAR-BEARING chooses from
+where the ant stands, with no memory of where it has been, and re-chooses
+every tick.  So an ant in a concavity walks out a few centimetres, the
+direct bearing home comes clear, it turns back, and re-enters — for as
+long as its energy lasts.  Measured on the word scenario at 12 000 ticks:
+57 ants going nowhere, 38 of them *returning*, and every corpse in the
+run lying against terrain.  No width of scan reaches this, because the
+information the ant needs is not in front of it; it is in the fact that
+it has been here before.
+
+Commitment is the cheapest thing that supplies it.  The ant does not need
+to know the shape of the obstacle, only to stop asking the question for a
+while — and the release condition does the rest.")
+
+(defparameter *detour-release* 0.9f0
+  "How much of the range home an ant must actually close before it calls
+a detour finished, as a fraction of the range when the latch shut.  [cal]
+0.9 is 'ten percent nearer than when I gave up'.
+
+The release matters as much as the latch.  Ending the detour when the
+bearing merely looks clear is the same error one level up — that is what
+CLEAR-BEARING already does every tick — so the test is against *ground
+actually made*, which is the one thing a pocket cannot fake.  An ant
+circling inside a concavity never improves on the range it had when it
+entered, so it stays committed; one that has genuinely rounded the corner
+beats it within a few strides and goes back to homing immediately.")
+
 (defparameter *stall-pinned-fraction* 0.55f0
   "How much of a window's walking must go nowhere before the ant decides
 it is pinned, as a fraction of the distance walked.  [cal]
@@ -1397,7 +1532,7 @@ relaxation from chasing floating-point noise forever.")
                *speed-spread*
                *gait-stride* *ant-disc-pixels* *ant-detail-pixels*
                *sensor-offset* *sensor-spread* *turn-rate*
-               *trail-turn-gain* *trail-noise-suppression*
+               *trail-turn-gain* *trail-noise-suppression* *trail-lane-offset*
                *choice-n* *choice-k* *choice-eavesdrop*
                *trail-tau* *trail-decay-scale* *trail-cap* *trail-deposit*
                *trail-packet-spacing* *trail-packet-radius*
@@ -1417,12 +1552,12 @@ relaxation from chasing floating-point noise forever.")
                *brood-investment*
                *trail-lost-threshold* *trail-follow-threshold*
                *trail-memory-decay* *uturn-cast-gain*
-               *stall-pinned-fraction* *stall-detour-fraction*
+               *stall-pinned-fraction* *stall-detour-fraction* *detour-release*
                *repel-tau* *repel-deposit* *repel-cap* *repel-weight*
                *repel-threshold* *repel-dead-end*
                *antennal-range* *encounter-cone* *yield-rate*
                *yield-laden* *yield-returning* *yield-outbound*
-               *stranger-avoidance* *encounter-confidence*
+               *yield-overtake* *stranger-avoidance* *encounter-confidence*
                *confidence-decay* *encounter-resolve-gain*
                *trophallaxis-rate* *trophallaxis-threshold*
                *relax-slop*))
@@ -1431,4 +1566,4 @@ relaxation from chasing floating-point noise forever.")
                *nest-meals-per-tick*
                *uturn-ticks* *brood-development-minutes*
                *forager-maturity-ticks* *age-shade-ticks*
-               *stall-window*))
+               *stall-window* *detour-ticks*))

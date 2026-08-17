@@ -40,6 +40,15 @@ not.  One stream, one question.")
 Drawn on the ant's id alone, with no tick, so it is a fixed property of
 the individual rather than a per-tick coin flip.")
 
+(defconstant +stream-lane+ 9
+  "Which part of a trail's width this ant prefers — see ANT-TRAIL-OFFSET.
+
+On the ant's id alone with no tick, exactly like +STREAM-HAND+ and
++STREAM-PACE+, and for the same reason: it is a property of the
+individual, and a value re-rolled every tick would be noise on the step
+rather than a trait.  The model already has noise on the step, in the
+heading, where it belongs.")
+
 (defconstant +stream-pace+ 8
   "How fast this ant walks relative to its colony — see ANT-PACE.
 
@@ -163,6 +172,8 @@ initial condition rather than merely a convenient one."
                  (aref (ants-walked a) i) 0.0f0
                  (aref (ants-window a) i) 0
                  (aref (ants-stalled a) i) 0.0f0
+                 (aref (ants-detour a) i) 0
+                 (aref (ants-hv-latch a) i) 0.0f0
                  ;; nobody has told it anything yet
                  (aref (ants-confidence a) i) 0.0f0
                  (aref (ants-dturn a) i) 0.0f0
@@ -265,6 +276,38 @@ and any two marks commute (§4.2)."
     (field-deposit-packet! (colony-repel c) x y amount))
   (values))
 
+(defun terrain-near-p (f x y r)
+  "True if any of eight probes at radius R lands in terrain.
+
+The discriminator between an ant that is *wedged* and one that is merely
+*jammed*, and the whole reason the pinned signal can be allowed to
+deposit at all.
+
+Layer 0's first gap fires whenever an ant walks without covering ground,
+and that is true of a pocket and equally true of the queue at the nest
+entrance — which §3.11 and *nest-arrival-radius* both record as emergent
+and correct.  The original rule dealt with this by forbidding the pinned
+signal to deposit anywhere, and that was too blunt: a pocket fills with
+*outbound* ants, which never accumulate a detour gap because they have no
+homeward progress to fail to make, so the one place the repellent was
+designed for was the one place nothing ever marked.
+
+The physical difference is what an ant is stuck *against*.  A crowd is
+made of bodies and it clears; a pocket is made of terrain and it does
+not.  The field already carries the terrain mask for §3.3, so this costs
+eight array reads and adds no new sense — and it is the same antennal
+contact that CHOOSE-TURN already uses to feel a wall.
+
+It also makes the nest-door prohibition structural rather than a special
+case: a nest entrance is not terrain, so the queue around it cannot
+satisfy this however stuck it gets."
+  (declare (type field f) (type f32 x y r) (optimize (speed 3) (safety 1)))
+  (dotimes (k 8 nil)
+    (let ((a (* 0.7853982f0 (float k 1.0f0))))
+      (declare (type f32 a))
+      (when (field-blocked-p f (+ x (* r (cos a))) (+ y (* r (sin a))))
+        (return t)))))
+
 (declaim (inline blocked-factor))
 (defun blocked-factor (f x y avoid)
   "1.0 where an antenna is over open ground, (1 - AVOID) where it is over
@@ -322,6 +365,75 @@ this width the two are indistinguishable anyway."
   (declare (type (unsigned-byte 32) id seed) (optimize (speed 3) (safety 0)))
   (+ (- 1.0f0 *speed-spread*)
      (* 2.0f0 *speed-spread* (rnd01 id 0 +stream-pace+ seed))))
+
+(declaim (inline ant-trail-offset))
+(defun ant-trail-offset (id seed)
+  "How far to one side of the trail this ant likes to walk, in metres.
+Zero is the centre line.  Fixed for the life of the ant.
+
+Implemented by sliding the ant's whole three-point sensing frame sideways
+(CHOOSE-TURN), so the ant still steers to put *the ridge of the gradient*
+between its antennae — it simply holds those antennae offset from its
+body.  Its body therefore settles that far off the centre line, and the
+equilibrium is as stable as the centred one because it is the same
+equilibrium in a shifted frame.
+
+**The version that does not work, since it is the obvious one.**  Steering
+`bias` to a constant instead of to zero — telling the ant to hold a given
+left/right imbalance — reads naturally and measures badly: −21% food at a
+quarter of full scale.  `bias` is a *normalised* asymmetry, so a fixed
+target asks the ant to seek a place with a particular gradient shape
+rather than a particular position, and there is no such place at a stable
+distance from a trail whose strength changes as it is used.  Ants
+holding one drifted off the trail entirely.  Blocking fell, which looked
+like success and was ants leaving.  Offsetting in metres asks a question
+the geometry can answer.
+
+**Why this exists.**  Tropotaxis as first written steers to make the two
+antennal readings equal, and that is a definition of the ridge line of
+the pheromone gradient — so every ant on a trail converges onto the same
+one-dimensional curve, whatever the chemical trail's actual width.  A
+deposit is a packet 3 cm across (*trail-packet-radius*) and the ants were
+walking it in single file down the middle, shoulder to shoulder, with
+nowhere to pass and nothing to sort.  That is not what a trail looks like:
+real ones are broad, and the traffic spreads across the width.
+
+The fix is not to weaken the trail term, which would only make ants worse
+at following trails.  It is to notice that the ant was being told to hold
+the wrong quantity.  An ant holds *its own* offset from centre rather than
+zero, so the population spreads across the trail instead of stacking on
+its axis, and the road becomes a road.
+
+Uniform, and a lifelong trait rather than a per-tick draw, for the reasons
+given at +STREAM-LANE+ and in ANT-PACE.  It costs no per-ant storage at
+all: it is derived from the id the ant already has, on a stream of its
+own, which is what lets a new trait be added for the price of one
+constant.
+
+Lateralisation in ants is documented — ANT-HANDEDNESS already leans on it
+— so individual variation in antennal steering is the defensible reading
+rather than a convenience."
+  (declare (type (unsigned-byte 32) id seed) (optimize (speed 3) (safety 0)))
+  (* *trail-lane-offset* (- (* 2.0f0 (rnd01 id 0 +stream-lane+ seed)) 1.0f0)))
+
+(declaim (inline ant-speed))
+(defun ant-speed (a i seed crop)
+  "How fast ant I is walking, m/s: its lifelong pace times the speed its
+load allows.
+
+The same two factors ANT-MOTION-STEP! multiplies, factored out because
+the encounter pass needs to compare two ants' speeds to tell whether one
+is gaining on the other.  Kept as a function rather than duplicated, so
+the two places can never disagree about what an ant's speed is.
+
+Note that this is not private knowledge one ant has about another.  It is
+a property of the world, and the *sense* being modelled is only that an
+antenna keeps touching something that is still in the way — catching up
+is the sole reason that contact persists rather than fading."
+  (declare (type ants a) (type fixnum i) (type (unsigned-byte 32) seed)
+           (type f32 crop) (optimize (speed 3) (safety 0)))
+  (* (ant-pace (aref (the u32v (ants-id a)) i) seed)
+     (if (> crop 0.0f0) *walk-speed-laden* *walk-speed*)))
 
 (defun clear-bearing (f x y bearing prefer off &optional repel)
   "BEARING if an antenna held that way is over open ground, else the
@@ -428,9 +540,20 @@ switch into and no switching logic to get wrong (§3.5)."
          ;; terrain and no-entry — so computing them once is both cheaper
          ;; than the three copies this grew and the only way the readings
          ;; cannot drift apart from one another.
-         (xl (+ x (* off (cos hl)))) (yl (+ y (* off (sin hl))))
-         (xc (+ x (* off (cos heading)))) (yc (+ y (* off (sin heading))))
-         (xr (+ x (* off (cos hr)))) (yr (+ y (* off (sin hr))))
+         ;; This ant's own place across the width of a trail
+         ;; (ANT-TRAIL-OFFSET): the whole sensing frame slides sideways,
+         ;; so the ant still centres the gradient's ridge between its
+         ;; antennae and its *body* ends up that far off the middle.
+         ;;
+         ;; Without it every ant nulls the same imbalance, and nulling the
+         ;; imbalance is the definition of standing on the ridge — so the
+         ;; colony walked a 3 cm trail in single file down one line, with
+         ;; nowhere to pass and no width for traffic to sort into.
+         (lane (ant-trail-offset id (world-seed w)))
+         (lx (* lane (- (sin heading)))) (ly (* lane (cos heading)))
+         (xl (+ x lx (* off (cos hl)))) (yl (+ y ly (* off (sin hl))))
+         (xc (+ x lx (* off (cos heading)))) (yc (+ y ly (* off (sin heading))))
+         (xr (+ x lx (* off (cos hr)))) (yr (+ y ly (* off (sin hr))))
          (cl (sense-at w colony-id xl yl))
          (cc (sense-at w colony-id xc yc))
          (cr (sense-at w colony-id xr yr))
@@ -487,7 +610,7 @@ switch into and no switching logic to get wrong (§3.5)."
                     (progn (setf wl 1.0f0 wc 1.0f0 wr 1.0f0) 3.0f0)))
          (u (* (rnd01 id tick +stream-choice+ (world-seed w)) total)))
     (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u
-                      xl yl xc yc xr yr rw ql qc qr))
+                      xl yl xc yc xr yr rw ql qc qr lane lx ly))
     ;; Second value: how strongly this ant can smell a trail at all,
     ;; as C/(k+C) of the best sensor — 0 in clean ground, approaching 1
     ;; on a saturated road.  The caller uses it to decide how *hard* to
@@ -865,16 +988,43 @@ switch into and no switching logic to get wrong (§3.5)."
                       ;; traded for a worse one.  A proper fix is route
                       ;; memory — the path walked out, not the trail field
                       ;; — which is §3.4's landmark system and is not M1.
+                      ;; Layer 1: an ant that has committed to a detour
+                      ;; is not steering at the nest at all
+                      ;; (docs/navigation.md §4.2, *detour-ticks*).
+                      ;;
+                      ;; Getting out of a concavity means walking *away*
+                      ;; from home, and no bearing can say that — which
+                      ;; is why widening CLEAR-BEARING's scan never fixed
+                      ;; it and could not.  With the urge off the ant
+                      ;; falls back on the choice function and the
+                      ;; antennal wall veto, which is exactly the
+                      ;; edge-following that walks a pocket's perimeter
+                      ;; to its mouth.
+                      (committed (plusp (aref (ants-detour a) i)))
                       (urge (if returning
                                 ;; Total, unless a trail is allowed to
                                 ;; argue with it (§3.4).
-                                (- 1.0f0 (* *trail-homing-suppression* smell))
+                                (if committed
+                                    0.0f0
+                                    (- 1.0f0
+                                       (* *trail-homing-suppression* smell)))
                                 (* *homing-weight-low-energy*
                                    (max 0.0f0
                                         (/ (- ethr
                                               (aref (ants-energy a) i))
                                            (max 1.0f-6 ethr)))))))
                  (declare (type f32 hv-len urge ethr))
+                 ;; Run the commitment down, and end it early the moment
+                 ;; the ant has genuinely closed on the nest — ground
+                 ;; made, not a bearing that merely looks open, which is
+                 ;; the distinction the whole latch exists to draw.
+                 (when committed
+                   (let ((d (aref (ants-detour a) i)))
+                     (declare (type (unsigned-byte 16) d))
+                     (if (< hv-len (* *detour-release*
+                                      (aref (ants-hv-latch a) i)))
+                         (setf (aref (ants-detour a) i) 0)
+                         (setf (aref (ants-detour a) i) (1- d)))))
                  (when (and (> hv-len 1.0f-4) (> urge 0.0f0))
                    ;; Home on the bearing if it is walkable and on the
                    ;; nearest walkable direction if it is not — the same
@@ -1207,18 +1357,57 @@ homing term from simply undoing it on the next tick."
                           (detour (- got closer)))
                      (declare (type f32 hx hy zx zy l dx dy got hn h0n
                                        closer pinned detour))
-                     ;; Walking that went nowhere.  Behaviour only.
+                     ;; Walking that went nowhere.
                      (when (and (> l 1.0f-6)
                                 (> pinned (* *stall-pinned-fraction* l)))
                        (setf (aref (the u8v (ants-cast a)) i)
-                             (min 255 (max 0 *uturn-ticks*))))
+                             (min 255 (max 0 *uturn-ticks*)))
+                       ;; and if it is *terrain* holding this ant rather
+                       ;; than other ants, mark it (§3.9).
+                       ;;
+                       ;; This is the one deposit an outbound ant can
+                       ;; make, and without it a pocket never gets marked
+                       ;; at all: an ant wanders in while outbound, has
+                       ;; no homeward progress to fail to make, and so
+                       ;; never books a detour however long it circles.
+                       ;; Watched, that is ants milling in a concavity
+                       ;; until they starve — with the repellent working
+                       ;; exactly as specified and pointed at the wrong
+                       ;; half of the problem.
+                       ;;
+                       ;; TERRAIN-NEAR-P is what makes this safe.  A
+                       ;; crowd is bodies and clears; a pocket is terrain
+                       ;; and does not.  The nest entrance is not terrain,
+                       ;; so the queue cannot mark its own doorway however
+                       ;; stuck it gets — the prohibition that used to be
+                       ;; a blanket ban is now structural.
+                       (let* ((c (nth (aref (the u8v (ants-colony a)) i)
+                                      (world-colonies w)))
+                              (bi (aref (the u32v (ants-body a)) i))
+                              (bx (aref (the f32v (bodies-x (world-bodies w))) bi))
+                              (by (aref (the f32v (bodies-y (world-bodies w))) bi)))
+                         (when (terrain-near-p (colony-field c) bx by
+                                               *sensor-offset*)
+                           (repel-deposit! w c bx by
+                                           (* *repel-deposit* pinned)))))
                      ;; Travel that went somewhere other than homeward.
                      ;; Returning ants only — an outbound ant is supposed
                      ;; to be walking away from the nest.
                      (if (and (= state +ant-returning+)
                               (> got 1.0f-6)
                               (> detour (* *stall-detour-fraction* got)))
-                         (incf (aref (the f32v (ants-stalled a)) i) detour)
+                         (progn
+                           (incf (aref (the f32v (ants-stalled a)) i) detour)
+                           ;; Layer 1: stop steering at the nest, and
+                           ;; commit to it (docs/navigation.md §4.2).
+                           ;; The latch records the range home *now*, so
+                           ;; the release test below is against ground
+                           ;; actually made rather than against how open
+                           ;; the bearing happens to look.
+                           (when (plusp *detour-ticks*)
+                             (setf (aref (the u16v (ants-detour a)) i)
+                                   (min 65535 *detour-ticks*)
+                                   (aref (the f32v (ants-hv-latch a)) i) hn)))
                          ;; A window that went well clears the evidence.
                          ;; Without this an ant that escaped a pocket
                          ;; would carry the stall for the rest of the trip
@@ -1323,14 +1512,14 @@ as BODIES-RESOLVE! does."
           (denergy (ants-denergy a)) (confs (ants-confidence a))
           (seed (world-seed w))
           (cone *encounter-cone*) (yrate *yield-rate*)
-          (stranger *stranger-avoidance*)
+          (stranger *stranger-avoidance*) (overtake *yield-overtake*)
           (trate *trophallaxis-rate*) (tthr *trophallaxis-threshold*)
           (gain *encounter-confidence*)
           (r2 (* range range)))
       (declare (type f32v bxs bys heads crops energies dturn dcrop denergy
                           confs)
                (type u8v kinds states cols) (type u32v obm bodyv)
-               (type f32 cone yrate stranger trate tthr gain r2))
+               (type f32 cone yrate stranger overtake trate tthr gain r2))
       ;; --- 1. clear the buffers and age the evidence -------------------
       (dotimes (i n)
         (setf (aref dturn i) 0.0f0
@@ -1353,13 +1542,16 @@ as BODIES-RESOLVE! does."
                  (role (cond ((and returning (> cropi 0.0f0)) *yield-laden*)
                              (returning *yield-returning*)
                              (t *yield-outbound*)))
+                 ;; this ant's own walking speed, for telling whether it
+                 ;; is gaining on the one in front (see *yield-overtake*)
+                 (myspeed (ant-speed a i seed cropi))
                  (turn 0.0f0)
                  ;; the neediest nestmate this ant could feed, and how
                  ;; empty it is — one partner per donor, so a donor can
                  ;; never give away more than it has however many hungry
                  ;; ants are pressed around it
                  (mouth -1) (mouth-e 2.0f0))
-            (declare (type f32 xi yi hi cropi role turn mouth-e)
+            (declare (type f32 xi yi hi cropi role myspeed turn mouth-e)
                      (type fixnum bi mouth))
             (do-shash-neighbours (jb hash xi yi range)
               (let ((jbb (the fixnum jb)))
@@ -1392,20 +1584,48 @@ as BODIES-RESOLVE! does."
                                        (< (cos (- (aref heads j) hi)) 0.0f0))
                                      (near (- 1.0f0 (/ d range))))
                                 (declare (type f32 near))
-                                ;; --- 2a. give way ---------------------
-                                (when (and (> yrate 0.0f0)
-                                           (or oncoming (not same)))
-                                  (let ((side
-                                          ;; away from where it is; nose
-                                          ;; to nose, the ant's own hand
-                                          (if (> (abs beta) 1.0f-3)
-                                              (if (plusp beta) -1.0f0 1.0f0)
-                                              (ant-handedness
-                                               (aref (ants-id a) i) seed))))
-                                    (declare (type f32 side))
-                                    (incf turn
-                                          (* side yrate near role
-                                             (if same 1.0f0 stranger)))))
+                                ;; --- 2a. give way, or pass ------------
+                                ;;
+                                ;; Three cases, and the third was missing
+                                ;; for long enough to be worth naming.
+                                ;; A stranger is stepped away from
+                                ;; whatever it is doing.  A nestmate
+                                ;; closing head-on is given way to, by
+                                ;; role.  And a nestmate ahead going the
+                                ;; *same* way, which this ant is gaining
+                                ;; on, is passed rather than queued
+                                ;; behind — without that last case
+                                ;; *speed-spread* buys nothing at all,
+                                ;; because a fast ant simply walks into
+                                ;; the back of a slow one and the
+                                ;; collision solver holds the pair
+                                ;; together at the slower pace.
+                                (when (> yrate 0.0f0)
+                                  (let ((weight
+                                          (cond
+                                            ((not same) (* role stranger))
+                                            (oncoming role)
+                                            ;; gaining on it: pass
+                                            ((> myspeed
+                                                (ant-speed a j seed
+                                                           (aref crops j)))
+                                             overtake)
+                                            (t 0.0f0))))
+                                    (declare (type f32 weight))
+                                    (when (> weight 0.0f0)
+                                      (let ((side
+                                              ;; away from where it is;
+                                              ;; dead ahead or nose to
+                                              ;; nose, the ant's own hand
+                                              (if (> (abs beta) 1.0f-3)
+                                                  (if (plusp beta)
+                                                      -1.0f0 1.0f0)
+                                                  (ant-handedness
+                                                   (aref (ants-id a) i)
+                                                   seed))))
+                                        (declare (type f32 side))
+                                        (incf turn
+                                              (* side yrate near weight))))))
                                 ;; --- 2b. news from a nestmate ---------
                                 ;;
                                 ;; Loaded, coming the other way, and mine.

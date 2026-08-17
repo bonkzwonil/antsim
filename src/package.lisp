@@ -43,13 +43,15 @@
    #:*trail-lost-threshold* #:*trail-follow-threshold* #:*trail-memory-decay*
    #:*uturn-ticks* #:*uturn-cast-gain*
    #:*stall-window* #:*stall-pinned-fraction* #:*stall-detour-fraction*
+   #:*detour-ticks* #:*detour-release*
    ;; the no-entry field (§3.9, docs/navigation.md Layer 3)
    #:*repel-tau* #:*repel-deposit* #:*repel-cap* #:*repel-weight*
    #:*repel-threshold* #:*repel-dead-end* #:repel-tau
    ;; when two ants meet (M3)
    #:*antennal-range* #:*encounter-cone* #:*yield-rate*
    #:*yield-laden* #:*yield-returning* #:*yield-outbound*
-   #:*stranger-avoidance* #:*encounter-confidence* #:*confidence-decay*
+   #:*yield-overtake* #:*stranger-avoidance*
+   #:*encounter-confidence* #:*confidence-decay*
    #:*encounter-resolve-gain*
    #:*trophallaxis-rate* #:*trophallaxis-threshold*
    #:*relax-iterations* #:*relax-slop*
@@ -99,6 +101,7 @@
    #:ants-gait #:ants-waited
    ;; Layer 0 — one window, three readings (§3.4, docs/navigation.md)
    #:ants-h0x #:ants-h0y #:ants-walked #:ants-window #:ants-stalled
+   #:ants-detour #:ants-hv-latch #:terrain-near-p
    #:stall-reset! #:stall-step!
    ;; when two ants meet (M3)
    #:ants-confidence #:ants-dturn #:ants-dcrop #:ants-denergy
@@ -123,7 +126,8 @@
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
    #:repel-at #:repel-deposit! #:clear-bearing
-   #:ant-handedness #:ant-pace
+   #:ant-handedness #:ant-pace #:ant-speed #:ant-trail-offset
+   #:*trail-lane-offset*
    #:world-step! #:world-run! #:colony-step! #:colony-feed! #:world-seed-population!
    ;; render/png (antsim/render)
    #:write-png #:crc32 #:adler32

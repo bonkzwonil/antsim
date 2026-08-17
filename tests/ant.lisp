@@ -74,7 +74,8 @@ only holds if the three options come out equally likely."
   "n > 1 is the entire model (§3.3): a small concentration difference has
 to produce a *large* probability difference.  With n = 2 and one arm at
 2k, the preference must be well past the linear 2:1."
-  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 32))
+  (let* ((ant:*trail-lane-offset* 0.0f0) ; isolate the choice function
+         (w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 32))
          (c (ant:add-colony w :nest-x 0.2f0 :nest-y 0.2f0))
          (f (ant:colony-field c))
          (right 0) (n 6000))
@@ -99,6 +100,7 @@ a doubled concentration must produce only a *linear* preference.  If this
 ever shows amplification, the selection seen elsewhere is coming from
 something other than the choice function."
   (let* ((ant:*choice-n* 1.0f0)
+         (ant:*trail-lane-offset* 0.0f0) ; isolate the choice function
          (w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 32))
          (c (ant:add-colony w :nest-x 0.2f0 :nest-y 0.2f0))
          (f (ant:colony-field c))
@@ -167,16 +169,25 @@ seed (§3.4)."
             (is (< arrived (round (* 4 (/ out 0.001f0))))
                 "took ~d ticks to cover ~,3f m; that is not homing" arrived out)))))))
 
-(defun %walled-homing-run (steps &key (ticks 20000))
+(defun %walled-homing-run (steps &key (ticks 20000) (detour 0))
   "Put one laden ant above a wall, its nest below, and let it try to get
 home.  Returns the tick it arrived on, or NIL.
 
 The wall does not span the arena: there is a way round its left end, so
-the only question the run asks is whether the ant finds it."
+the only question the run asks is whether the ant finds it.
+
+DETOUR is Layer 1's commitment window and defaults to *off* here, so this
+fixture keeps measuring the antennal scan it was written for.  There are
+now two mechanisms that can get an ant round a wall and they have to be
+measurable apart — with the latch on, the scan's own control run
+succeeds, which would quietly turn this regression test into a test of
+nothing.  A-COMMITTED-ANT-ROUNDS-A-WALL-WITHOUT-THE-SCAN is the other
+half."
   (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16))
          (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.2f0 :nest-r 0.02f0
                               :stock 1.0f6))
          (a (ant:world-ants w))
+         (ant:*detour-ticks* detour)
          (ant:*homing-scan-steps* steps))
     (ant:add-obstacle w '(0.30 0.40 0.90 0.40 0.90 0.45 0.30 0.45))
     (ant:world-seed-population! w c 1)
@@ -228,6 +239,30 @@ test the scan" without)
       (is (< with 6000) "took ~d ticks, which is loitering, not walking"
           with))))
 
+(test a-committed-ant-rounds-a-wall-without-the-scan
+  "Layer 1 on its own, against the same wall, with the antennal scan
+switched off entirely (docs/navigation.md §4.2).
+
+This is the stronger claim of the two.  The scan chooses a walkable
+bearing from where the ant stands and re-chooses every tick, so it cannot
+express 'walk away from home for a while' — which is what a concavity
+requires, and why *homing-scan-steps* says in its own docstring that a
+pocket is still a trap however wide the scan.  A commitment window can
+express it, and needs no bearing at all: with the urge off the ant falls
+back on the choice function and the antennal wall veto, and follows the
+edge to its end.
+
+Measured on the word scenario before this existed: 57 ants going
+nowhere, 38 of them returning, and every corpse in the run against
+terrain."
+  (let ((latched (%walled-homing-run 0 :detour 400))
+        (neither (%walled-homing-run 0 :detour 0)))
+    (is-true latched
+             "the latch alone never got round the wall in 20000 ticks")
+    (is-false neither
+              "arrived at tick ~a with both mechanisms off, so this test
+does not test the latch" neither)))
+
 (defparameter +uturn-run-ticks+ 4000)
 
 (defun %trail-departure-tick (lost seed)
@@ -239,6 +274,18 @@ The trail runs west to east and ends at x = 0.40 with open ground
 beyond, so an ant following it eastward walks off the end.  Nothing
 stops it leaving; the question is how long it stays."
   (let* ((ant:*trail-lost-threshold* lost)
+         ;; Lane offset off, and the reason is this fixture rather than
+         ;; the rule.  The trail below is laid with FIELD-DEPOSIT! at
+         ;; single cells, so it is one cell — 5 mm — wide, where a real
+         ;; trail is a row of 3 cm packets.  A lane preference of 8 mm
+         ;; therefore puts the ant entirely beside this trail rather than
+         ;; across its width, and what would be measured is the fixture's
+         ;; thinness and not the U-turn edge this test is about.
+         ;;
+         ;; The interaction is real at full width too and is recorded on
+         ;; *trail-lane-offset*: ants spread across a road leave it
+         ;; sooner, which is most of that parameter's cost in food.
+         (ant:*trail-lane-offset* 0.0f0)
          (w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16
                             :seed seed))
          (c (ant:add-colony w :nest-x 0.1f0 :nest-y 0.5f0 :nest-r 0.02f0
@@ -1209,7 +1256,12 @@ emptiness test rather than needing a rule of its own."
 to be an exact off position — a sensor whose consequence appears without
 it is not being tested."
   (flet ((left-share (weight)
-           (let ((ant:*repel-weight* weight))
+           (let ((ant:*repel-weight* weight)
+                 ;; isolate the field's effect on the choice function: a
+                 ;; lane offset slides the sample points sideways, which
+                 ;; would move them off the single marked cell this test
+                 ;; constructs
+                 (ant:*trail-lane-offset* 0.0f0))
              (multiple-value-bind (w c) (%repel-world)
                ;; mark the left antenna's sample point only
                (let ((hl (- 0.0f0 ant:*sensor-spread*)))
@@ -1354,20 +1406,88 @@ ratio is what gets asserted."
           "outbound yielded ~,4f against the laden ant's ~,4f, which is not
 a right of way" out laden))))
 
-(test an-ant-being-overtaken-is-not-an-obstruction
-  "The give-way rule keys on *closing*, not on proximity.  An ant walking
-the same way as the one behind it is traffic to be followed, and steering
-around it would break up exactly the columns this milestone is trying to
-let form."
-  (let ((w (%meet-world)))
-    ;; both heading east, one just ahead of the other
+(defun %pace-pair (w)
+  "Two ant indices whose lifelong paces differ by at least 2%, faster
+first, or NIL."
+  (let* ((a (ant:world-ants w))
+         (seed (ant:world-seed w)))
+    (dotimes (i (ant:ants-n a))
+      (dotimes (j (ant:ants-n a))
+        (when (and (/= i j)
+                   (> (ant:ant-pace (aref (ant:ants-id a) i) seed)
+                      (* 1.02f0 (ant:ant-pace (aref (ant:ants-id a) j) seed))))
+          (return-from %pace-pair (list i j)))))
+    nil))
+
+(test a-faster-ant-passes-a-slower-nestmate
+  "Regression, and the hole this rule was originally written with.
+
+*speed-spread* exists so that there is a fast ant behind a slow one — its
+own docstring says so, and names overtaking as the thing that buys.  The
+first version of the give-way rule fired only on *oncoming* ants, so a
+nestmate going the same way produced no turn at all: the faster ant
+walked into the back of the slower one and the collision solver held the
+pair together at the slower pace.  Watched, that is a colony whose ants
+visibly do not differ in speed, even though every one of them has a
+different pace and the trait tests all pass.
+
+So the trigger is *gaining*, not merely being near.  Both halves are
+asserted, because a rule that made every following ant swerve would break
+up the columns just as thoroughly from the other side."
+  (let* ((w (%meet-world :n 8))
+         (pair (%pace-pair w))
+         (a (ant:world-ants w)))
+    (is-true pair "no two ants in the fixture differ enough in pace")
+    (when pair
+      (destructuring-bind (fast slow) pair
+        ;; the faster ant, behind, closing: it passes
+        (%place! w fast 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
+        (%place! w slow 0.506f0 0.500f0 0.0f0 ant:+ant-outbound+)
+        (%encounter! w)
+        (is (plusp (abs (aref (ant:ants-dturn a) fast)))
+            "the faster ant queued behind the slower one instead of passing")
+        ;; and the ant in front pays no attention to what is behind it
+        (is (zerop (aref (ant:ants-dturn a) slow))
+            "the leading ant swerved for something behind it: ~,4f"
+            (aref (ant:ants-dturn a) slow))
+        ;; the slower ant behind the faster one is not gaining, so it has
+        ;; no reason to pull out and does not
+        (%place! w slow 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
+        (%place! w fast 0.506f0 0.500f0 0.0f0 ant:+ant-outbound+)
+        (%encounter! w)
+        (is (zerop (aref (ant:ants-dturn a) slow))
+            "an ant that cannot catch up pulled out to pass anyway: ~,4f"
+            (aref (ant:ants-dturn a) slow))))))
+
+(test overtaking-has-an-exact-off-position
+  "*yield-overtake* = 0 restores queueing, which is how the rule behaved
+before — so the measurement of what passing is worth has a baseline."
+  (let ((ant:*yield-overtake* 0.0f0))
+    (let* ((w (%meet-world :n 8))
+           (pair (%pace-pair w))
+           (a (ant:world-ants w)))
+      (when pair
+        (destructuring-bind (fast slow) pair
+          (%place! w fast 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
+          (%place! w slow 0.506f0 0.500f0 0.0f0 ant:+ant-outbound+)
+          (%encounter! w)
+          (is (zerop (aref (ant:ants-dturn a) fast))
+              "passed with the rule switched off"))))))
+
+(test a-head-on-meeting-still-outranks-a-pass
+  "The three cases must stay ordered.  An oncoming nestmate is given way
+to by role, and adding overtaking must not have quietly turned every
+head-on meeting into a pass at the overtake weight."
+  (let* ((w (%meet-world :n 8))
+         (a (ant:world-ants w)))
+    ;; laden, returning, meeting an outbound ant head-on
     (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
-    (%place! w 1 0.506f0 0.500f0 0.0f0 ant:+ant-outbound+)
+    (%place! w 1 0.506f0 0.502f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
     (%encounter! w)
-    (let ((a (ant:world-ants w)))
-      (is (zerop (aref (ant:ants-dturn a) 0))
-          "swerved around an ant going the same way: ~,4f"
-          (aref (ant:ants-dturn a) 0)))))
+    (let ((out (abs (aref (ant:ants-dturn a) 0)))
+          (laden (abs (aref (ant:ants-dturn a) 1))))
+      (is (> out (* 2.0f0 laden))
+          "right of way was lost: outbound ~,4f, laden ~,4f" out laden))))
 
 (test a-stranger-is-avoided-harder-and-never-fed
   "Recognition, and it is kept deliberately small: a non-nestmate is

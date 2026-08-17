@@ -153,6 +153,24 @@
   ;; aversive deposit is proportional to the effort actually wasted and
   ;; needs no strength parameter of its own.
   (stalled nil :type (or null f32v))
+  ;; --- Layer 1: the detour latch (docs/navigation.md §4.2) ------------
+  ;;
+  ;; Motion ticks of commitment left.  While this is non-zero the ant does
+  ;; not steer at the nest, and that is the whole mechanism: escaping a
+  ;; concavity means walking *away* from home, which a bearing cannot
+  ;; express and which CLEAR-BEARING actively undoes — it re-decides from
+  ;; where the ant stands every tick, so the moment the ant steps clear the
+  ;; direct bearing looks open and it turns straight back in.  Measured on
+  ;; the word scenario, that is 38 returning ants circling in the letter
+  ;; pockets and every corpse in the run lying against terrain.
+  ;;
+  ;; u16 rather than the u8 the design sketched: a commitment worth having
+  ;; is tens of seconds, and 255 ticks is twelve.
+  (detour nil :type (or null u16v))
+  ;; The range home at the moment the latch closed.  The ant gives up the
+  ;; detour when it beats this — not when it merely feels better, which is
+  ;; the same mistake as re-deciding every tick, one level up.
+  (hv-latch nil :type (or null f32v))
   ;; --- when two ants meet (M3) ----------------------------------------
   ;;
   ;; Evidence from nestmates that persisting is currently paying, 0..1,
@@ -218,6 +236,7 @@ size them alike."
               :h0x (mkf32 capacity) :h0y (mkf32 capacity)
               :walked (mkf32 capacity) :window (mku16 capacity)
               :stalled (mkf32 capacity)
+              :detour (mku16 capacity) :hv-latch (mkf32 capacity)
               :free (mkfix capacity)))
 
 (declaim (inline ant-live-p))
@@ -241,7 +260,9 @@ minutes it spends in the nest and then act on it the moment it set out."
         (aref (the f32v (ants-h0y a)) i) (aref (the f32v (ants-hvy a)) i)
         (aref (the f32v (ants-walked a)) i) 0.0f0
         (aref (the u16v (ants-window a)) i) 0
-        (aref (the f32v (ants-stalled a)) i) 0.0f0)
+        (aref (the f32v (ants-stalled a)) i) 0.0f0
+        ;; a commitment belongs to the leg that made it
+        (aref (the u16v (ants-detour a)) i) 0)
   (values))
 
 (defun ants-alloc (a)
