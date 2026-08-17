@@ -153,6 +153,16 @@
   ;; aversive deposit is proportional to the effort actually wasted and
   ;; needs no strength parameter of its own.
   (stalled nil :type (or null f32v))
+  ;; Whether this ant currently needs to be steered homeward at all, 0 or
+  ;; 1, decided once per stall window (*homing-progress*).
+  ;;
+  ;; Homing is a medium-run constraint rather than a per-tick command: an
+  ;; ant that turned a reasonable share of last window's walking into
+  ;; ground closed on the nest is left to walk as the pheromone and the
+  ;; room take it, and only one that did not gets pulled.  The old rule
+  ;; rotated every returning ant toward the nest on every tick, which is a
+  ;; servo tracking a setpoint and looks like one.
+  (homing nil :type (or null f32v))
   ;; --- Layer 1: the detour latch (docs/navigation.md §4.2) ------------
   ;;
   ;; Motion ticks of commitment left.  While this is non-zero the ant does
@@ -237,6 +247,8 @@ size them alike."
               :walked (mkf32 capacity) :window (mku16 capacity)
               :stalled (mkf32 capacity)
               :detour (mku16 capacity) :hv-latch (mkf32 capacity)
+              ;; steer home until a window says otherwise
+              :homing (mkf32 capacity 1.0f0)
               :free (mkfix capacity)))
 
 (declaim (inline ant-live-p))
@@ -262,7 +274,10 @@ minutes it spends in the nest and then act on it the moment it set out."
         (aref (the u16v (ants-window a)) i) 0
         (aref (the f32v (ants-stalled a)) i) 0.0f0
         ;; a commitment belongs to the leg that made it
-        (aref (the u16v (ants-detour a)) i) 0)
+        (aref (the u16v (ants-detour a)) i) 0
+        ;; and a fresh leg starts out steering home until a window has
+        ;; had the chance to say it need not
+        (aref (the f32v (ants-homing a)) i) 1.0f0)
   (values))
 
 (defun ants-alloc (a)

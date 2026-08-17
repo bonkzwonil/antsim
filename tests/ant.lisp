@@ -1454,14 +1454,25 @@ up the columns just as thoroughly from the other side."
         (is (zerop (aref (ant:ants-dturn a) slow))
             "the leading ant swerved for something behind it: ~,4f"
             (aref (ant:ants-dturn a) slow))
-        ;; the slower ant behind the faster one is not gaining, so it has
-        ;; no reason to pull out and does not
+        ;; And the follower pulls out whichever of the two it is, because
+        ;; the trigger is *being obstructed* and not being nominally
+        ;; quicker.
+        ;;
+        ;; That was the other way round at first, gated on comparing
+        ;; free-walking speeds, and it fails in the one case that matters:
+        ;; in a stalled column nobody is moving, so only the ants that
+        ;; happen to be faster on paper ever try to pass and the rest
+        ;; shove.  What that produces is a queue whose leader presses a
+        ;; wall while everyone behind presses into the ant in front —
+        ;; which is what the letter pockets fill up with.
         (%place! w slow 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
         (%place! w fast 0.506f0 0.500f0 0.0f0 ant:+ant-outbound+)
         (%encounter! w)
-        (is (zerop (aref (ant:ants-dturn a) slow))
-            "an ant that cannot catch up pulled out to pass anyway: ~,4f"
-            (aref (ant:ants-dturn a) slow))))))
+        (is (plusp (abs (aref (ant:ants-dturn a) slow)))
+            "an ant with a nestmate right in front of it kept shoving")
+        (is (zerop (aref (ant:ants-dturn a) fast))
+            "the leading ant swerved for something behind it: ~,4f"
+            (aref (ant:ants-dturn a) fast))))))
 
 (test overtaking-has-an-exact-off-position
   "*yield-overtake* = 0 restores queueing, which is how the rule behaved

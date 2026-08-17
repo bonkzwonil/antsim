@@ -174,6 +174,7 @@ initial condition rather than merely a convenient one."
                  (aref (ants-stalled a) i) 0.0f0
                  (aref (ants-detour a) i) 0
                  (aref (ants-hv-latch a) i) 0.0f0
+                 (aref (ants-homing a) i) 1.0f0
                  ;; nobody has told it anything yet
                  (aref (ants-confidence a) i) 0.0f0
                  (aref (ants-dturn a) i) 0.0f0
@@ -507,18 +508,41 @@ wide the scan; that is route memory (§3.4)."
   (declare (type field f) (type f32 x y bearing prefer off)
            (type (or null field) repel)
            (optimize (speed 3) (safety 1)))
-  (flet ((clear-p (ang)
-           (declare (type f32 ang))
-           (let ((sx (+ x (* off (cos ang))))
-                 (sy (+ y (* off (sin ang)))))
-             (declare (type f32 sx sy))
-             (and (not (field-blocked-p f sx sy))
-                  (or (null repel)
-                      (< (field-at repel sx sy) *repel-threshold*))))))
-    (if (clear-p bearing)
-        bearing
-        (let ((steps *homing-scan-steps*))
-          (declare (type fixnum steps))
+  (let ((soft-ang bearing) (soft-rep 1.0f30) (soft-p nil))
+    (declare (type f32 soft-ang soft-rep))
+    (flet ((clear-p (ang)
+             (declare (type f32 ang))
+             (let ((sx (+ x (* off (cos ang))))
+                   (sy (+ y (* off (sin ang)))))
+               (declare (type f32 sx sy))
+               (cond
+                 ((field-blocked-p f sx sy) nil)
+                 ((null repel) t)
+                 (t
+                  ;; Walkable ground, however heavily marked — remember
+                  ;; the least objectionable of it.
+                  ;;
+                  ;; Without this the scan falls back to BEARING when
+                  ;; nothing is under the threshold, which is the raw
+                  ;; direction of the nest: an ant in a pocket it has
+                  ;; itself covered in no-entry marks therefore reads
+                  ;; every escape as shut and walks into the wall anyway.
+                  ;; Watched, that is ants standing on their own repellent
+                  ;; pressing at a wall until they starve — the field
+                  ;; being deposited, read, and then thrown away for want
+                  ;; of anywhere it considered good enough.
+                  ;;
+                  ;; A gradient, not a gate: the mark should say *which
+                  ;; way is less bad* when none of it is good.
+                  (let ((rv (field-at repel sx sy)))
+                    (declare (type f32 rv))
+                    (when (< rv soft-rep)
+                      (setf soft-rep rv soft-ang ang soft-p t))
+                    (< rv *repel-threshold*)))))))
+      (if (clear-p bearing)
+          bearing
+          (let ((steps *homing-scan-steps*))
+            (declare (type fixnum steps))
           ;; The whole of the preferred side before any of the other one.
           ;;
           ;; Interleaving them — trying prefer and -prefer at each
@@ -531,13 +555,17 @@ wide the scan; that is route memory (§3.4)."
           ;; Measured, it walked 8 mm in 20 000 ticks.  Committing to a
           ;; side costs a wider turn now and again and is the only
           ;; version that goes anywhere.
-          (dolist (side (list prefer (- prefer)) bearing)
-            (declare (type f32 side))
-            (loop for s of-type fixnum from 1 to steps
-                  for ang of-type f32
-                    = (wrap-angle (+ bearing (* side s +bearing-step+)))
-                  when (clear-p ang)
-                    do (return-from clear-bearing ang)))))))
+              (dolist (side (list prefer (- prefer)))
+                (declare (type f32 side))
+                (loop for s of-type fixnum from 1 to steps
+                      for ang of-type f32
+                        = (wrap-angle (+ bearing (* side s +bearing-step+)))
+                      when (clear-p ang)
+                        do (return-from clear-bearing ang)))
+              ;; Nothing acceptable.  Take the least-marked walkable
+              ;; direction if the scan found one, and only then give up
+              ;; and keep the bearing.
+              (if soft-p soft-ang bearing))))))
 
 (defun choose-turn (w colony-id id tick x y heading)
   "Sample three headings through the antennae and pick one, with the
@@ -1086,12 +1114,18 @@ switch into and no switching logic to get wrong (§3.5)."
                       ;; to its mouth.
                       (committed (plusp (aref (ants-detour a) i)))
                       (urge (if returning
-                                ;; Total, unless a trail is allowed to
-                                ;; argue with it (§3.4).
+                                ;; Only when the last window says this ant
+                                ;; is not making ground (*homing-progress*)
+                                ;; — homing is a medium-run constraint, not
+                                ;; a heading held every tick.  An ant that
+                                ;; is closing on the nest by whatever route
+                                ;; it has found is not steered at all.
                                 (if committed
                                     0.0f0
-                                    (- 1.0f0
-                                       (* *trail-homing-suppression* smell)))
+                                    (* (aref (ants-homing a) i)
+                                       (- 1.0f0
+                                          (* *trail-homing-suppression*
+                                             smell))))
                                 (* *homing-weight-low-energy*
                                    (max 0.0f0
                                         (/ (- ethr
@@ -1143,6 +1177,35 @@ switch into and no switching logic to get wrong (§3.5)."
                                                       *sensor-offset*
                                                       (colony-repel c))
                                        (min 1.0f0 (/ urge (+ 1.0f0 urge)))))))
+               ;; --- one wall veto, for every rule at once -------------
+               ;;
+               ;; Three separate things can turn an ant on a given tick —
+               ;; the choice function, the homing term, and giving way to
+               ;; a nestmate — and any of them can leave it facing rock.
+               ;; Each *could* carry its own terrain test; the antennal
+               ;; veto in CHOOSE-TURN and the scan in CLEAR-BEARING are
+               ;; two that already do, written at different times and in
+               ;; different shapes, and giving way was about to become a
+               ;; third.
+               ;;
+               ;; One check at the point where the heading is finally
+               ;; settled subsumes all of them and cannot drift out of
+               ;; step with any rule added later, because a later rule
+               ;; does not have to know it exists.  It is also the more
+               ;; faithful account: an ant feels the wall in front of it
+               ;; with its antennae whatever reasoning turned it that
+               ;; way, and it does that *as it steps*, not while
+               ;; deliberating.
+               ;;
+               ;; CLEAR-BEARING is exactly this scan already, so it is
+               ;; reused rather than reimplemented — terrain only, with no
+               ;; no-entry field, because this is about what the ant can
+               ;; physically walk into and not about where it would
+               ;; rather not go.
+               (when *wall-veto*
+                 (setf heading (clear-bearing (colony-field c) x y heading
+                                              (ant-handedness id seed)
+                                              *sensor-offset*)))
                (setf (aref (ants-heading a) i) heading)
 
                ;; advance
@@ -1544,6 +1607,60 @@ homing term from simply undoing it on the next tick."
                                                *sensor-offset*)
                            (repel-deposit! w c bx by
                                            (* *repel-deposit* pinned)))))
+                     ;; **Did this window make ground on the nest?**
+                     ;;
+                     ;; The homing decision, taken once per window rather
+                     ;; than once per tick (*homing-progress*).  An ant
+                     ;; that closed a reasonable share of what it walked
+                     ;; is doing fine by whatever route it found and is
+                     ;; left alone; one that did not gets the urge back
+                     ;; until a window says otherwise.
+                     ;;
+                     ;; Outbound ants are exempt for the same reason they
+                     ;; are exempt from the detour test: walking away from
+                     ;; the nest is their job.
+                     (when (and (= state +ant-returning+)
+                                (< *homing-progress* 1.0f0))
+                       (setf (aref (the f32v (ants-homing a)) i)
+                             (if (and (> l 1.0f-6)
+                                      (>= closer (* *homing-progress* l)))
+                                 0.0f0
+                                 1.0f0))
+                       ;; **Got further away: turn round and try
+                       ;; something else.**
+                       ;;
+                       ;; Not 'steer harder at the nest', which is what a
+                       ;; servo would do and what walks an ant into the
+                       ;; wall the nest lies behind.  A window that went
+                       ;; backwards is evidence about the direction the
+                       ;; ant has been walking, so the thing to change is
+                       ;; that direction — and the ant already has the
+                       ;; machinery, because this is exactly what it does
+                       ;; when it loses a trail (*uturn-ticks*).
+                       ;;
+                       ;; This is the whole of what an ant can honestly
+                       ;; do.  It has no compass and no map; it has a
+                       ;; sense of how far home is and whether that has
+                       ;; been getting better, and 'it got worse, so go
+                       ;; another way' is what that sense is *for*.
+                       ;;
+                       ;; The heading change *is* the response; ANTS-CAST
+                       ;; is deliberately not touched.  Casting means
+                       ;; 'sweep for a trail I have lost', and the pinned
+                       ;; gap already uses it; borrowing it here would
+                       ;; make two different diagnoses indistinguishable
+                       ;; from the outside, which is exactly what keeping
+                       ;; the two gaps separate was for.
+                       (when (< closer 0.0f0)
+                         (setf (aref (the f32v (ants-heading a)) i)
+                               (wrap-angle
+                                (+ (aref (the f32v (ants-heading a)) i)
+                                   3.1415927f0
+                                   (* 0.6f0
+                                      (rnd-normal (aref (ants-id a) i)
+                                                  (world-tick w)
+                                                  +stream-uturn+
+                                                  (world-seed w))))))))
                      ;; Travel that went somewhere other than homeward.
                      ;; Returning ants only — an outbound ant is supposed
                      ;; to be walking away from the nest.
@@ -1773,18 +1890,62 @@ as BODIES-RESOLVE! does."
                                           (cond
                                             ((not same) (* role stranger))
                                             (oncoming role)
-                                            ;; gaining on it: pass
-                                            ((> myspeed
-                                                (ant-speed a j seed
-                                                           (aref crops j)))
+                                            ;; **In the way**: same
+                                            ;; direction, close, and
+                                            ;; nearly dead ahead.
+                                            ;;
+                                            ;; The trigger used to be
+                                            ;; "I am nominally faster",
+                                            ;; which is the wrong
+                                            ;; question in the one case
+                                            ;; that matters.  In a
+                                            ;; stalled column nobody is
+                                            ;; moving, so comparing
+                                            ;; free-walking speeds lets
+                                            ;; only the ants that happen
+                                            ;; to be quicker on paper try
+                                            ;; to pass and leaves the
+                                            ;; rest shoving.  What that
+                                            ;; produces is a queue whose
+                                            ;; leader presses a wall
+                                            ;; while everyone behind
+                                            ;; presses into the ant in
+                                            ;; front of them, which is
+                                            ;; what the pockets fill up
+                                            ;; with.
+                                            ;;
+                                            ;; Being obstructed is the
+                                            ;; honest trigger, and it is
+                                            ;; also the one an ant can
+                                            ;; actually sense: something
+                                            ;; is under my antennae and
+                                            ;; it is not moving out of
+                                            ;; the way.
+                                            ((and (< d (* 0.75f0 range))
+                                                  (< (abs beta) 0.7f0))
                                              overtake)
                                             (t 0.0f0))))
                                     (declare (type f32 weight))
                                     (when (> weight 0.0f0)
+                                      ;; Away from where the other ant
+                                      ;; is; dead ahead or nose to nose,
+                                      ;; the ant's own hand.
+                                      ;;
+                                      ;; Deliberately *no* terrain check
+                                      ;; here.  Giving way into a wall is
+                                      ;; a real failure — in a pocket
+                                      ;; every ant has rock on one side
+                                      ;; and a nestmate on the other, so
+                                      ;; the whole crowd yields into the
+                                      ;; rock and wedges — but the fix
+                                      ;; belongs at the end of the tick
+                                      ;; rather than here.  Every rule
+                                      ;; that can turn an ant would
+                                      ;; otherwise need its own copy of
+                                      ;; it, and they would drift apart.
+                                      ;; See the single veto in
+                                      ;; ANT-MOTION-STEP!.
                                       (let ((side
-                                              ;; away from where it is;
-                                              ;; dead ahead or nose to
-                                              ;; nose, the ant's own hand
                                               (if (> (abs beta) 1.0f-3)
                                                   (if (plusp beta)
                                                       -1.0f0 1.0f0)

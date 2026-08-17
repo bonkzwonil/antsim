@@ -537,6 +537,84 @@ the sample points and the terrain mask both already exist — the field
 carries the mask because a blocked cell cannot hold pheromone (§3.3).  So
 this costs three array reads and adds no new sense.")
 
+(defparameter *homing-progress* 1.0f0
+  "How much of a window's walking a returning ant must turn into ground
+closed on the nest before it is left to walk as it likes, as a fraction
+of the distance walked (§3.4).  **1.0 — off — is the default**: it
+switches the whole windowed policy out and restores per-tick homing
+exactly.  0.25 is the value the idea wants; see the measurement below for
+why it is not the default yet.
+
+**Measured, and it breaks §3.8.**  Binary bridge, busiest-arm share,
+which must reach 0.80 on every replicate:
+
+    1.00 (off)   passes
+    0.60         0.642 — the colony did not commit
+    0.25         0.637 — the colony did not commit
+
+The same tension as *food-odour-reach*, and worth understanding rather
+than tuning around.  Both bridge experiments are calibrated on a tight
+round trip: an arm wins because ants that took it get back *sooner* and
+lay pheromone *sooner*, so anything that loosens the return leg — letting
+ants wander while they are still technically closing, or turning them
+round when a curved arm reads as backwards over one window — slows the
+feedback below the point where a colony commits inside the run.
+
+So the mechanism is here, argued for, and off.  Turning it on visibly
+improves how ants move in an obstacle field and costs the two published
+rows the model is calibrated against, and that is not a trade to make
+silently.  What it probably needs is a window that scales with the
+journey rather than a fixed 100 ticks, so a 10 cm bridge arm and a 40 cm
+foraging run are not judged on the same stretch of walking.
+
+**Homing is a medium-run constraint, not a steering command.**  The old
+rule rotated a returning ant halfway to the nest bearing *every tick*,
+which reads exactly as what it is — a servo tracking a setpoint — and it
+is why laden ants walked like machines and pressed into walls that stood
+between them and home.  It also threw away most of what path integration
+gives them: an arrow has a length as well as a direction, and *any*
+heading with a component toward home shortens it.  The ant in a pocket
+whose nest lies through the west wall closes the distance perfectly well
+by walking south.
+
+So the ant walks where the pheromone, the room and its own noise take it,
+and the home vector is consulted over a *window* rather than a tick — the
+same window Layer 0 already keeps (*stall-window*), which measures
+|h0| - |h| for exactly this purpose and was until now only used to
+diagnose failure.  A window that made ground leaves the ant alone
+entirely.  A window that did not turns the urge back on until the next
+one does.
+
+At 0.25 an ant has to convert a quarter of its walking into range closed
+— a loose bar, easily met by an ant on a trail heading roughly homeward,
+and failed by one going round in circles or pressing a wall.  That is the
+distinction worth acting on, and nothing finer needs to be.")
+
+(defparameter *wall-veto* nil
+  "Whether every ant's *final* heading is checked against terrain each
+tick, whatever rule set it (§3.2).  NIL is off, which is how the model
+behaved before.
+
+The design is right and belongs here rather than in each rule: three
+separate things can turn an ant on a tick — the choice function, the
+homing term, and giving way to a nestmate — and any of them can leave it
+facing rock.  Two of the three already carry their own terrain test,
+written at different times in different shapes, and giving way was about
+to become a third.  One check where the heading is finally settled
+subsumes all of them, cannot drift out of step with a rule added later,
+and is the more faithful account: an ant feels a wall with its antennae
+whatever reasoning turned it that way.
+
+**And measured, it costs a §3.8 row.**  It changes how every ant moves
+near every wall, which on the bridges is the whole apparatus — the arms
+*are* walls — and the double bridge stopped picking the short arm
+reliably (one replicate at 0.473 against a bar of 0.80).
+
+Off, with the reasoning kept, because the argument for it is structural
+and the argument against it is a measurement, and this project resolves
+that pair by keeping both visible rather than by preferring whichever was
+written second.")
+
 (defparameter *homing-scan-steps* 12
   "How far around a blocked bearing a homing ant will look, in 15-degree
 steps (§3.2).  0 disables the scan; 12 is a half turn, the most a

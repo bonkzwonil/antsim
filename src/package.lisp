@@ -44,6 +44,7 @@
    #:*uturn-ticks* #:*uturn-cast-gain*
    #:*stall-window* #:*stall-pinned-fraction* #:*stall-detour-fraction*
    #:*detour-ticks* #:*detour-release* #:*detour-abandon*
+   #:*homing-progress* #:*wall-veto*
    ;; the no-entry field (§3.9, docs/navigation.md Layer 3)
    #:*repel-tau* #:*repel-deposit* #:*repel-cap* #:*repel-weight*
    #:*repel-threshold* #:*repel-dead-end* #:repel-tau
@@ -101,7 +102,7 @@
    #:ants-gait #:ants-waited
    ;; Layer 0 — one window, three readings (§3.4, docs/navigation.md)
    #:ants-h0x #:ants-h0y #:ants-walked #:ants-window #:ants-stalled
-   #:ants-detour #:ants-hv-latch #:terrain-near-p
+   #:ants-detour #:ants-hv-latch #:ants-homing #:terrain-near-p
    #:stall-reset! #:stall-step!
    ;; when two ants meet (M3)
    #:ants-confidence #:ants-dturn #:ants-dcrop #:ants-denergy
