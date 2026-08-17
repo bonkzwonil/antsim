@@ -1948,16 +1948,15 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
           Two things keep it from being a licence to tune. The default does not move,
           so nothing outside a file that sets it is affected. And the direction is the
           defensible one: a real <em>Lasius</em> forager ranges far beyond eight metres
-          and trunk trails run to tens of them, so the large arena's value is the more
-          realistic one and the shipped default is the compromise a small arena allows.
+          and trunk trails run to tens of them, so a metre-scale scene asking for more
+          range is asking for the more realistic value, and the shipped default is the
+          compromise a small arena allows.
         </p>
         <p>
-          <code>scenarios/antsim-large.json</code> is the worked example — the same
-          word in the same font, five times over in every length, with the range scaled
-          by exactly the same factor so a journey costs the same fraction of a tank in
-          both files. A test asserts that ratio, because the failure it guards is
-          silent: get it wrong and both scenarios still run, they simply stop being the
-          same experiment at two sizes.
+          Where a scenario does scale, a test asserts the ratio between its geometry
+          and its range, because the failure it guards is silent: get it wrong and the
+          file still runs, it simply stops being the same experiment at a different
+          size.
         </p>
       </section>
 
@@ -2151,7 +2150,7 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
               <tr><td><code>deneubourg-binary-bridge</code></td><td>Equal arms. The winner changes between runs — that is the result.</td></tr>
               <tr><td><code>goss-double-bridge</code></td><td>Unequal arms. The short one wins every time.</td></tr>
               <tr><td><code>antsim</code></td><td>The project's name spelled in solid terrain, on a 1.00 × 0.72 m arena.</td></tr>
-              <tr><td><code>antsim-large</code></td><td>The same word five times over. Every <em>length</em> scales and the ant does not, so the same journey costs five times the energy.</td></tr>
+              <tr><td><code>antsim-large</code></td><td>The same word on a 5.00 × 3.60 m arena.</td></tr>
               <tr><td><code>antsim-overload</code></td><td>1400 ants on 40 units of stock: metabolism exceeds income from the first tick.</td></tr>
             </tbody>
           </table>

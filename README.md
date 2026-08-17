@@ -134,16 +134,6 @@ Six scenarios ship:
 | `antsim-large` | the same word five times over, at 5.00 × 3.60 m |
 | `antsim-overload` | the small arena with 1400 ants on 40 units of stock |
 
-The large word scenario is not the small one printed bigger: every *length* is
-five times over and **the ant is not**, so the same journey costs five times the
-energy out of the same fixed tank — at the shipped range that colony starves in
-sight of the food. Five times the length is also twenty-five times the *area*,
-which is what sets the population: an ant finds food by covering ground. Both
-of those are measured, and the second one is capped by the tick budget rather
-than by biology. In the small arena the *word* is the obstacle; in the large one
-the *distance* is
-([experiments.md](docs/experiments.md#scaling-the-arena--what-does-and-does-not-scale-with-it)).
-
 Scenarios are JSON ([§6](docs/concept.md#6-the-scenario-file)) and validation is
 strict: an unknown key is an error and the message names the path, because a
 silently-defaulted typo produces a run that looks plausible and answers a
