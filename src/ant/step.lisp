@@ -162,7 +162,14 @@ initial condition rather than merely a convenient one."
                  (aref (ants-h0y a) i) (- (colony-nest-y c) sy)
                  (aref (ants-walked a) i) 0.0f0
                  (aref (ants-window a) i) 0
-                 (aref (ants-stalled a) i) 0.0f0)
+                 (aref (ants-stalled a) i) 0.0f0
+                 ;; nobody has told it anything yet
+                 (aref (ants-confidence a) i) 0.0f0
+                 (aref (ants-dturn a) i) 0.0f0
+                 (aref (ants-dcrop a) i) 0.0f0
+                 (aref (ants-denergy a) i) 0.0f0
+                 ;; and the broad phase can now find the ant from the body
+                 (aref (ants-of-body a) bi) i)
            (incf (colony-next-id c))
            (incf (colony-population c))
            (incf (colony-born c))
@@ -1044,10 +1051,22 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; The give-up threshold is the colony's, not the
                     ;; constant: a forager from a hungry nest pushes
                     ;; deeper into its reserve before turning back.
+                    ;; The give-up threshold, lowered by whatever recent
+                    ;; evidence this ant has that persisting is paying
+                    ;; (M3).  An ant that has just passed nestmates coming
+                    ;; back loaded pushes further before turning round.
+                    ;;
+                    ;; This is the *only* thing confidence does.  It is
+                    ;; not a bearing and it never becomes one — an ant
+                    ;; learns from a contact that things are going well,
+                    ;; not which way to walk (see ANT-ENCOUNTER-STEP!).
                     (cond ((world-food-at w x2 y2)
                            (setf (aref (ants-state a) i) +ant-at-food+))
                           ((< (aref (ants-energy a) i)
-                              (aref (ants-resolve a) i))
+                              (* (aref (ants-resolve a) i)
+                                 (- 1.0f0
+                                    (* *encounter-resolve-gain*
+                                       (aref (ants-confidence a) i)))))
                            (setf (aref (ants-state a) i)
                                  +ant-returning+))))
                    ))               ; cond H, let G
@@ -1210,6 +1229,222 @@ homing term from simply undoing it on the next tick."
                            (aref (the f32v (ants-h0y a)) i) hy
                            (aref (the f32v (ants-walked a)) i) 0.0f0
                            (aref (the u16v (ants-window a)) i) 0)))))))))))
+  (values))
+
+(declaim (inline ant-afield-p))
+(defun ant-afield-p (state)
+  "Out of doors and walking — the only two states an encounter applies to.
+
+An ant in the nest is behind the door (+BODY-RESTING+) and takes no part
+in ant-ant contact at all; one standing at a source is not going
+anywhere, so it has no traffic to sort and nothing to be persuaded of.
+Both are excluded here rather than filtered by body kind alone, because
+*resting-ants-block* can put a resting ant back into the collision table
+and it must not thereby start antennating."
+  (declare (type (unsigned-byte 8) state) (optimize (speed 3) (safety 0)))
+  (or (= state +ant-outbound+) (= state +ant-returning+)))
+
+(defun ant-encounter-step! (w)
+  "Antennal contact: what happens when two ants meet (M3, §3.4, §3.11).
+
+The broad phase has always reported *overlaps to be resolved*.  This
+reads the same geometry as an event — this ant met that ant, at this
+bearing, going that way — which is the piece §7 called the expensive part
+of the social channel.  Three rules ride on it, and they are cheap
+precisely because the event is not.
+
+**1. Recognition.**  Nestmate or not, by colony, which stands for the
+cuticular hydrocarbon profile a real worker reads off another's antennae.
+A stranger is turned away from harder (*stranger-avoidance*), is never
+fed, and is never believed.  That is all it does here: fighting, alarm
+and defence are §3.12's subject and want two colonies with something to
+fight over.  What matters now is that the two already take different
+paths, so a consequence added later is a rule and not an excavation.
+
+**2. Giving way.**  Two ants closing head-on each turn aside, and *how
+much* depends on what they are carrying: a laden ant on its way home
+yields least, an outbound ant most.  That asymmetry is taken from the
+traffic literature rather than invented — laden inbound ants are reported
+to hold their line while outbound ants deviate around them, and the lane
+structure on a busy trail is a consequence of the asymmetry rather than
+of any rule about sides.  Nothing here says 'walk on the left'.  If lanes
+appear, they are a finding.
+
+The tie-break when two ants meet exactly nose to nose is the ant's
+handedness — already a lifelong per-individual trait (ANT-HANDEDNESS),
+already drawn from the id with no tick, and already the answer to this
+exact problem in a different guise: a side derived from anything that
+moves flips with it, and two ants dithering nose to nose is the same
+20 000-tick oscillation in miniature.
+
+**3. Trophallaxis, and confidence.**  A laden ant hands food to a hungry
+nestmate; §3.9 deferred this as 'the only mechanism in the model needing
+pairwise coupling', and it is.  Meeting a laden nestmate coming the other
+way also raises an outbound ant's *confidence* — which is not a direction
+and must never become one.  Ants of this genus were tested for tactile
+transfer of direction and the answer was no; what a contact honestly
+carries is that nestmates are coming back loaded, which is evidence about
+*when*, not about *where*.  So confidence buys persistence and nothing
+else (*encounter-resolve-gain*).
+
+**Determinism.**  Every rule reads the state the tick began with and
+writes to a buffer applied afterwards — the same discipline as the Jacobi
+collision buffers (§3.11) and the field deposit buffer (§3.3).  An ant
+that turned in place would be seen already turned by every
+higher-numbered neighbour, which makes the result depend on table order:
+a bug that survives every test until the day something is threaded.  The
+energy buffer is accumulated into by donors rather than owned by one ant,
+which is fine for the same reason a pheromone deposit is — addition
+commutes.  A threaded version needs the fixed partition of §4.5, exactly
+as BODIES-RESOLVE! does."
+  (declare (type world w) (optimize (speed 3) (safety 1)))
+  (let* ((a (world-ants w))
+         (b (world-bodies w))
+         (n (ants-n a))
+         (range *antennal-range*)
+         (decay *confidence-decay*))
+    (declare (type fixnum n) (type f32 range decay))
+    (when (<= range 0.0f0)
+      ;; the off position: confidence still decays away, so switching
+      ;; encounters off mid-run cannot leave ants permanently persuaded
+      (dotimes (i n)
+        (when (ant-live-p a i)
+          (setf (aref (the f32v (ants-confidence a)) i)
+                (* decay (aref (the f32v (ants-confidence a)) i)))))
+      (return-from ant-encounter-step! (values)))
+    (let ((bxs (bodies-x b)) (bys (bodies-y b))
+          (kinds (bodies-kind b)) (hash (bodies-hash b))
+          (obm (ants-of-body a))
+          (bodyv (ants-body a))
+          (states (ants-state a)) (cols (ants-colony a))
+          (heads (ants-heading a)) (crops (ants-crop a))
+          (energies (ants-energy a))
+          (dturn (ants-dturn a)) (dcrop (ants-dcrop a))
+          (denergy (ants-denergy a)) (confs (ants-confidence a))
+          (seed (world-seed w))
+          (cone *encounter-cone*) (yrate *yield-rate*)
+          (stranger *stranger-avoidance*)
+          (trate *trophallaxis-rate*) (tthr *trophallaxis-threshold*)
+          (gain *encounter-confidence*)
+          (r2 (* range range)))
+      (declare (type f32v bxs bys heads crops energies dturn dcrop denergy
+                          confs)
+               (type u8v kinds states cols) (type u32v obm bodyv)
+               (type f32 cone yrate stranger trate tthr gain r2))
+      ;; --- 1. clear the buffers and age the evidence -------------------
+      (dotimes (i n)
+        (setf (aref dturn i) 0.0f0
+              (aref dcrop i) 0.0f0
+              (aref denergy i) 0.0f0)
+        (when (ant-live-p a i)
+          (setf (aref confs i) (* decay (aref confs i)))))
+      ;; --- 2. the sweep ------------------------------------------------
+      (dotimes (i n)
+        (when (and (ant-live-p a i) (ant-afield-p (aref states i)))
+          (let* ((bi (aref bodyv i))
+                 (xi (aref bxs bi)) (yi (aref bys bi))
+                 (hi (aref heads i))
+                 (sti (aref states i))
+                 (coli (aref cols i))
+                 (cropi (aref crops i))
+                 (returning (= sti +ant-returning+))
+                 ;; What this ant owes the traffic.  Right of way for the
+                 ;; loaded: it yields least, an outbound ant most.
+                 (role (cond ((and returning (> cropi 0.0f0)) *yield-laden*)
+                             (returning *yield-returning*)
+                             (t *yield-outbound*)))
+                 (turn 0.0f0)
+                 ;; the neediest nestmate this ant could feed, and how
+                 ;; empty it is — one partner per donor, so a donor can
+                 ;; never give away more than it has however many hungry
+                 ;; ants are pressed around it
+                 (mouth -1) (mouth-e 2.0f0))
+            (declare (type f32 xi yi hi cropi role turn mouth-e)
+                     (type fixnum bi mouth))
+            (do-shash-neighbours (jb hash xi yi range)
+              (let ((jbb (the fixnum jb)))
+                (when (and (/= jbb bi) (= (aref kinds jbb) +body-ant+))
+                  (let ((j (aref obm jbb)))
+                    ;; Checked rather than trusted: a body outlives the
+                    ;; ant that had it, so a stale entry must be capable
+                    ;; only of being ignored.
+                    (when (and (/= j +no-ant+) (< j n)
+                               (ant-live-p a j)
+                               (= (aref bodyv j) jbb)
+                               (ant-afield-p (aref states j)))
+                      (let* ((dx (- (aref bxs jbb) xi))
+                             (dy (- (aref bys jbb) yi))
+                             (d2 (+ (* dx dx) (* dy dy))))
+                        (declare (type f32 dx dy d2))
+                        (when (and (<= d2 r2) (> d2 1.0f-12))
+                          (let* ((d (sqrt d2))
+                                 ;; where it is, relative to where I face
+                                 (beta (wrap-angle (- (atan dy dx) hi))))
+                            (declare (type f32 d beta))
+                            (when (< (abs beta) cone)
+                              (let* ((same (= coli (aref cols j)))
+                                     (stj (aref states j))
+                                     ;; closing, rather than merely near:
+                                     ;; an ant being overtaken is not an
+                                     ;; obstruction and must not be
+                                     ;; steered around
+                                     (oncoming
+                                       (< (cos (- (aref heads j) hi)) 0.0f0))
+                                     (near (- 1.0f0 (/ d range))))
+                                (declare (type f32 near))
+                                ;; --- 2a. give way ---------------------
+                                (when (and (> yrate 0.0f0)
+                                           (or oncoming (not same)))
+                                  (let ((side
+                                          ;; away from where it is; nose
+                                          ;; to nose, the ant's own hand
+                                          (if (> (abs beta) 1.0f-3)
+                                              (if (plusp beta) -1.0f0 1.0f0)
+                                              (ant-handedness
+                                               (aref (ants-id a) i) seed))))
+                                    (declare (type f32 side))
+                                    (incf turn
+                                          (* side yrate near role
+                                             (if same 1.0f0 stranger)))))
+                                ;; --- 2b. news from a nestmate ---------
+                                ;;
+                                ;; Loaded, coming the other way, and mine.
+                                ;; All three are needed: a stranger's
+                                ;; success is not evidence for me, an
+                                ;; empty nestmate is no evidence at all,
+                                ;; and one walking beside me is on the
+                                ;; same errand rather than back from it.
+                                (when (and same oncoming
+                                           (= sti +ant-outbound+)
+                                           (= stj +ant-returning+)
+                                           (> (aref crops j) 0.0f0))
+                                  (setf (aref confs i)
+                                        (min 1.0f0 (+ (aref confs i) gain))))
+                                ;; --- 2c. a mouth to feed --------------
+                                (when (and same (> trate 0.0f0)
+                                           returning (> cropi 0.0f0)
+                                           (< (aref energies j) tthr)
+                                           (< (aref energies j) mouth-e))
+                                  (setf mouth j
+                                        mouth-e (aref energies j)))))))))))))
+            (setf (aref dturn i) turn)
+            (when (>= mouth 0)
+              (let ((give (min trate cropi)))
+                (declare (type f32 give))
+                (decf (aref dcrop i) give)
+                ;; Accumulated into, not assigned: several donors may feed
+                ;; one ant in the same tick and addition commutes.
+                (incf (aref denergy mouth) (* give *crop-to-energy*)))))))
+      ;; --- 3. apply ----------------------------------------------------
+      (dotimes (i n)
+        (when (ant-live-p a i)
+          (unless (zerop (aref dturn i))
+            (setf (aref heads i) (wrap-angle (+ (aref heads i) (aref dturn i)))))
+          (unless (zerop (aref dcrop i))
+            (setf (aref crops i) (max 0.0f0 (+ (aref crops i) (aref dcrop i)))))
+          (unless (zerop (aref denergy i))
+            (setf (aref energies i)
+                  (min 1.0f0 (+ (aref energies i) (aref denergy i)))))))))
   (values))
 
 (defun colony-feed! (w)
@@ -1377,6 +1612,12 @@ stops producing brood, and decays."
                            t))
                        (world-foods w)))))
   (bodies-resolve! (world-bodies w) (world-obstacles w))
+  ;; Encounters read the positions the collision pass settled on, and the
+  ;; spatial hash BODIES-RESOLVE! leaves rebuilt behind it.  Nothing here
+  ;; moves an ant, so path integration is unaffected by where in the tick
+  ;; this sits; what it must not do is read positions two ants are still
+  ;; overlapping at.
+  (ant-encounter-step! w)
   (path-integration-step! w)
   ;; after path integration, so the window closes on this tick's home
   ;; vector rather than on last tick's estimate of where the ant got to

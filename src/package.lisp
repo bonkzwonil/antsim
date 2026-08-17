@@ -46,6 +46,12 @@
    ;; the no-entry field (§3.9, docs/navigation.md Layer 3)
    #:*repel-tau* #:*repel-deposit* #:*repel-cap* #:*repel-weight*
    #:*repel-threshold* #:*repel-dead-end* #:repel-tau
+   ;; when two ants meet (M3)
+   #:*antennal-range* #:*encounter-cone* #:*yield-rate*
+   #:*yield-laden* #:*yield-returning* #:*yield-outbound*
+   #:*stranger-avoidance* #:*encounter-confidence* #:*confidence-decay*
+   #:*encounter-resolve-gain*
+   #:*trophallaxis-rate* #:*trophallaxis-threshold*
    #:*relax-iterations* #:*relax-slop*
    ;; world/geom — polygons and the broad phase (§3.7, §4.2)
    #:polygon #:make-polygon #:polygon-n #:polygon-verts
@@ -94,6 +100,9 @@
    ;; Layer 0 — one window, three readings (§3.4, docs/navigation.md)
    #:ants-h0x #:ants-h0y #:ants-walked #:ants-window #:ants-stalled
    #:stall-reset! #:stall-step!
+   ;; when two ants meet (M3)
+   #:ants-confidence #:ants-dturn #:ants-dcrop #:ants-denergy
+   #:ants-of-body #:+no-ant+ #:ant-afield-p #:ant-encounter-step!
    #:path-integration-step!
    #:spawn-ant #:kill-ant
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+

@@ -981,6 +981,184 @@ than modelled.  What was wrong was requiring an ant to reach the *centre*
 of a crowd it is part of.")
 
 ;;; --------------------------------------------------------------------
+;;; When two ants meet (§3.4, §3.11, M3)
+;;; --------------------------------------------------------------------
+;;;
+;;; The broad phase has always reported *overlaps to be resolved*.  An
+;;; encounter is the same geometry read as an event — this ant met that
+;;; ant, at this bearing, going that way — and once the model can see one,
+;;; several things that were infrastructure problems become one-line rules.
+;;;
+;;; What an encounter is allowed to carry is worth stating up front,
+;;; because the obvious version is wrong.  **Ants do not tell each other
+;;; which way the food is.**  That was tested directly in this genus and
+;;; came out negative (Grüter, Czaczkes et al., "No evidence for tactile
+;;; communication of direction in foraging Lasius ants", Insectes Sociaux
+;;; 2017), and a model that let a contact hand over a bearing would be
+;;; inventing a channel the animal has been shown not to have.
+;;;
+;;; What a contact does carry is *that things are going well*.  A laden
+;;; nestmate walking the other way is current, first-hand evidence that
+;;; persisting on this course has been paying, where pheromone is an
+;;; average over the last several minutes.  So an encounter here changes
+;;; how long an ant is willing to keep trying, and never where it points.
+;;; That distinction is the whole of the design.
+
+(defparameter *antennal-range* 0.010f0
+  "How far apart two ants can be and still be in antennal contact,
+metres, centre to centre.  [scale] Two touching ants are 5 mm apart at
+*ant-radius*, and an antenna reaches a few millimetres past the head, so
+this is contact plus a reach.  0 switches every encounter rule off at
+once, which is the off position the tests measure against.
+
+**Measured, with the no-entry field of §3.9, against the model without
+either.**  Two sources and a concave obstacle, 150 starting ants, 24 000
+ticks, six seeds, units of food taken:
+
+    baseline (both off)   1205  1353  1355  1193  1202  1230   =  7537
+    both on               1248  1507  1435  1221  1346  1350   =  8108
+
+    +3.6%  +11.4%  +5.9%  +2.4%  +12.0%  +9.7%
+
+Up on every seed, which is the bar this project uses — a mean over seeds
+that hides a sign change is not a result.  Separated, the no-entry field
+is worth about +3% on its own and encounters about +2%, so most of the
+total is the two together: an ant that can tell it is getting nowhere
+marks the ground, and traffic that sorts itself gets more ants past the
+mark.  Giving way is the half that carries it; with *yield-rate* at 0 the
+encounter gain very nearly vanishes.")
+
+(defparameter *encounter-cone* 1.5f0
+  "Half-angle ahead of an ant within which it reacts to another, radians.
+[cal] About 85 degrees, so an ant responds to what is in front of it and
+ignores what is behind — which is both what antennae can reach and what
+keeps a column from turning itself inside out as ants overtake.")
+
+(defparameter *yield-rate* 0.05f0
+  "How hard an ant turns away from one it is about to meet head-on,
+radians per motion tick at contact, before its role multiplier.  [cal]
+Comparable to *turn-rate*, because giving way is an ordinary steering
+correction and not a special manoeuvre.  0 disables lane formation while
+leaving recognition and trophallaxis alone.")
+
+(defparameter *yield-laden* 0.25f0
+  "Yield multiplier for a laden ant on its way home.  [lit]
+
+Right of way for the loaded, and it is documented rather than invented:
+on leaf-cutter trails most inbound clusters are headed by a laden ant
+that the others do not attempt to overtake, and in *Eciton* columns the
+laden inbound stream holds the centre while outbound ants take the
+flanks.  The mechanism reported is exactly this — an asymmetry in how
+much each party deviates during the avoidance turn, not a rule about
+sides.
+
+Which is why these are three numbers and not a lane assignment.  Nothing
+here says 'walk on the left'.  Lanes are what an asymmetric yield
+produces when there is enough traffic to sort, and if they do not appear
+that is a finding about the model rather than a missing feature.")
+
+(defparameter *yield-returning* 0.6f0
+  "Yield multiplier for an unladen ant on its way home.  [cal] Between
+the other two: it has a bearing to hold, but nothing to protect.")
+
+(defparameter *yield-outbound* 1.0f0
+  "Yield multiplier for an outbound ant.  [lit] The one that gives way.
+Outbound ants deviate most from their heading during avoidance, which is
+the asymmetry the whole three-lane structure is reported to rest on.")
+
+(defparameter *stranger-avoidance* 2.0f0
+  "How much harder an ant turns away from a non-nestmate than from a
+nestmate.  [cal]
+
+Recognition itself is not in doubt — a worker discriminates colony
+membership by cuticular hydrocarbons on antennal contact, and this is one
+of the best-attested facts about ants.  What that recognition *leads to*
+is the part being kept deliberately small here: this model gives it
+avoidance and nothing else.
+
+No fighting, no recruitment of defenders, no alarm chemistry.  Those are
+real and they are §3.12's subject, and a fight is worth having only once
+there are two colonies with something to fight over.  What matters now is
+that the *channel* exists and that nestmate and stranger already take
+different code paths, so adding a consequence later is a rule rather than
+an infrastructure change.
+
+The other half of recognition is what does not happen: a stranger is
+never fed and never believed.  See ANT-ENCOUNTER-STEP!.")
+
+(defparameter *encounter-confidence* 0.30f0
+  "How much a single encounter with a laden nestmate raises an outbound
+ant's confidence, 0..1 saturating.  [cal]
+
+Note what is being raised.  Not a heading, not a memory of where food is
+— an ant learns neither of those from a contact (see the note at the head
+of this section).  It learns that ants are coming back loaded, which
+means the ground it is walking has been paying *recently*, and the honest
+consequence of that is a longer willingness to keep at it.")
+
+(defparameter *confidence-decay* 0.997f0
+  "Per-tick decay on that confidence.  [cal] Half-lives in about 230
+ticks, twelve seconds — long enough to carry an ant a good way further
+out, short enough that news goes stale.  A colony whose evidence never
+expired would keep sending ants down a route for as long as it once
+worked, which is the failure the no-entry field exists to cure and would
+be perverse to reintroduce here.")
+
+(defparameter *encounter-resolve-gain* 0.5f0
+  "How far a fully confident ant lowers its own give-up threshold, as a
+fraction of it.  [cal] 0 is an exact off position: encounters still
+happen, still sort traffic and still feed nestmates, but change nobody's
+mind about turning back — which is how the navigational half of this is
+measured apart from the physical half.
+
+This is the *only* thing confidence does, deliberately.  One quantity,
+one consequence, one measurement.")
+
+(defparameter *trophallaxis-rate* 0.004f0
+  "Crop transferred from one ant to another per motion tick of contact.
+[cal] A full crop takes about 250 ticks — twelve seconds — to hand over
+entirely, so a meal is an event with a duration rather than an instant,
+and a donor that walks on has given only part of one.
+
+0 disables ant-to-ant feeding.  §3.9 deferred exactly this as 'the only
+mechanism in the model needing pairwise coupling', and it is: everything
+else an ant does it does to itself or to a field.
+
+**Measured, and it changes sign with range.**  A single source, 200 ants,
+24 000 ticks, four seeds, with against without:
+
+    source at 0.55 m     3904 against 3727    +4.7%, and up on every seed
+    source at 0.75 m     3003 against 3117    -3.6%, and 35 deaths to 26
+
+On the two-source arena of the branch's main A/B it is neutral (+0.7%).
+
+The reversal has a mechanism rather than being noise, and the mechanism
+is worth stating because it is not the one the rule was written for.  A
+laden ant on its way home hands food to a hungry ant walking the *other*
+way.  At moderate range that ant completes its trip and brings back more
+than it was given.  At a range where foragers are dying anyway it does
+not: the crop is gone from the colony's ledger, only *crop-to-energy* of
+it ever became usable, and what it bought was a few more metres of
+walking away from home.  Feeding the outbound is an investment, and it
+stops paying at exactly the distance the investment stops returning.
+
+Left **on** — unlike *trail-lost-threshold*, which measured as a plain
+cost and ships off.  This is positive in two regimes of three, it is the
+mechanism this milestone exists to build, and the regime where it loses
+is one where the colony is failing for other reasons.  The number is here
+to argue with; a rate of 0 is the exact comparison.")
+
+(defparameter *trophallaxis-threshold* 0.5f0
+  "Energy below which an ant will accept food from a nestmate in the
+field.  [cal] Half a tank.
+
+The consequence to watch is range: until now a forager made the whole
+round trip on the reserve it set out with, topped up only at a source
+(*forager-eats-at-source*) or at home, so a colony's reach was set by one
+ant's tank.  **Measured, that is true up to a point and then reverses**,
+and the reversal is the more interesting half — see *trophallaxis-rate*.")
+
+;;; --------------------------------------------------------------------
 ;;; The no-entry field (§3.9, docs/navigation.md Layer 3)
 ;;; --------------------------------------------------------------------
 ;;;
@@ -1215,6 +1393,11 @@ relaxation from chasing floating-point noise forever.")
                *stall-pinned-fraction* *stall-detour-fraction*
                *repel-tau* *repel-deposit* *repel-cap* *repel-weight*
                *repel-threshold* *repel-dead-end*
+               *antennal-range* *encounter-cone* *yield-rate*
+               *yield-laden* *yield-returning* *yield-outbound*
+               *stranger-avoidance* *encounter-confidence*
+               *confidence-decay* *encounter-resolve-gain*
+               *trophallaxis-rate* *trophallaxis-threshold*
                *relax-slop*))
 
 (declaim (type fixnum *max-age-ticks* *relax-iterations* *homing-scan-steps*

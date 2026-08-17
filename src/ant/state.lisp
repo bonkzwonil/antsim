@@ -153,11 +153,56 @@
   ;; aversive deposit is proportional to the effort actually wasted and
   ;; needs no strength parameter of its own.
   (stalled nil :type (or null f32v))
+  ;; --- when two ants meet (M3) ----------------------------------------
+  ;;
+  ;; Evidence from nestmates that persisting is currently paying, 0..1,
+  ;; decaying every tick.  Raised by meeting a laden nestmate coming the
+  ;; other way.
+  ;;
+  ;; It is emphatically **not** a direction, and the field is named for
+  ;; what it is so that nothing later is tempted to steer with it.  Ants
+  ;; of this genus were tested for tactile transfer of direction and the
+  ;; result was negative; what a contact honestly carries is that ants are
+  ;; coming back loaded, which is a statement about time rather than
+  ;; space.  See *ENCOUNTER-CONFIDENCE*.
+  (confidence nil :type (or null f32v))
+  ;; Buffered outputs of the encounter pass, applied after the sweep.
+  ;;
+  ;; The same discipline as the collision solver's Jacobi buffers (§3.11)
+  ;; and the field's deposit buffer (§3.3), and for the same reason: an
+  ;; ant that read a neighbour's heading *after* that neighbour had
+  ;; already turned would make the result depend on table order, which is
+  ;; a determinism bug that only shows up when something else changes.
+  ;; Every encounter reads the state the tick began with and writes here.
+  (dturn nil :type (or null f32v))
+  (dcrop nil :type (or null f32v))
+  (denergy nil :type (or null f32v))
+  ;; Body index -> ant index, so an encounter found through the broad
+  ;; phase can be turned back into an ant.
+  ;;
+  ;; The broad phase indexes *bodies* — ants, corpses, food and nest
+  ;; entrances in one table (§3.11) — and until an encounter was an event
+  ;; nothing ever needed to go the other way.  Sized to the body table,
+  ;; and every lookup is checked against the ant's own BODY entry rather
+  ;; than trusted, so a stale slot can only ever be ignored.
+  (of-body nil :type (or null u32v))
   (free nil :type (or null fixv))
   (nfree 0 :type fixnum))
 
-(defun make-ants (capacity)
+(defconstant +no-ant+ #xFFFFFFFF
+  "OF-BODY entry for a body that is not a live ant — food, a nest
+entrance, or the corpse an ant left behind.")
+
+(defun make-ants (capacity &key (body-capacity capacity))
+  "BODY-CAPACITY sizes the reverse map only.  It is a separate argument
+because the two tables are conceptually independent — the body table also
+holds corpses, food and nest entrances — even though MAKE-WORLD happens to
+size them alike."
   (%make-ants :capacity capacity
+              :confidence (mkf32 capacity)
+              :dturn (mkf32 capacity) :dcrop (mkf32 capacity)
+              :denergy (mkf32 capacity)
+              :of-body (mku32 body-capacity +no-ant+)
               :id (mku32 capacity) :body (mku32 capacity)
               :colony (mku8 capacity) :state (mku8 capacity +ant-dead+)
               :heading (mkf32 capacity) :crop (mkf32 capacity)
@@ -213,6 +258,10 @@ not broken."
 
 (defun ants-free! (a i)
   (declare (type ants a) (type fixnum i))
+  ;; The body outlives the ant — it becomes a corpse, and nothing removes
+  ;; one (§3.11) — so the reverse map has to be broken here or the broad
+  ;; phase would keep handing encounters a dead ant's index.
+  (setf (aref (the u32v (ants-of-body a)) (aref (ants-body a) i)) +no-ant+)
   (setf (aref (ants-state a) i) +ant-dead+)
   (setf (aref (ants-free a) (ants-nfree a)) i)
   (incf (ants-nfree a))

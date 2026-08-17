@@ -236,7 +236,7 @@ that it is also the arithmetic."
             ;; The body table also holds corpses, food and nest entrances,
             ;; so it is sized the same as the ant table and then some —
             ;; corpses accumulate and are never reclaimed (§3.11).
-            :ants (make-ants capacity)
+            :ants (make-ants capacity :body-capacity capacity)
             :pheromone-every (max 1 (round *pheromone-dt* *motion-dt*))
             :colony-every (max 1 (round *colony-dt* *motion-dt*)))))
     w))

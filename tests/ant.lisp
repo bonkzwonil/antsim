@@ -1282,3 +1282,289 @@ of evaporation."
         (ant:world-step! w))
       (is (plusp (ant:field-total (ant:colony-repel c)))
           "walked to an empty source and left no verdict"))))
+
+;;; ------------------------------------------ when two ants meet (M3)
+;;;
+;;; The broad phase used to report only overlaps to be resolved.  These
+;;; test it read as an *event* instead, and the three rules that ride on
+;;; it: recognition, giving way, and the pairwise exchange §3.9 deferred.
+;;;
+;;; ANT-ENCOUNTER-STEP! is driven directly rather than through
+;;; WORLD-STEP!, because a full tick also walks the ants, turns them by
+;;; the choice function and adds heading noise — all of which would be
+;;; measured here as if it were the encounter.  The hash is rebuilt by
+;;; hand for the same reason: this is the pass under test and nothing else.
+
+(defun %meet-world (&key (colonies 1) (n 4))
+  "A world with N ants per colony, all placeable by hand."
+  (let ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 64)))
+    (dotimes (k colonies)
+      (let ((c (ant:add-colony w :name (format nil "c~d" k)
+                                 :nest-x (+ 0.2f0 (* 0.5f0 k)) :nest-y 0.9f0
+                                 :stock 1.0f6)))
+        (ant:world-seed-population! w c n)))
+    w))
+
+(defun %place! (w i x y heading state &key (crop 0.0f0) (energy 1.0f0))
+  "Put ant I where the test wants it, body and all.
+
+The body *kind* has to move with the state, because ANT-MOTION-STEP!
+normally derives one from the other every tick and these tests do not run
+it — an ant left as +BODY-RESTING+ is behind the nest door and takes no
+part in ant-ant contact at all, so the whole fixture would silently
+measure nothing.  That is exactly the drift the derivation exists to
+prevent, met here from the other side."
+  (let* ((a (ant:world-ants w))
+         (b (ant:world-bodies w))
+         (bi (aref (ant:ants-body a) i)))
+    (setf (aref (ant:bodies-kind b) bi)
+          (if (= state ant:+ant-in-nest+) ant:+body-resting+ ant:+body-ant+))
+    (setf (aref (ant:bodies-x b) bi) (float x 1.0f0)
+          (aref (ant:bodies-y b) bi) (float y 1.0f0)
+          (aref (ant:ants-heading a) i) (float heading 1.0f0)
+          (aref (ant:ants-state a) i) state
+          (aref (ant:ants-crop a) i) (float crop 1.0f0)
+          (aref (ant:ants-energy a) i) (float energy 1.0f0)
+          (aref (ant:ants-confidence a) i) 0.0f0)))
+
+(defun %encounter! (w)
+  (ant:bodies-rebuild-hash! (ant:world-bodies w))
+  (ant:ant-encounter-step! w))
+
+(test a-laden-ant-has-the-right-of-way
+  "Both ants give way; the question is how much.  A laden ant on its way
+home yields least and an outbound ant most, which is the asymmetry the
+traffic literature reports and the one the lane structure on a busy trail
+is supposed to rest on.
+
+Nothing in the model says 'walk on the left'.  If lanes appear on a
+crowded trail they are a consequence of this ratio, which is why the
+ratio is what gets asserted."
+  (let ((w (%meet-world)))
+    ;; head-on, slightly offset so the bearing is unambiguous
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
+    (%place! w 1 0.507f0 0.502f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (%encounter! w)
+    (let* ((a (ant:world-ants w))
+           (out (abs (aref (ant:ants-dturn a) 0)))
+           (laden (abs (aref (ant:ants-dturn a) 1))))
+      (is (plusp out) "the outbound ant did not give way at all")
+      (is (plusp laden) "the laden ant did not give way at all")
+      (is (> out (* 2.0f0 laden))
+          "outbound yielded ~,4f against the laden ant's ~,4f, which is not
+a right of way" out laden))))
+
+(test an-ant-being-overtaken-is-not-an-obstruction
+  "The give-way rule keys on *closing*, not on proximity.  An ant walking
+the same way as the one behind it is traffic to be followed, and steering
+around it would break up exactly the columns this milestone is trying to
+let form."
+  (let ((w (%meet-world)))
+    ;; both heading east, one just ahead of the other
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
+    (%place! w 1 0.506f0 0.500f0 0.0f0 ant:+ant-outbound+)
+    (%encounter! w)
+    (let ((a (ant:world-ants w)))
+      (is (zerop (aref (ant:ants-dturn a) 0))
+          "swerved around an ant going the same way: ~,4f"
+          (aref (ant:ants-dturn a) 0)))))
+
+(test a-stranger-is-avoided-harder-and-never-fed
+  "Recognition, and it is kept deliberately small: a non-nestmate is
+turned away from and nothing else.  No fighting, no alarm — those want
+two colonies with something to fight over (§3.12).  What matters now is
+that nestmate and stranger already take different paths.
+
+The half that is easy to forget is the one asserted second.  A stranger
+is not fed, and would not be believed either."
+  (let ((w (%meet-world :colonies 2 :n 4)))
+    ;; ant 0 is colony 0; ant 4 is colony 1
+    (let ((a (ant:world-ants w)))
+      (is (/= (aref (ant:ants-colony a) 0) (aref (ant:ants-colony a) 4))
+          "the fixture did not actually produce two colonies"))
+    ;; a laden nestmate pair, and the same geometry across colonies
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+ :energy 0.2f0)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (%place! w 4 0.300f0 0.300f0 0.0f0 ant:+ant-outbound+ :energy 0.2f0)
+    (%place! w 5 0.306f0 0.300f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    ;; ant 5 is colony 1's; move colony 0's ant 2 next to it instead
+    (%place! w 2 0.700f0 0.700f0 0.0f0 ant:+ant-outbound+ :energy 0.2f0)
+    (%place! w 6 0.706f0 0.700f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (%encounter! w)
+    (let* ((a (ant:world-ants w))
+           (nestmate (abs (aref (ant:ants-dturn a) 0)))
+           (stranger (abs (aref (ant:ants-dturn a) 2))))
+      (is (> stranger (* 1.5f0 nestmate))
+          "turned away from a stranger by ~,4f and a nestmate by ~,4f"
+          stranger nestmate)
+      (is (> (aref (ant:ants-energy a) 0) 0.2f0)
+          "a hungry nestmate was not fed")
+      (is (= (aref (ant:ants-energy a) 2) 0.2f0)
+          "a stranger was fed: energy ~,4f" (aref (ant:ants-energy a) 2))
+      (is (zerop (aref (ant:ants-confidence a) 2))
+          "a stranger's full crop was taken as evidence"))))
+
+(test a-laden-ant-feeds-a-hungry-nestmate
+  "Trophallaxis — §3.9's 'only mechanism in the model needing pairwise
+coupling', and it is: everything else an ant does it does to itself or to
+a field.
+
+What it buys is range.  Until now a forager made the whole round trip on
+the reserve it set out with, so a colony's reach was set by one ant's
+tank; a trail with laden ants coming back along it is a supply line."
+  (let ((w (%meet-world)))
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+ :energy 0.20f0)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+
+             :crop 1.0f0 :energy 1.0f0)
+    (%encounter! w)
+    (let* ((a (ant:world-ants w))
+           (given (- 1.0f0 (aref (ant:ants-crop a) 1)))
+           (got (- (aref (ant:ants-energy a) 0) 0.20f0)))
+      (is (> given 0.0f0) "the donor gave nothing")
+      (is (> got 0.0f0) "the hungry ant received nothing")
+      ;; and the books balance: crop is social food, and the same fraction
+      ;; of it becomes usable energy here as it does at the nest
+      (is (< (abs (- got (* given ant:*crop-to-energy*))) 1.0f-6)
+          "gave ~,6f of crop and delivered ~,6f of energy" given got))))
+
+(test a-full-ant-is-not-fed
+  "The recipient has to be hungry, or a busy trail would be nothing but
+ants handing food back and forth instead of carrying it home."
+  (let ((w (%meet-world)))
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+ :energy 1.0f0)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (%encounter! w)
+    (is (= 1.0f0 (aref (ant:ants-crop (ant:world-ants w)) 1))
+        "fed an ant with a full tank")))
+
+(test a-donor-cannot-give-away-more-than-it-carries
+  "One partner per donor, and this is why.  A laden ant pressed round by
+a crowd of hungry nestmates must not hand each of them a meal out of the
+same crop — the queue at a source is exactly that geometry, and a rule
+that paid out per neighbour would create food."
+  (let ((w (%meet-world :n 6)))
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-returning+
+             :crop 0.003f0 :energy 1.0f0)   ; less crop than one full gift
+    (%place! w 1 0.505f0 0.500f0 3.1415927f0 ant:+ant-outbound+ :energy 0.1f0)
+    (%place! w 2 0.504f0 0.503f0 3.1415927f0 ant:+ant-outbound+ :energy 0.1f0)
+    (%place! w 3 0.504f0 0.497f0 3.1415927f0 ant:+ant-outbound+ :energy 0.1f0)
+    (%encounter! w)
+    (let* ((a (ant:world-ants w))
+           (fed (+ (- (aref (ant:ants-energy a) 1) 0.1f0)
+                   (- (aref (ant:ants-energy a) 2) 0.1f0)
+                   (- (aref (ant:ants-energy a) 3) 0.1f0))))
+      (is (>= (aref (ant:ants-crop a) 0) 0.0f0)
+          "the donor's crop went negative: ~,6f" (aref (ant:ants-crop a) 0))
+      (is (< (abs (- fed (* 0.003f0 ant:*crop-to-energy*))) 1.0f-6)
+          "three mouths drew ~,6f of energy from a crop worth ~,6f"
+          fed (* 0.003f0 ant:*crop-to-energy*)))))
+
+(test every-donor-sees-the-tick-as-it-began
+  "The determinism discipline, and a sharp test of it.
+
+Two donors, one recipient sitting just below the threshold at which it
+would stop accepting food.  Read from a buffer, both donors see the
+hunger the tick began with and both give.  Written in place, the second
+donor would see a recipient the first had already lifted over the line
+and would walk past — so the outcome would depend on the order the ant
+table happens to be in, which is the determinism bug that survives every
+test until the day something is threaded."
+  (let* ((w (%meet-world))
+         (a (ant:world-ants w))
+         ;; one gift lands it above *trophallaxis-threshold*
+         (start (- ant:*trophallaxis-threshold*
+                   (* 0.4f0 ant:*trophallaxis-rate* ant:*crop-to-energy*))))
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+ :energy start)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (%place! w 2 0.494f0 0.500f0 0.0f0 ant:+ant-returning+ :crop 1.0f0)
+    (%encounter! w)
+    (let ((got (- (aref (ant:ants-energy a) 0) start))
+          (one (* ant:*trophallaxis-rate* ant:*crop-to-energy*)))
+      (is (> got (* 1.9f0 one))
+          "received ~,6f, which is ~,2f gifts and not two — one donor saw
+the other's transfer" got (/ got one)))))
+
+(test news-from-a-laden-nestmate-buys-persistence-and-nothing-else
+  "The whole of the social-information design, in one test.
+
+An outbound ant that passes a loaded nestmate coming the other way learns
+that this ground has been paying *recently*, which pheromone — an average
+over the last several minutes — cannot tell it.  What it does **not**
+learn is a direction: that was tested in this genus and came out negative
+(Grüter, Czaczkes et al. 2017), and a model that let a contact hand over
+a bearing would be inventing a channel the animal does not have.
+
+So the second assertion is the important one.  With giving way switched
+off, an encounter must move confidence and leave the heading exactly
+where it was."
+  (let ((ant:*yield-rate* 0.0f0))
+    (let* ((w (%meet-world))
+           (a (ant:world-ants w)))
+      (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
+      (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+      (%encounter! w)
+      (is (plusp (aref (ant:ants-confidence a) 0))
+          "passed a loaded nestmate and learned nothing")
+      (is (= 0.0f0 (aref (ant:ants-heading a) 0))
+          "a contact steered the ant to ~,4f; encounters must not carry a
+direction" (aref (ant:ants-heading a) 0))))
+  ;; an empty nestmate is no evidence at all
+  (let* ((w (%meet-world))
+         (a (ant:world-ants w)))
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 0.0f0)
+    (%encounter! w)
+    (is (zerop (aref (ant:ants-confidence a) 0))
+        "an empty nestmate was taken as evidence of food")))
+
+(test confidence-goes-stale
+  "A colony whose evidence never expired would keep sending ants down a
+route for as long as it once worked — which is the failure the no-entry
+field exists to cure, and would be perverse to reintroduce here."
+  (let* ((w (%meet-world))
+         (a (ant:world-ants w)))
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (%encounter! w)
+    (let ((peak (aref (ant:ants-confidence a) 0)))
+      (is (plusp peak))
+      ;; walk the informant away and let the news age
+      (%place! w 1 0.900f0 0.900f0 0.0f0 ant:+ant-returning+ :crop 1.0f0)
+      (dotimes (k 400) (%encounter! w))
+      (is (< (aref (ant:ants-confidence a) 0) (* 0.5f0 peak))
+          "confidence held at ~,4f of its peak over 20 s"
+          (/ (aref (ant:ants-confidence a) 0) peak)))))
+
+(test encounters-have-an-exact-off-position
+  "*antennal-range* = 0 has to restore the model that had no encounters
+at all, or none of the measurements above mean anything."
+  (let ((ant:*antennal-range* 0.0f0))
+    (let* ((w (%meet-world))
+           (a (ant:world-ants w)))
+      (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+ :energy 0.2f0)
+      (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+      (%encounter! w)
+      (is (zerop (aref (ant:ants-dturn a) 0)))
+      (is (zerop (aref (ant:ants-confidence a) 0)))
+      (is (= 1.0f0 (aref (ant:ants-crop a) 1)))
+      (is (= 0.2f0 (aref (ant:ants-energy a) 0))))))
+
+(test a-corpse-is-not-an-ant
+  "The reverse map from body to ant has to survive a death.  A body
+outlives the ant that had it — nothing removes a corpse (§3.11) — so a
+stale entry would hand the encounter pass a dead ant's index, and every
+rule here would then read the state of whatever ant next took that slot."
+  (let* ((w (%meet-world))
+         (a (ant:world-ants w))
+         (colony (first (ant:world-colonies w))))
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+ :energy 0.2f0)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (let ((bi (aref (ant:ants-body a) 1)))
+      (ant:kill-ant w colony 1)
+      (is (= ant:+no-ant+ (aref (ant:ants-of-body a) bi))
+          "the dead ant's body still points at an ant"))
+    (%encounter! w)
+    (is (zerop (aref (ant:ants-dturn a) 0))
+        "gave way to a corpse")
+    (is (= 0.2f0 (aref (ant:ants-energy a) 0))
+        "a corpse handed over a meal")))
