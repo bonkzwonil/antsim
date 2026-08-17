@@ -42,12 +42,6 @@
    #:colony-brood-pipe #:colony-brood-head
    #:*trail-lost-threshold* #:*trail-follow-threshold* #:*trail-memory-decay*
    #:*uturn-ticks* #:*uturn-cast-gain*
-   #:*stall-window* #:*stall-pinned-fraction* #:*stall-detour-fraction*
-   #:*detour-ticks* #:*detour-release* #:*detour-abandon*
-   #:*homing-progress* #:*wall-veto*
-   ;; the no-entry field (§3.9, docs/navigation.md Layer 3)
-   #:*repel-tau* #:*repel-deposit* #:*repel-cap* #:*repel-weight*
-   #:*repel-threshold* #:*repel-dead-end* #:repel-tau
    ;; when two ants meet (M3)
    #:*antennal-range* #:*encounter-cone* #:*yield-rate*
    #:*yield-laden* #:*yield-returning* #:*yield-outbound*
@@ -82,8 +76,7 @@
    #:food #:food-x #:food-y #:food-r #:food-amount #:food-initial
    #:food-density #:food-density-for
    #:food-quality #:food-renew #:food-empty-p #:food-body
-   #:colony #:colony-id #:colony-name #:colony-field #:colony-repel
-   #:colony-stock
+   #:colony #:colony-id #:colony-name #:colony-field #:colony-stock
    #:colony-population #:colony-capacity #:colony-born #:colony-died
    #:colony-nest-x #:colony-nest-y #:colony-nest-r #:colony-alive-p
    #:colony-forage-urgency #:colony-leave-probability
@@ -100,10 +93,6 @@
    #:ants-hvx #:ants-hvy #:ants-px #:ants-py #:ants-count-state
    #:ants-trailed #:ants-exit #:ants-smelled #:ants-cast #:ants-resolve
    #:ants-gait #:ants-waited
-   ;; Layer 0 — one window, three readings (§3.4, docs/navigation.md)
-   #:ants-h0x #:ants-h0y #:ants-walked #:ants-window #:ants-stalled
-   #:ants-detour #:ants-hv-latch #:ants-homing #:terrain-near-p
-   #:stall-reset! #:stall-step!
    ;; when two ants meet (M3)
    #:ants-confidence #:ants-dturn #:ants-dcrop #:ants-denergy
    #:ants-of-body #:+no-ant+ #:ant-afield-p #:ant-encounter-step!
@@ -126,9 +115,7 @@
    #:bridge-share #:bridge-winner
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
-   #:repel-at #:repel-deposit! #:clear-bearing
-   #:ant-handedness #:ant-pace #:ant-speed #:ant-trail-offset
-   #:*trail-lane-offset*
+   #:ant-handedness #:ant-pace
    #:world-step! #:world-run! #:colony-step! #:colony-feed! #:world-seed-population!
    ;; render/png (antsim/render)
    #:write-png #:crc32 #:adler32

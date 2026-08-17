@@ -17,13 +17,6 @@
   (body-program 0 :type unsigned-byte)
   (empty-vao 0 :type unsigned-byte)
   (field-tex 0 :type unsigned-byte)
-  ;; The no-entry field (§3.9), its own texture rather than a second
-  ;; channel of the first.  Two textures because the two fields are two
-  ;; FIELD structures with their own caps and their own evaporation, and
-  ;; packing them together would tie the renderer to an assumption the
-  ;; model does not make — that a colony has exactly two chemicals.  The
-  ;; third and fourth (alarm, nest-marking) are scheduled.
-  (repel-tex 0 :type unsigned-byte)
   (field-w 0 :type fixnum)
   (field-h 0 :type fixnum)
   (field-scratch nil :type (or null f32v))
@@ -72,22 +65,19 @@ field grid."
             :field-scratch (mkf32 (* field-width field-height))
             :body-capacity body-capacity
             :poly-capacity poly-capacity)))
-    ;; pheromone textures: the trail, and the no-entry field (§3.9)
-    (flet ((make-field-texture ()
-             (let ((tex (gl:gen-texture)))
-               (gl:bind-texture :texture-2d tex)
-               (gl:tex-image-2d :texture-2d 0 :r32f field-width field-height 0
-                                :red :float (cffi:null-pointer))
-               ;; LINEAR so a zoomed-in trail is a gradient rather than a
-               ;; mosaic; the *sampling* the ants do is still nearest (see
-               ;; FIELD-AT), and those are deliberately different questions
-               (gl:tex-parameter :texture-2d :texture-min-filter :linear)
-               (gl:tex-parameter :texture-2d :texture-mag-filter :linear)
-               (gl:tex-parameter :texture-2d :texture-wrap-s :clamp-to-edge)
-               (gl:tex-parameter :texture-2d :texture-wrap-t :clamp-to-edge)
-               tex)))
-      (setf (renderer-field-tex r) (make-field-texture)
-            (renderer-repel-tex r) (make-field-texture)))
+    ;; pheromone texture
+    (let ((tex (gl:gen-texture)))
+      (gl:bind-texture :texture-2d tex)
+      (gl:tex-image-2d :texture-2d 0 :r32f field-width field-height 0
+                       :red :float (cffi:null-pointer))
+      ;; LINEAR so a zoomed-in trail is a gradient rather than a mosaic;
+      ;; the *sampling* the ants do is still nearest (see FIELD-AT), and
+      ;; those are deliberately different questions
+      (gl:tex-parameter :texture-2d :texture-min-filter :linear)
+      (gl:tex-parameter :texture-2d :texture-mag-filter :linear)
+      (gl:tex-parameter :texture-2d :texture-wrap-s :clamp-to-edge)
+      (gl:tex-parameter :texture-2d :texture-wrap-t :clamp-to-edge)
+      (setf (renderer-field-tex r) tex))
     ;; body instance buffer
     (let ((buf (gl:gen-buffer))
           (bytes (* body-capacity 4 4)))     ; vec4 per body
@@ -167,7 +157,7 @@ field grid."
   (gl:delete-program (renderer-ant-program r))
   (gl:delete-vertex-arrays (list (renderer-empty-vao r) (renderer-poly-vao r)
                                  (renderer-ant-vao r)))
-  (gl:delete-textures (list (renderer-field-tex r) (renderer-repel-tex r)))
+  (gl:delete-textures (list (renderer-field-tex r)))
   (gl:delete-buffers (list (renderer-body-ssbo r) (renderer-poly-vbo r)
                            (renderer-ant-vbo r) (renderer-ant-ebo r)
                            (renderer-ant-ssbo r)))
@@ -177,12 +167,11 @@ field grid."
 ;;; Uploads
 ;;; --------------------------------------------------------------------
 
-(defun upload-field (r field &optional (tex (renderer-field-tex r)))
-  "Push a colony's field to a texture — the trail by default, or the
-no-entry field when TEX says so (§3.9)."
+(defun upload-field (r field)
+  "Push a colony's trail field to the texture."
   (declare (type renderer r) (type field field))
   (let ((c (field-c field)))
-    (gl:bind-texture :texture-2d tex)
+    (gl:bind-texture :texture-2d (renderer-field-tex r))
     (gl:pixel-store :unpack-alignment 1)
     (cffi:with-foreign-object (buf :float (length c))
       (dotimes (i (length c))
@@ -393,34 +382,17 @@ framebuffer.  Layers back to front, per §5.1."
 
     ;; --- ground + pheromone ------------------------------------------
     (let ((c (nth colony (world-colonies w))))
-      (when c
-        (upload-field r (colony-field c))
-        (upload-field r (colony-repel c) (renderer-repel-tex r))))
+      (when c (upload-field r (colony-field c))))
     (let ((p (renderer-field-program r)))
       (gl:use-program p)
       (gl:active-texture :texture0)
       (gl:bind-texture :texture-2d (renderer-field-tex r))
       (gl:uniformi (gl:get-uniform-location p "u_field") 0)
-      (gl:active-texture :texture1)
-      (gl:bind-texture :texture-2d (renderer-repel-tex r))
-      (gl:uniformi (gl:get-uniform-location p "u_repel") 1)
-      (gl:active-texture :texture0)
       (gl:uniformf (gl:get-uniform-location p "u_bounds") x0 y0 x1 y1)
       (gl:uniformf (gl:get-uniform-location p "u_world")
                    (world-width w) (world-height w))
       (gl:uniformf (gl:get-uniform-location p "u_k") *choice-k*)
       (gl:uniformf (gl:get-uniform-location p "u_cap") *trail-cap*)
-      (gl:uniformf (gl:get-uniform-location p "u_repel_cap") *repel-cap*)
-      ;; the odour halos, capped at what the shader declares
-      (let ((foods (remove-if #'food-empty-p (world-foods w))))
-        (gl:uniformi (gl:get-uniform-location p "u_nfood")
-                     (min 8 (length foods)))
-        (loop for f in foods
-              for i from 0 below 8
-              do (gl:uniformf
-                  (gl:get-uniform-location p (format nil "u_food[~d]" i))
-                  (food-x f) (food-y f)
-                  (food-current-radius f) *food-odour-reach*)))
       (gl:uniformi (gl:get-uniform-location p "u_blocked_shade") 1)
       (gl:bind-vertex-array (renderer-empty-vao r))
       (gl:draw-arrays :triangles 0 3))

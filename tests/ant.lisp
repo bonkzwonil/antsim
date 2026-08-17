@@ -74,8 +74,7 @@ only holds if the three options come out equally likely."
   "n > 1 is the entire model (§3.3): a small concentration difference has
 to produce a *large* probability difference.  With n = 2 and one arm at
 2k, the preference must be well past the linear 2:1."
-  (let* ((ant:*trail-lane-offset* 0.0f0) ; isolate the choice function
-         (w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 32))
+  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 32))
          (c (ant:add-colony w :nest-x 0.2f0 :nest-y 0.2f0))
          (f (ant:colony-field c))
          (right 0) (n 6000))
@@ -100,7 +99,6 @@ a doubled concentration must produce only a *linear* preference.  If this
 ever shows amplification, the selection seen elsewhere is coming from
 something other than the choice function."
   (let* ((ant:*choice-n* 1.0f0)
-         (ant:*trail-lane-offset* 0.0f0) ; isolate the choice function
          (w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 32))
          (c (ant:add-colony w :nest-x 0.2f0 :nest-y 0.2f0))
          (f (ant:colony-field c))
@@ -169,25 +167,16 @@ seed (§3.4)."
             (is (< arrived (round (* 4 (/ out 0.001f0))))
                 "took ~d ticks to cover ~,3f m; that is not homing" arrived out)))))))
 
-(defun %walled-homing-run (steps &key (ticks 20000) (detour 0))
+(defun %walled-homing-run (steps &key (ticks 20000))
   "Put one laden ant above a wall, its nest below, and let it try to get
 home.  Returns the tick it arrived on, or NIL.
 
 The wall does not span the arena: there is a way round its left end, so
-the only question the run asks is whether the ant finds it.
-
-DETOUR is Layer 1's commitment window and defaults to *off* here, so this
-fixture keeps measuring the antennal scan it was written for.  There are
-now two mechanisms that can get an ant round a wall and they have to be
-measurable apart — with the latch on, the scan's own control run
-succeeds, which would quietly turn this regression test into a test of
-nothing.  A-COMMITTED-ANT-ROUNDS-A-WALL-WITHOUT-THE-SCAN is the other
-half."
+the only question the run asks is whether the ant finds it."
   (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16))
          (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.2f0 :nest-r 0.02f0
                               :stock 1.0f6))
          (a (ant:world-ants w))
-         (ant:*detour-ticks* detour)
          (ant:*homing-scan-steps* steps))
     (ant:add-obstacle w '(0.30 0.40 0.90 0.40 0.90 0.45 0.30 0.45))
     (ant:world-seed-population! w c 1)
@@ -239,34 +228,6 @@ test the scan" without)
       (is (< with 6000) "took ~d ticks, which is loitering, not walking"
           with))))
 
-;;; **What Layer 1 does not do, recorded because a test once claimed it
-;;; did.**
-;;;
-;;; There was a test here asserting that the detour latch alone gets a
-;;; laden ant round a wall with the antennal scan switched off.  It
-;;; passed, and it was asserting a bug.
-;;;
-;;; The latch suppresses the homing urge, and the first version re-armed
-;;; itself every window — because a latched ant makes no homeward
-;;; progress, which is exactly the evidence the detour test looks for.  So
-;;; homing was off *permanently*, the ant fell back on the correlated
-;;; random walk, and a random walk does eventually find its way round a
-;;; wall in 20 000 ticks.  What the test measured was an ant that had
-;;; stopped trying to go home at all.
-;;;
-;;; The same runaway in a colony is ants drifting to corners in furballs,
-;;; laying trail as they went, with full sources untouched and the larder
-;;; emptying — all of which was reported from the window and none of which
-;;; showed in delivery aggregates, because the ants that had not yet been
-;;; caught were still feeding the nest.
-;;;
-;;; With the feedback removed the latch is a much smaller thing: it buys
-;;; one bounded window of not-homing, which is enough to break the
-;;; step-out-and-turn-back oscillation but not enough to navigate an
-;;; obstacle.  Doing that properly is Layer 2 — remembered corners — which
-;;; is not built.  A-LADEN-ANT-GETS-ROUND-A-WALL keeps the latch off for
-;;; the same reason it always did: it is a test of the antennal scan.
-
 (defparameter +uturn-run-ticks+ 4000)
 
 (defun %trail-departure-tick (lost seed)
@@ -278,18 +239,6 @@ The trail runs west to east and ends at x = 0.40 with open ground
 beyond, so an ant following it eastward walks off the end.  Nothing
 stops it leaving; the question is how long it stays."
   (let* ((ant:*trail-lost-threshold* lost)
-         ;; Lane offset off, and the reason is this fixture rather than
-         ;; the rule.  The trail below is laid with FIELD-DEPOSIT! at
-         ;; single cells, so it is one cell — 5 mm — wide, where a real
-         ;; trail is a row of 3 cm packets.  A lane preference of 8 mm
-         ;; therefore puts the ant entirely beside this trail rather than
-         ;; across its width, and what would be measured is the fixture's
-         ;; thinness and not the U-turn edge this test is about.
-         ;;
-         ;; The interaction is real at full width too and is recorded on
-         ;; *trail-lane-offset*: ants spread across a road leave it
-         ;; sooner, which is most of that parameter's cost in food.
-         (ant:*trail-lane-offset* 0.0f0)
          (w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16
                             :seed seed))
          (c (ant:add-colony w :nest-x 0.1f0 :nest-y 0.5f0 :nest-r 0.02f0
@@ -988,356 +937,62 @@ that a colony cannot live on nothing."
         "population ~d did not fall" (ant:colony-population c))
     (is (plusp (ant:colony-died c)))))
 
-;;; ---------------------------------------- Layer 0: the stall window
-;;;
-;;; An ant carrying a home vector already holds everything it needs to
-;;; notice it is getting nowhere, and the model used to throw half of it
-;;; away — the vector's length was computed every tick and read only for a
-;;; validity check.  Snapshot it, count the walking between snapshots, and
-;;; the same two numbers give three readings:
-;;;
-;;;     L  >=  |h - h0|  >=  |h0| - |h|
-;;;
-;;; The two gaps are different diagnoses and the tests below keep them
-;;; apart, because the cheap mistake is to assume one stands in for the
-;;; other.  A pinned ant barely displaces, so a metres-denominated test
-;;; crawls on exactly the case that most needs catching; a detouring ant
-;;; displaces perfectly well and simply does not get home.
+;;; ------------------------------------- feeding at a source (M3 fix)
 
-(defun %stall-once (&key (state ant:+ant-returning+)
-                         (h0 '(0.4f0 0.0f0)) (h '(0.4f0 0.0f0))
-                         (walked 0.0f0))
-  "Contrive one ant's window, close it, and report what it concluded.
+(test an-ant-leaves-a-source-with-a-full-crop
+  "Regression, and a large one.
 
-A unit test on the arithmetic rather than a run, deliberately: the three
-readings are a claim about two snapshots, and driving an ant into a real
-corner to produce them would test the corner as much as the rule.
-Returns (values cast stalled)."
-  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
-         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
-         (a (ant:world-ants w)))
-    (ant:world-seed-population! w c 1)
-    (setf (aref (ant:ants-state a) 0) state
-          (aref (ant:ants-h0x a) 0) (first h0)
-          (aref (ant:ants-h0y a) 0) (second h0)
-          (aref (ant:ants-hvx a) 0) (first h)
-          (aref (ant:ants-hvy a) 0) (second h)
-          (aref (ant:ants-walked a) 0) walked
-          (aref (ant:ants-window a) 0) (1- ant:*stall-window*)
-          (aref (ant:ants-cast a) 0) 0
-          (aref (ant:ants-stalled a) 0) 0.0f0)
-    (ant:stall-step! w)
-    (values (aref (ant:ants-cast a) 0)
-            (aref (ant:ants-stalled a) 0))))
+A feeding ant does not hold its own position: the pile is a blocking body
+with a queue round it, and its edge retreats as it is eaten
+(FOOD-CURRENT-RADIUS).  Asking WORLD-FOOD-AT whether the ant is still
+*on* the source therefore treated every shove as the food running out and
+sent the ant home with whatever it had.  Measured before the fix, 48% of
+all departures from food were ants that had been pushed off rather than
+filled up, and the mean load carried home was 0.63 of a crop.
 
-(test the-two-gaps-are-different-diagnoses
-  "L - |h-h0| is walking that went nowhere; |h-h0| - (|h0|-|h|) is travel
-that went somewhere other than home.  An ant can have either without the
-other, and if the implementation ever conflates them one of these fails."
-  ;; Walked 20 cm, got 1 cm: pinned, and not detouring — what little
-  ;; ground it made was straight at the nest.
-  (multiple-value-bind (cast stalled)
-      (%stall-once :h0 '(0.40f0 0.0f0) :h '(0.39f0 0.0f0) :walked 0.20f0)
-    (is (plusp cast) "walked 20 cm for 1 cm of ground and did not notice")
-    (is (zerop stalled) "a pinned ant must not book a detour: ~,4f" stalled))
-  ;; Walked 10 cm and displaced all of it, but sideways: the range home is
-  ;; unchanged, so every centimetre was a detour and none of it a stall.
-  (multiple-value-bind (cast stalled)
-      (%stall-once :h0 '(0.40f0 0.0f0) :h '(0.40f0 0.10f0) :walked 0.103f0)
-    (is (zerop cast) "an ant that covered its ground is not pinned")
-    (is (> stalled 0.05f0)
-        "walked 10 cm across the bearing home and booked ~,4f" stalled))
-  ;; And an ant driving straight home is neither.
-  (multiple-value-bind (cast stalled)
-      (%stall-once :h0 '(0.40f0 0.0f0) :h '(0.30f0 0.0f0) :walked 0.102f0)
-    (is (zerop cast))
-    (is (zerop stalled) "a good trip booked a stall of ~,4f" stalled)))
-
-(test the-detour-test-never-fires-on-an-outbound-ant
-  "The one way this rule could be actively harmful.
-
-An outbound ant is *supposed* to walk away from the nest, so its
-homeward progress is negative by design and the detour gap is large on
-every successful trip.  Measured against it, the first thing the colony
-would write off is the route to the food."
-  (multiple-value-bind (cast stalled)
-      (%stall-once :state ant:+ant-outbound+
-                   :h0 '(0.10f0 0.0f0) :h '(0.40f0 0.0f0) :walked 0.31f0)
-    (declare (ignore cast))
-    (is (zerop stalled)
-        "an outbound ant walking 30 cm away from home booked ~,4f" stalled))
-  ;; but it is still pinned if it is pinned — being wedged has nothing to
-  ;; do with which way the ant is trying to go
-  (multiple-value-bind (cast stalled)
-      (%stall-once :state ant:+ant-outbound+
-                   :h0 '(0.40f0 0.0f0) :h '(0.40f0 0.0f0) :walked 0.20f0)
-    (declare (ignore stalled))
-    (is (plusp cast) "a wedged outbound ant must still notice")))
-
-(test a-good-window-clears-the-evidence
-  "The stall is evidence about ground the ant is still on.  An ant that
-escapes a pocket and starts making way must not carry the old verdict
-for the rest of the trip."
-  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
-         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
-         (a (ant:world-ants w)))
-    (ant:world-seed-population! w c 1)
-    (flet ((close-window (h0 h walked)
-             (setf (aref (ant:ants-state a) 0) ant:+ant-returning+
-                   (aref (ant:ants-h0x a) 0) (first h0)
-                   (aref (ant:ants-h0y a) 0) (second h0)
-                   (aref (ant:ants-hvx a) 0) (first h)
-                   (aref (ant:ants-hvy a) 0) (second h)
-                   (aref (ant:ants-walked a) 0) walked
-                   (aref (ant:ants-window a) 0) (1- ant:*stall-window*))
-             (ant:stall-step! w)))
-      ;; two bad windows accumulate
-      (close-window '(0.40f0 0.0f0) '(0.40f0 0.10f0) 0.103f0)
-      (let ((one (aref (ant:ants-stalled a) 0)))
-        (close-window '(0.40f0 0.10f0) '(0.40f0 0.20f0) 0.103f0)
-        (is (> (aref (ant:ants-stalled a) 0) one)
-            "a second bad window did not add to the first"))
-      ;; and one good one wipes the slate
-      (close-window '(0.40f0 0.0f0) '(0.30f0 0.0f0) 0.102f0)
-      (is (zerop (aref (ant:ants-stalled a) 0))
-          "made 10 cm of ground and still carries ~,4f"
-          (aref (ant:ants-stalled a) 0)))))
-
-(test a-resting-ant-carries-no-stall
-  "A window is a statement about a stretch of walking.  An ant that has
-stopped walking has no such stretch, and must not be able to accumulate
-one over the minutes it spends in the nest and then act on it the moment
-it sets out."
-  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
-         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
-         (a (ant:world-ants w)))
-    (ant:world-seed-population! w c 1)
-    (setf (aref (ant:ants-state a) 0) ant:+ant-in-nest+
-          (aref (ant:ants-stalled a) 0) 0.9f0
-          (aref (ant:ants-walked a) 0) 5.0f0
-          (aref (ant:ants-window a) 0) 90)
-    (ant:stall-step! w)
-    (is (zerop (aref (ant:ants-stalled a) 0)))
-    (is (zerop (aref (ant:ants-walked a) 0)))
-    (is (zerop (aref (ant:ants-window a) 0)))
-    ;; and the fresh window is anchored on where it actually is
-    (is (= (aref (ant:ants-h0x a) 0) (aref (ant:ants-hvx a) 0)))
-    (is (= (aref (ant:ants-h0y a) 0) (aref (ant:ants-hvy a) 0)))))
-
-(test the-pedometer-counts-walking-not-ground-made-good
-  "ANTS-WALKED is the step the ant *attempted*, which is the whole of the
-pinned signal: an ant shoving at a wall is walking, and the fact that
-none of it becomes ground is exactly what it needs to find out.  Closed
-over net displacement instead, L and |h-h0| would be the same quantity
-and the first gap would be identically zero.
-
-The arena boundary is the cheap way to hold an ant still while it walks
-at full speed, the same trick PATH-INTEGRATION-TRACKS-ACTUAL-DISPLACEMENT
-uses."
-  (let* ((ant:*stall-window* 0)         ; isolate the pedometer itself
-         (w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
-         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
+The fix is WORLD-FOOD-NEAR: an ant that has drifted off the pile walks
+back onto it and can feed from a radius rather than a point.  Both halves
+are needed — stepping back without being able to eat from the wider
+radius leaves an ant hovering at the edge, pushed out as fast as it steps
+in, filling nothing, for ever."
+  (let* ((w (ant:make-world :width 0.5f0 :height 0.5f0 :capacity 200
+                            :seed 7))
+         (c (ant:add-colony w :nest-x 0.10f0 :nest-y 0.10f0 :nest-r 0.02f0
+                              :stock 1.0f6))
          (a (ant:world-ants w))
          (b (ant:world-bodies w)))
-    (ant:world-seed-population! w c 1)
-    (let ((bi (aref (ant:ants-body a) 0)))
-      (setf (aref (ant:bodies-x b) bi) 0.0f0
-            (aref (ant:bodies-y b) bi) 0.5f0
-            (aref (ant:ants-state a) 0) ant:+ant-outbound+
-            (aref (ant:ants-walked a) 0) 0.0f0)
-      (dotimes (k 200)
-        (setf (aref (ant:ants-energy a) 0) 1.0f0
-              (aref (ant:ants-heading a) 0) 3.1415927f0)  ; into the wall
-        (ant:world-step! w))
-      (is (< (aref (ant:bodies-x b) bi) 0.02f0)
-          "the ant was supposed to stay pinned at the wall")
-      ;; 200 ticks at ~2 cm/s is about 20 cm of walking, none of it ground
-      (is (> (aref (ant:ants-walked a) 0) 0.15f0)
-          "walked ~,4f m while stepping for 10 s"
-          (aref (ant:ants-walked a) 0)))))
-
-(test a-pinned-ant-notices-it-is-pinned
-  "Both of the ant-oscillation bugs in this repository's history are the
-first gap — 12 mm in 20 000 ticks (ANT-HANDEDNESS) and 8 mm in 20 000
-(*homing-scan-steps*) — and neither ant had any way to notice.  This is
-that way, end to end, on a live tick loop.
-
-The off position is asserted too.  A sensor whose consequence also
-appears without it is not being tested, and *stall-window* = 0 is the
-exact off switch."
-  (flet ((ever-cast (window)
-           (let* ((ant:*stall-window* window)
-                  (w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 8))
-                  (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0
-                                       :stock 1.0f6))
-                  (a (ant:world-ants w))
-                  (b (ant:world-bodies w)))
-             (ant:world-seed-population! w c 1)
-             (let ((bi (aref (ant:ants-body a) 0)))
-               (setf (aref (ant:bodies-x b) bi) 0.0f0
-                     (aref (ant:bodies-y b) bi) 0.5f0
-                     (aref (ant:ants-state a) 0) ant:+ant-outbound+)
-               (dotimes (k 300 nil)
-                 (setf (aref (ant:ants-energy a) 0) 1.0f0
-                       (aref (ant:ants-heading a) 0) 3.1415927f0)
-                 (ant:world-step! w)
-                 (when (plusp (aref (ant:ants-cast a) 0))
-                   (return t)))))))
-    (is-true (ever-cast 100)
-             "walked into a wall for 15 s and never noticed")
-    (is-false (ever-cast 0)
-              "noticed with the window switched off, so this test does
-not test the window")))
-
-;;; ------------------------------------- Layer 3: the no-entry field
-;;;
-;;; The colony's only *fast* negative feedback.  Everything else it can do
-;;; to stop recruiting runs at the speed of evaporation — tens of minutes —
-;;; so a branch that has stopped paying keeps dispatching ants for another
-;;; *trail-tau*, which is the loop behind the collapse traced in §3.4.
-;;;
-;;; The first test here is the one that matters most, and it is a
-;;; prohibition rather than a behaviour.
-
-(defun %repel-world ()
-  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16))
-         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :nest-r 0.02f0
-                              :stock 1.0f6)))
-    (values w c)))
-
-(test the-nest-door-is-never-marked
-  "The load-bearing prohibition, and the reason the two Layer 0 gaps are
-kept apart at all.
-
-The densest crowd in any run is the queue at the nest entrance.  It is
-emergent, it is correct, and §3.11 and *nest-arrival-radius* both record
-it as such — and every ant in it is stalled, jostled and getting nowhere
-by any measure this model has.  If that could deposit, the colony would
-chemically write off its own front door and starve in a ring around it,
-which is precisely the failure widening the arrival radius had to fix.
-
-Crowding is not an obstacle.  It clears."
-  (multiple-value-bind (w c) (%repel-world)
-    ;; every direction, at and just inside the arrival radius
-    (dotimes (k 12)
-      (let* ((ang (* 0.5236f0 k))
-             (r (* 0.9f0 ant:*nest-arrival-radius*)))
-        (ant:repel-deposit! w c (+ 0.5f0 (* r (cos ang)))
-                            (+ 0.5f0 (* r (sin ang))) 5.0f0)))
-    (ant:field-step! (ant:colony-repel c))
-    (is (zerop (ant:field-total (ant:colony-repel c)))
-        "the colony marked its own doorway: ~,4f units"
-        (ant:field-total (ant:colony-repel c))))
-  ;; and the exclusion is a radius, not a blanket ban — ground further out
-  ;; is markable, or the rule would do nothing at all
-  (multiple-value-bind (w c) (%repel-world)
-    (ant:repel-deposit! w c 0.80f0 0.5f0 5.0f0)
-    (ant:field-step! (ant:colony-repel c))
-    (is (plusp (ant:field-total (ant:colony-repel c)))
-        "nothing anywhere is markable, so the prohibition proves nothing")))
-
-(test a-live-source-is-never-marked-but-a-dry-one-is
-  "The same argument one step out: ants pile up at food and the pile is
-the point.  The asymmetry is the interesting half — a source that has run
-dry is exactly a dead end worth marking, and that falls out of the
-emptiness test rather than needing a rule of its own."
-  (multiple-value-bind (w c) (%repel-world)
-    (ant:add-food w 0.8f0 0.5f0 0.02f0 100.0f0)
-    (ant:repel-deposit! w c 0.8f0 0.5f0 5.0f0)
-    (ant:field-step! (ant:colony-repel c))
-    (is (zerop (ant:field-total (ant:colony-repel c)))
-        "marked a source with 100 units still in it"))
-  (multiple-value-bind (w c) (%repel-world)
-    (let ((f (ant:add-food w 0.8f0 0.5f0 0.02f0 100.0f0)))
-      (setf (ant:food-amount f) 0.0f0)
-      (ant:repel-deposit! w c 0.8f0 0.5f0 5.0f0)
-      (ant:field-step! (ant:colony-repel c))
-      (is (plusp (ant:field-total (ant:colony-repel c)))
-          "an exhausted source is a dead end and was not marked"))))
-
-(test a-marked-direction-loses-the-choice
-  "The field has to reach the choice function, and *repel-weight* = 0 has
-to be an exact off position — a sensor whose consequence appears without
-it is not being tested."
-  (flet ((left-share (weight)
-           (let ((ant:*repel-weight* weight)
-                 ;; isolate the field's effect on the choice function: a
-                 ;; lane offset slides the sample points sideways, which
-                 ;; would move them off the single marked cell this test
-                 ;; constructs
-                 (ant:*trail-lane-offset* 0.0f0))
-             (multiple-value-bind (w c) (%repel-world)
-               ;; mark the left antenna's sample point only
-               (let ((hl (- 0.0f0 ant:*sensor-spread*)))
-                 (ant:field-deposit!
-                  (ant:colony-repel c)
-                  (+ 0.5f0 (* ant:*sensor-offset* (cos hl)))
-                  (+ 0.5f0 (* ant:*sensor-offset* (sin hl)))
-                  8.0f0))
-               (ant:field-step! (ant:colony-repel c))
-               (let ((left 0) (n 3000))
-                 (dotimes (id n)
-                   (when (< (ant:choose-turn w 0 id 7 0.5f0 0.5f0 0.0f0) 0.0f0)
-                     (incf left)))
-                 (/ (float left) n))))))
-    (let ((marked (left-share 1.0f0))
-          (off (left-share 0.0f0)))
-      (is (< marked (* 0.6f0 off))
-          "a marked direction was still chosen ~,3f of the time against ~,3f
-unmarked, so the field is not reaching the choice function" marked off)
-      (is (< (abs (- off 1/3)) 0.05f0)
-          "with the field off the three directions must be equally likely,
-and left came out ~,3f" off))))
-
-(test a-homing-ant-routes-around-a-marked-pocket
-  "Why the field has to reach CLEAR-BEARING as well, and not only the
-choice function.
-
-A laden ant's heading is set by the homing term *after* the choice
-function has spoken, so whatever the antennae concluded is overwritten
-before the ant moves — the same reason *homing-scan-steps* had to exist.
-A returning ant is precisely the one that needs to route around a pocket,
-so a mark that stops at the choice function does not reach the ants it is
-for."
-  (multiple-value-bind (w c) (%repel-world)
-    (declare (ignore w))
-    (let ((f (ant:colony-field c))
-          (rf (ant:colony-repel c)))
-      ;; heavily mark the ground due east of the ant
-      (loop for dx from 0.0f0 to 0.03f0 by 0.004f0
-            do (ant:field-deposit! rf (+ 0.5f0 dx) 0.5f0 40.0f0))
-      (ant:field-step! rf)
-      (let ((plain (ant:clear-bearing f 0.5f0 0.5f0 0.0f0 1.0f0
-                                      ant:*sensor-offset*))
-            (marked (ant:clear-bearing f 0.5f0 0.5f0 0.0f0 1.0f0
-                                       ant:*sensor-offset* rf)))
-        (is (< (abs plain) 1.0f-5)
-            "open ground should return the bearing unchanged, got ~,4f" plain)
-        (is (> (abs marked) 0.2f0)
-            "the marked bearing was taken anyway: ~,4f" marked)))))
-
-(test an-exhausted-source-marks-itself
-  "End to end on a live tick loop: an ant that walks to a source and
-finds nothing there says so.  This is the model's first fast brake — a
-trail outliving its source can otherwise only be forgotten at the speed
-of evaporation."
-  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16))
-         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
-         (f (ant:add-food w 0.8f0 0.5f0 0.02f0 100.0f0))
-         (a (ant:world-ants w))
-         (b (ant:world-bodies w)))
-    (ant:world-seed-population! w c 1)
-    (let ((bi (aref (ant:ants-body a) 0)))
-      ;; standing on the source, which then runs out under it
-      (setf (aref (ant:bodies-x b) bi) 0.8f0
-            (aref (ant:bodies-y b) bi) 0.5f0
-            (aref (ant:ants-state a) 0) ant:+ant-at-food+
-            (ant:food-amount f) 0.0f0)
-      (dotimes (k 40)
-        (setf (aref (ant:ants-energy a) 0) 1.0f0)
-        (ant:world-step! w))
-      (is (plusp (ant:field-total (ant:colony-repel c)))
-          "walked to an empty source and left no verdict"))))
+    (ant:add-food w 0.35f0 0.35f0 0.03f0 5000.0f0 :quality 1.0f0)
+    (ant:world-seed-population! w c 20)
+    ;; A crowd on the source — the case that used to shove ants off it
+    ;; half-fed — but laid out *without* overlaps.  Packed tighter than
+    ;; their own diameter they simply explode apart on the first tick,
+    ;; which is the collision solver being tested rather than this.
+    (dotimes (i 20)
+      (let ((bi (aref (ant:ants-body a) i)))
+        (setf (aref (ant:bodies-x b) bi)
+              (+ 0.3410f0 (* 0.006f0 (mod i 4)))
+              (aref (ant:bodies-y b) bi)
+              (+ 0.3350f0 (* 0.006f0 (floor i 4)))
+              (aref (ant:bodies-kind b) bi) ant:+body-ant+
+              (aref (ant:ants-state a) i) ant:+ant-at-food+)))
+    (let ((loads '()))
+      (dotimes (k 3000)
+        (let ((was (make-array 20)))
+          (dotimes (i 20)
+            (setf (aref was i) (aref (ant:ants-state a) i)))
+          (dotimes (i 20) (setf (aref (ant:ants-energy a) i) 1.0f0))
+          (ant:world-step! w)
+          (dotimes (i 20)
+            (when (and (= (aref was i) ant:+ant-at-food+)
+                       (= (aref (ant:ants-state a) i) ant:+ant-returning+))
+              (push (aref (ant:ants-crop a) i) loads)))))
+      (is (>= (length loads) 20)
+          "only ~d ants finished feeding; the fixture did not exercise it"
+          (length loads))
+      (let ((mean (/ (reduce #'+ loads) (max 1 (length loads)))))
+        (is (> mean 0.95f0)
+            "mean load leaving the source was ~,3f of a crop, so ants are
+still being shoved off half-fed" mean)))))
 
 ;;; ------------------------------------------ when two ants meet (M3)
 ;;;

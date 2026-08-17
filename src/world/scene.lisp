@@ -90,13 +90,6 @@ every existing scenario behaving exactly as it did."
   ;; single colony so ε never fires, but the indirection is free now and
   ;; unaddable later without touching every line that reads a pheromone.
   (field nil :type (or null field))
-  ;; The no-entry field (§3.9, docs/navigation.md Layer 3): the same
-  ;; structure carrying the opposite sign, and the first test of §3.3's
-  ;; claim that a further chemical is another instance of this rather than
-  ;; new machinery.  It is per colony for the same reason the trail is —
-  ;; one colony's verdict about a dead end is not another's, and a shared
-  ;; aversive field would let a neighbour close your routes.
-  (repel nil :type (or null field))
   (stock 0.0f0 :type f32)               ; nest food store
   ;; What the renderer's stock gauge treats as "full".  Display only:
   ;; stock has no natural ceiling, so the starting value is the only
@@ -249,8 +242,7 @@ which MAKE-COLONY handles by rasterizing what is already there."
   (let ((p (make-polygon coords)))
     (push p (world-obstacles w))
     (dolist (c (world-colonies w))
-      (field-rasterize-polygon! (colony-field c) p)
-      (field-rasterize-polygon! (colony-repel c) p))
+      (field-rasterize-polygon! (colony-field c) p))
     p))
 
 (defun add-food (w x y r amount &key (quality 1.0f0) (renew 0.0f0) density)
@@ -285,11 +277,6 @@ has."
   (let* ((x (float nest-x 1.0f0)) (y (float nest-y 1.0f0))
          (r (float nest-r 1.0f0))
          (f (make-field :width (world-width w) :height (world-height w)))
-         ;; Its own tau and its own ceiling: an aversive mark has to fade
-         ;; faster than a road and must not be able to outgrow every
-         ;; contrary opinion (see *repel-tau*, *repel-cap*).
-         (rf (make-field :width (world-width w) :height (world-height w)
-                         :tau (repel-tau) :cap *repel-cap*))
          (c (%make-colony :id (length (world-colonies w))
                           :name name
                           :nest-x x :nest-y y :nest-r r
@@ -298,17 +285,12 @@ has."
                           :nest-body (bodies-alloc (world-bodies w) x y r
                                                    +body-nest+)
                           :field f
-                          :repel rf
                           :capacity capacity
                           :stock (float stock 1.0f0)
                           :stock-ref (max 1.0f0 (float stock 1.0f0)))))
-    ;; obstacles already in the world have to be in both fields' masks —
-    ;; a blocked cell cannot hold a chemical of either sign, and a packet
-    ;; that fell partly inside terrain would leak the fraction that landed
-    ;; there (see FIELD-DEPOSIT-PACKET!)
+    ;; obstacles already in the world have to be in this field's mask
     (dolist (p (world-obstacles w))
-      (field-rasterize-polygon! f p)
-      (field-rasterize-polygon! rf p))
+      (field-rasterize-polygon! f p))
     (setf (world-colonies w) (append (world-colonies w) (list c)))
     c))
 

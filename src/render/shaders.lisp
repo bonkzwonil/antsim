@@ -34,19 +34,11 @@ in vec2 v_uv;
 out vec4 frag;
 
 uniform sampler2D u_field;     // trail concentration, R32F
-uniform sampler2D u_repel;     // no-entry concentration, R32F (3.9)
 uniform vec4  u_bounds;        // world rect currently visible: x0 y0 x1 y1
 uniform vec2  u_world;         // world size in metres
 uniform float u_k;             // choice-function offset: the map's midpoint
 uniform float u_cap;           // field ceiling
-uniform float u_repel_cap;     // no-entry ceiling
 uniform int   u_blocked_shade; // 1 = darken cells the mask marks blocked
-// Food odour (3.7): up to 8 sources as (x, y, edge-radius, reach).
-// Passed as uniforms rather than a texture because it is not a field —
-// there is no deposit, no evaporation and nothing to accumulate, only a
-// handful of discs whose radius changes as they are eaten.
-uniform int   u_nfood;
-uniform vec4  u_food[8];
 
 // Ground: a faint grid at 5 cm so motion has a reference frame (5.1),
 // and so zoom level is legible without any HUD.
@@ -90,24 +82,6 @@ vec3 trail_color(float c) {
     return t < 1.0 ? below : above;
 }
 
-// The no-entry field, in violet (3.9).
-//
-// A third hue, and the arithmetic of the palette forces which one.  The
-// trail owns blue because it has to stay separable from the ants, and the
-// ants own the warm half of the wheel — red laden, orange, yellow, pale
-// callow.  Violet is what is left that is neither, so a marked patch
-// reads as its own thing against both a road and the traffic standing on
-// it.
-//
-// It is drawn *over* the trail rather than instead of it, and that is the
-// honest picture: the two fields are independent, a road that has been
-// written off is still a road, and the moment worth seeing is exactly the
-// one where a strong trail and a strong repellent occupy the same ground.
-vec3 repel_color(float rc) {
-    float t = clamp(rc / max(1e-3, u_repel_cap), 0.0, 1.0);
-    return mix(vec3(0.30, 0.07, 0.34), vec3(0.88, 0.32, 0.80), sqrt(t));
-}
-
 void main() {
     vec2 w = mix(u_bounds.xy, u_bounds.zw, v_uv);
     float mpp = (u_bounds.z - u_bounds.x) / max(1.0, float(textureSize(u_field, 0).x));
@@ -147,39 +121,6 @@ void main() {
                                     / max(1.0, u_cap - 0.6 * u_k),
                                     0.0, 1.0));
         c = mix(c, tc, a);
-    }
-
-    // and the aversive field on top of it.
-    //
-    // One square-root ramp against the cap, not the trail's two.  The
-    // trail needs a steep first ramp because a single fresh packet has to
-    // be visible at all against a ceiling thirty times higher; the
-    // no-entry cap is twenty units and one ant's verdict is one of them,
-    // so the same root that keeps a working trail legible already puts a
-    // lone opinion at about a tenth opacity — faint, which is what one
-    // ant's opinion should look like, and unmistakable once a few ants
-    // agree.
-    float rc = texture(u_repel, w / u_world).r;
-    if (rc > 0.001) {
-        c = mix(c, repel_color(rc),
-                0.62 * sqrt(clamp(rc / max(1e-3, u_repel_cap), 0.0, 1.0)));
-    }
-
-    // The halo a source can be smelled across (3.7), in green.
-    //
-    // Green because the two fields already own blue and violet and the
-    // ants own the warm half, so this is the last hue that reads as its
-    // own thing — and because it is the one layer here that is not a
-    // pheromone at all.  Faint, and fading to nothing at the reach, so it
-    // says 'about this far' without competing with the pile it surrounds
-    // or with traffic standing on it.
-    for (int i = 0; i < u_nfood && i < 8; ++i) {
-        float d = distance(w, u_food[i].xy);
-        float edge = u_food[i].z, reach = u_food[i].w;
-        if (reach > 0.0 && d > edge && d < edge + reach) {
-            float t = 1.0 - (d - edge) / reach;   // 1 at the pile, 0 at the rim
-            c = mix(c, vec3(0.45, 0.95, 0.55), 0.30 * t * t);
-        }
     }
     frag = vec4(c, 1.0);
 }

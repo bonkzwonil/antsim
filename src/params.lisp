@@ -186,49 +186,6 @@ Deliberately *not* implemented by lowering k or raising n.  Both would
 have moved trail-following in the same direction while changing the
 choice function itself, which §3.8 is a test of.")
 
-(defparameter *trail-lane-offset* 0.008f0
-  "How far off the centre line of a trail an ant may prefer to walk,
-metres.  Each ant draws its own, uniformly in ±this, and keeps it for
-life (ANT-TRAIL-OFFSET).  0 restores the old behaviour exactly — every
-ant steering to dead centre — which is what makes the difference
-measurable rather than asserted.
-
-The old behaviour was a mistake with a very ordinary cause.  Tropotaxis
-was written to null the difference between the two antennae, and nulling
-that difference *is* the definition of standing on the ridge of the
-gradient — so the rule that makes ants good at following trails also made
-every one of them follow the identical line.  A deposit is a packet 3 cm
-across (*trail-packet-radius*) and the colony was walking it in single
-file, shoulder to shoulder, with nowhere to pass and no width for traffic
-to sort into.  Real trails are broad; this is what makes this one broad.
-
-**Measured**, 400 ants on an 80 cm trail, three seeds.  Band width is the
-mean |lateral offset| of ants in the corridor; blocked is the fraction of
-trail time an ant spends with another same-direction ant inside 8 mm and
-34 degrees of dead ahead — which is the complaint this fixes, quantified:
-
-    lane    band     blocked   food
-    0.000   0.0183   80.0%     877
-    0.004   0.0194   64.6%     852
-    0.008   0.0238   47.0%     834
-    0.012   0.0272   39.9%     739
-
-Eighty percent at zero.  Four ticks in five, an ant on the trail had
-another ant right in front of it going the same way — the colony was
-walking a 3 cm road in single file, and that is what was being watched.
-
-8 mm is a little over half the packet radius, so the band is about as
-wide as the chemical trail actually is and ants do not habitually walk
-where they cannot smell anything.  It nearly halves the blocking.
-
-**It costs about 5% of the food, and the mechanism is not mysterious:**
-ants spread across a road are nearer its edges, so they lose it sooner.
-The same interaction shows up in the U-turn fixture, whose synthetic
-trail is one cell wide and which therefore switches this off to measure
-what it is actually about.  Whether 5% is worth paying for traffic that
-can move is a judgement rather than a measurement, and 0.004 is the
-conservative option at 65% blocked and half the cost.")
-
 (defparameter *trail-noise-suppression* 0.85f0
   "How much of the heading noise a strong trail removes.  [cal] Same
 argument as *trail-turn-gain*, from the other side: a committed
@@ -418,56 +375,6 @@ exp(-d/l).  [cal] About a third of the radius, so the packet is a
 concentrated spot with a soft edge rather than a flat disc.  This is the
 gradient the alpha channel draws and the sensors read.")
 
-(defparameter *food-odour-reach* 0.0f0
-  "How far past a source's own edge its smell carries, metres.  **0 —
-off — is the default**, and that is a measured result rather than an
-omission.  Implemented, measured, and shipped off, like
-*trail-lost-threshold* and *detour-ticks*.
-
-The problem it was written for is real: an ant with no trail to follow
-could pass within a millimetre of a full pile and never know it was
-there, because the only way to find food was for the ant's own centre to
-enter the disc.  Nothing about an insect is blind at four body lengths
-from a sugar drop.
-
-**And it cannot be switched on without breaking §3.8.**  Both published
-bridge experiments fail, at every reach tried:
-
-    reach    binary bridge          double bridge
-    0.020    0.507 on one replicate — no choice made
-    0.005    (binary recovers)      0.524, 0.540 — the short arm stops winning
-    0.000    passes                 passes
-
-The reason is not a tuning accident, it is what the experiments are
-*about*.  Deneubourg's bridge shows a colony committing to one of two
-identical arms, and Goss's shows it finding the shorter of two — and in
-both, the only thing that can make an arm win is that ants who took it
-lay pheromone on it and recruit others.  Detection is a competing channel
-for the same job.  Give an ant a nose and it finds the food whichever arm
-it is on, the arms stop differing in anything the colony can amplify, and
-the result the model exists to reproduce dissolves.
-
-So this is a genuine conflict between two things that are both true of
-real ants, and the model cannot presently hold both.  Resolving it
-properly means an odour that is short relative to the *apparatus* rather
-than to the ant — the bridge arms here are centimetres apart, where a
-real one is tens of centimetres — which is a statement about the scenario
-geometry, not about this parameter.  Recorded here so the next person
-reaches for the scenario rather than the number.")
-
-(defparameter *food-odour-strength* 20.0f0
-  "How loudly a source smells at its own edge, in the pheromone units the
-choice function reads.  [cal] Equal to *choice-k*, which is the point:
-that is the concentration at which the ants' preference becomes decisive,
-so a source at arm's length competes with a well-used trail and neither
-simply overrides the other.
-
-Folded into the same (k + C)^n weight rather than added as a separate
-steering term, so it inherits the nonlinearity §3.8 tests and needs no
-new machinery — and so an ant close to food turns as sharply toward it as
-it would toward a strong trail, which is what *trail-turn-gain* already
-does for a road.")
-
 (defparameter *trail-quality-threshold* 0.3f0
   "Food quality below which no trail is laid at all.  [lit] Beckers et
 al.: L. niger feeds on poor sucrose but does not recruit to it.  This
@@ -536,95 +443,6 @@ Antennal contact is how a real ant learns a wall is in front of it, and
 the sample points and the terrain mask both already exist — the field
 carries the mask because a blocked cell cannot hold pheromone (§3.3).  So
 this costs three array reads and adds no new sense.")
-
-(defparameter *homing-progress* 1.0f0
-  "How much of a window's walking a returning ant must turn into ground
-closed on the nest before it is left to walk as it likes, as a fraction
-of the distance walked (§3.4).  **1.0 — off — is the default**: it
-switches the whole windowed policy out and restores per-tick homing
-exactly.  0.25 is the value the idea wants; see the measurement below for
-why it is not the default yet.
-
-**Measured, and it breaks §3.8 at every setting.**  Binary bridge,
-busiest-arm share over the six acceptance replicates, run through the
-published fixture (fixed colony, warm-up, clean measurement window), with
-*wall-veto* off so this is the policy on its own:
-
-    1.00 (off)   0.873 0.890 0.838 0.838 0.886 0.846   min 0.838  ok
-    0.85         0.864 0.941 0.868 0.569 0.981 0.505   min 0.505  FAIL
-    0.60         0.762 0.939 0.848 0.609 0.883 0.670   min 0.609  FAIL
-    0.25         0.840 0.722 0.556 0.721 0.974 0.676   min 0.556  FAIL
-    0.10         0.848 0.608 0.607 0.868 0.942 0.573   min 0.573  FAIL
-
-The bar is 0.80 on **every** replicate.  Note what the column does not
-do: it does not improve as the parameter tightens.  0.85 is the worst of
-them and 0.10 is not the worst, so this is not a threshold that wants
-tuning — switching the policy on at all destabilises the commitment, and
-which replicate collapses is close to arbitrary.
-
-The reason is the same one *food-odour-reach* ran into.  Both bridge
-experiments are calibrated on a *tight round trip*: an arm wins because
-the ants that took it get back sooner and lay pheromone sooner, so the
-split is a race between two feedback loops with a small initial
-difference.  Letting a returning ant wander while it is still technically
-closing adds variance to every lap, and variance is exactly what a race
-between two nearly equal loops cannot absorb — the colony still commits,
-but not reliably enough, and not always to the arm it was heading for.
-
-So the mechanism is here, argued for, and off.  A window that scales with
-the journey rather than a fixed hundred ticks is the obvious next thing
-to try — a 10 cm bridge arm and a 40 cm foraging run should not be judged
-on the same stretch of walking — but the sweep above says that is a
-hypothesis and not a fix, because the failure is not shaped like a
-mis-set bar.
-
-**Homing is a medium-run constraint, not a steering command.**  The old
-rule rotated a returning ant halfway to the nest bearing *every tick*,
-which reads exactly as what it is — a servo tracking a setpoint — and it
-is why laden ants walked like machines and pressed into walls that stood
-between them and home.  It also threw away most of what path integration
-gives them: an arrow has a length as well as a direction, and *any*
-heading with a component toward home shortens it.  The ant in a pocket
-whose nest lies through the west wall closes the distance perfectly well
-by walking south.
-
-So the ant walks where the pheromone, the room and its own noise take it,
-and the home vector is consulted over a *window* rather than a tick — the
-same window Layer 0 already keeps (*stall-window*), which measures
-|h0| - |h| for exactly this purpose and was until now only used to
-diagnose failure.  A window that made ground leaves the ant alone
-entirely.  A window that did not turns the urge back on until the next
-one does.
-
-At 0.25 an ant has to convert a quarter of its walking into range closed
-— a loose bar, easily met by an ant on a trail heading roughly homeward,
-and failed by one going round in circles or pressing a wall.  That is the
-distinction worth acting on, and nothing finer needs to be.")
-
-(defparameter *wall-veto* nil
-  "Whether every ant's *final* heading is checked against terrain each
-tick, whatever rule set it (§3.2).  NIL is off, which is how the model
-behaved before.
-
-The design is right and belongs here rather than in each rule: three
-separate things can turn an ant on a tick — the choice function, the
-homing term, and giving way to a nestmate — and any of them can leave it
-facing rock.  Two of the three already carry their own terrain test,
-written at different times in different shapes, and giving way was about
-to become a third.  One check where the heading is finally settled
-subsumes all of them, cannot drift out of step with a rule added later,
-and is the more faithful account: an ant feels a wall with its antennae
-whatever reasoning turned it that way.
-
-**And measured, it costs a §3.8 row.**  It changes how every ant moves
-near every wall, which on the bridges is the whole apparatus — the arms
-*are* walls — and the double bridge stopped picking the short arm
-reliably (one replicate at 0.473 against a bar of 0.80).
-
-Off, with the reasoning kept, because the argument for it is structural
-and the argument against it is a measurement, and this project resolves
-that pair by keeping both visible rather than by preferring whichever was
-written second.")
 
 (defparameter *homing-scan-steps* 12
   "How far around a blocked bearing a homing ant will look, in 15-degree
@@ -1191,24 +1009,7 @@ of a crowd it is part of.")
 metres, centre to centre.  [scale] Two touching ants are 5 mm apart at
 *ant-radius*, and an antenna reaches a few millimetres past the head, so
 this is contact plus a reach.  0 switches every encounter rule off at
-once, which is the off position the tests measure against.
-
-**Measured, with the no-entry field of §3.9, against the model without
-either.**  Two sources and a concave obstacle, 150 starting ants, 24 000
-ticks, six seeds, units of food taken:
-
-    baseline (both off)   1205  1353  1355  1193  1202  1230   =  7537
-    both on               1248  1507  1435  1221  1346  1350   =  8108
-
-    +3.6%  +11.4%  +5.9%  +2.4%  +12.0%  +9.7%
-
-Up on every seed, which is the bar this project uses — a mean over seeds
-that hides a sign change is not a result.  Separated, the no-entry field
-is worth about +3% on its own and encounters about +2%, so most of the
-total is the two together: an ant that can tell it is getting nowhere
-marks the ground, and traffic that sorts itself gets more ants past the
-mark.  Giving way is the half that carries it; with *yield-rate* at 0 the
-encounter gain very nearly vanishes.")
+once, which is the off position the tests measure against.")
 
 (defparameter *encounter-cone* 1.5f0
   "Half-angle ahead of an ant within which it reacts to another, radians.
@@ -1220,8 +1021,8 @@ keeps a column from turning itself inside out as ants overtake.")
   "How hard an ant turns away from one it is about to meet head-on,
 radians per motion tick at contact, before its role multiplier.  [cal]
 Comparable to *turn-rate*, because giving way is an ordinary steering
-correction and not a special manoeuvre.  0 disables lane formation while
-leaving recognition and trophallaxis alone.")
+correction and not a special manoeuvre.  0 disables it while leaving
+recognition and trophallaxis alone.")
 
 (defparameter *yield-laden* 0.25f0
   "Yield multiplier for a laden ant on its way home.  [lit]
@@ -1235,36 +1036,15 @@ much each party deviates during the avoidance turn, not a rule about
 sides.
 
 Which is why these are three numbers and not a lane assignment.  Nothing
-here says 'walk on the left'.
-
-**And measured, lanes do not appear.**  600 ants on a 55 cm trail between
-nest and source, 20 000 ticks, three seeds, mean signed lateral offset of
-the outbound stream against the returning one:
-
-    yield on    0.0027   0.0006   0.0017   mean 0.0017 m
-    yield off   0.0034   0.0010   0.0019   mean 0.0021 m
-
-Two millimetres either way — less than one *ant-radius*, and slightly
-*smaller* with the rule on than without it.  There is no lane structure
-here at all, and the honest reading is that this rule does not produce
-one.
-
-The reason is that it is symmetric in a way the reported behaviour is
-not.  Each ant turns away from where the other actually is, so across a
-population the left and right deflections cancel; the only tie-break is
-ANT-HANDEDNESS, which is a deliberate even split.  A lane needs a shared
-convention or a population-level bias to seed it, and this model has
-neither.  Couzin and Franks' three-lane column also has a geometry doing
-half the work — a dense column with flanks — that a diffuse trail in an
-open arena does not.
-
-What the rule *does* buy is throughput, which is a different claim and
-holds: of the food gain the encounter rules produce, giving way carries
-most of it (see *antennal-range*).  Fewer head-on stalls, not tidier
-traffic.  Left in on that basis, with the lane result recorded here so it
-is argued with rather than rediscovered — and note that a population-level
-turning bias is documented in ants and is the obvious thing to try next,
-against ANT-HANDEDNESS's stated reason for staying even.")
+here says 'walk on the left'.  **And measured, lanes do not appear**: on
+a 55 cm trail with 600 ants the mean lateral offset between the outbound
+and returning streams is about 2 mm either way, less than one
+*ant-radius*.  This rule is symmetric in a way the reported behaviour is
+not — each ant turns away from where the other actually is, so left and
+right deflections cancel across a population, and ANT-HANDEDNESS is a
+deliberate even split.  A lane needs a shared convention or a
+population-level bias to seed it and there is neither.  What the rule
+does buy is throughput, which is a different claim and holds.")
 
 (defparameter *yield-returning* 0.6f0
   "Yield multiplier for an unladen ant on its way home.  [cal] Between
@@ -1276,62 +1056,28 @@ Outbound ants deviate most from their heading during avoidance, which is
 the asymmetry the whole three-lane structure is reported to rest on.")
 
 (defparameter *yield-overtake* 0.8f0
-  "How hard an ant steps aside to pass a *slower nestmate going the same
-way*, as a multiplier on *yield-rate*.  0 restores queueing, which is how
-this behaved when only head-on meetings were handled.
+  "How hard an ant steps aside to pass a nestmate that is *in its way*,
+as a multiplier on *yield-rate*.  0 restores queueing.
 
-Leaving this out was a hole, and *speed-spread* had already named it:
-individual pace exists so that there is 'a fast ant behind a slow one',
-and a model that gives ants different speeds and then no way to pass has
-spent the variation on nothing.  What it produced instead was a fast ant
-walking into the back of a slow one and being held there by the collision
-solver — the two then travel as a pair at the slower pace, which is what
-prompted this and is visible from the window.
+*speed-spread* had already named the hole this fills: individual pace
+exists so that there is 'a fast ant behind a slow one', and a model that
+gives ants different speeds and then no way to pass has spent the
+variation on nothing.
 
-**Measured, and the aggregate effect is null.**  Fraction of trail time an
-ant spends with a slower same-direction ant inside 8 mm and 34 degrees of
-dead ahead, three seeds on the live-demo arena, against food delivered:
+The trigger is being **obstructed** — same direction, close, nearly dead
+ahead — and not being nominally faster, which is what it was at first and
+is the wrong question in the one case that matters.  In a stalled column
+nobody is moving, so comparing free-walking speeds lets only the ants
+that happen to be quicker on paper try to pass and leaves the rest
+shoving: a queue whose leader presses an obstacle while everyone behind
+presses into the ant in front.
 
-    0.0   33.1%   887        2.0   33.2%   908
-    0.8   34.1%   915        4.0   29.8%   848
-
-So it does work — at 4.0 the blocking measurably falls — but only by
-turning hard enough to cost more food than it returns, and at the shipped
-value the blocking metric does not move at all.
-
-Two things dominate it, and neither is queueing.  **Load**: laden ants
-walk at *walk-speed-laden* and empty ones at *walk-speed*, a 25% gap
-against a ±10% pace spread, so what an ant is carrying explains more of
-its speed than who it is.  Holding load constant lifts the correlation
-between pace and achieved speed from 0.14 to 0.31 — most of the way
-there, and the remainder is the second cause.  **Jostling**: ants on the
-trail achieve about 88% of their nominal speed, and the shortfall is
-collision noise that has nothing to do with the individual.
-
-Kept on anyway, and the reason is the window rather than the table.  An
-ant pressed against the back of another for seconds at a time is visibly
-wrong in a way no aggregate catches, and this project has preferred the
-legible reading before where nothing else ranked the options
-(*resting-ants-block*, *gait-stride*).  It costs nothing measurable.  What
-it is *not* is a fix for uniform-looking speeds — that is the load term,
-and it is doing exactly what it should.
-
-The trigger is that the ant is *gaining*: same direction, in front, within
-antennal reach, and this ant's speed is the greater.  Speed here is the
-pair's own paces and loads, which is a property of the world rather than
-anything either ant knows about the other — the sense being modelled is
-simply antennal contact with something in the way, and catching up is the
-only reason that contact persists.
-
-**Not** the leaf-cutter result, and the difference is a fact about the
-animal rather than a simplification.  On *Atta* trails unladen ants do
-not overtake the laden ones ahead of them, and clusters therefore form
-behind a leader — but an *Atta* forager carrying a leaf fragment is far
-wider than its trail-mates, so that is a statement about the geometry of
-carrying a sail.  A *Lasius* forager carries nectar in its crop and is
-exactly as wide laden as empty, so nothing about it obstructs a passing
-nestmate and the queueing result does not transfer.  Recorded because the
-citation is tempting and would be the wrong species' physics.")
+Honest about what it is worth: the aggregate effect measures as null.
+What actually washes individual pace out of achieved speed is *load* —
+laden and unladen differ by 25% against a plus-or-minus 10% pace spread —
+plus collision noise.  It is kept because an ant pressed against the back
+of another for seconds at a time is visibly wrong in a way no aggregate
+catches, and it costs nothing measurable.")
 
 (defparameter *stranger-avoidance* 2.0f0
   "How much harder an ant turns away from a non-nestmate than from a
@@ -1368,8 +1114,7 @@ consequence of that is a longer willingness to keep at it.")
 ticks, twelve seconds — long enough to carry an ant a good way further
 out, short enough that news goes stale.  A colony whose evidence never
 expired would keep sending ants down a route for as long as it once
-worked, which is the failure the no-entry field exists to cure and would
-be perverse to reintroduce here.")
+worked.")
 
 (defparameter *encounter-resolve-gain* 0.5f0
   "How far a fully confident ant lowers its own give-up threshold, as a
@@ -1397,23 +1142,12 @@ else an ant does it does to itself or to a field.
     source at 0.55 m     3904 against 3727    +4.7%, and up on every seed
     source at 0.75 m     3003 against 3117    -3.6%, and 35 deaths to 26
 
-On the two-source arena of the branch's main A/B it is neutral (+0.7%).
-
-The reversal has a mechanism rather than being noise, and the mechanism
-is worth stating because it is not the one the rule was written for.  A
-laden ant on its way home hands food to a hungry ant walking the *other*
-way.  At moderate range that ant completes its trip and brings back more
-than it was given.  At a range where foragers are dying anyway it does
-not: the crop is gone from the colony's ledger, only *crop-to-energy* of
-it ever became usable, and what it bought was a few more metres of
-walking away from home.  Feeding the outbound is an investment, and it
-stops paying at exactly the distance the investment stops returning.
-
-Left **on** — unlike *trail-lost-threshold*, which measured as a plain
-cost and ships off.  This is positive in two regimes of three, it is the
-mechanism this milestone exists to build, and the regime where it loses
-is one where the colony is failing for other reasons.  The number is here
-to argue with; a rate of 0 is the exact comparison.")
+The reversal has a mechanism rather than being noise.  A laden ant on its
+way home hands food to a hungry ant walking the *other* way.  At moderate
+range that ant completes its trip and brings back more than it was given.
+At a range where foragers are dying anyway it does not: the crop is gone
+from the colony's ledger, only *crop-to-energy* of it ever became usable,
+and what it bought was a few more metres of walking away from home.")
 
 (defparameter *trophallaxis-threshold* 1.0f0
   "How hungry an ant must be before a nestmate will feed it in the field,
@@ -1431,316 +1165,14 @@ the field is for.
 Tying it to the departure bar fixes both halves at once.  It is the right
 *quantity*: an ant below it cannot start another trip, so it is the point
 at which help changes an outcome rather than topping somebody up.  And it
-moves with the colony — a hungry nest lowers the bar (COLONY-FORAGE-URGENCY),
-so its foragers are also more sparing with what they are carrying, which
-is the correct direction and comes for free.
+moves with the colony — a hungry nest lowers the bar
+(COLONY-FORAGE-URGENCY), so its foragers are also more sparing with what
+they are carrying, which is the correct direction and comes for free.
 
 It is also exactly the threshold the renderer draws as *spent* (§5.1,
 ANT-DISPLAY-STATE), so the rule and the picture are the same number: an
 ant is fed when, and only when, it is drawn as being in trouble.  That
-makes it checkable by eye, which is how the flat version was caught.
-
-The consequence to watch is range: until now a forager made the whole
-round trip on the reserve it set out with, topped up only at a source
-(*forager-eats-at-source*) or at home, so a colony's reach was set by one
-ant's tank.  **Measured, that is true up to a point and then reverses**,
-and the reversal is the more interesting half — see *trophallaxis-rate*.")
-
-;;; --------------------------------------------------------------------
-;;; The no-entry field (§3.9, docs/navigation.md Layer 3)
-;;; --------------------------------------------------------------------
-;;;
-;;; A second chemical, per colony, carrying the opposite sign.  It is the
-;;; same FIELD structure as the trail — §3.3 says each further chemical is
-;;; another instance rather than new machinery, and this is the first one
-;;; to test that claim.
-;;;
-;;; Two uses, and it is worth being explicit about which is which.
-;;; **Marking a branch that led nowhere is the published behaviour**
-;;; (Robinson et al. 2005, on *Monomorium pharaonis*): a bifurcation with
-;;; one dead branch, marked by the ants that found out and avoided by
-;;; nestmates that never went.  **Marking an obstacle face is the
-;;; extrapolation** — no ant has been shown to chemically mark a rock —
-;;; and it is here because the mechanism is identical and the model's
-;;; concavity trap is exactly a place that repeatedly costs ants their
-;;; walking.  Both are labelled in §9 of docs/navigation.md.
-;;;
-;;; What it buys that nothing else in this model has: **fast negative
-;;; feedback**.  Today recruitment can only be braked by evaporation, which
-;;; is tens of minutes, so a branch that has stopped paying keeps
-;;; dispatching ants for another *trail-tau* — the loop behind the collapse
-;;; traced in §3.4.  A dead end can now be written off in the seconds it
-;;; takes one ant to walk back out of it.
-
-(defparameter *repel-tau* 900.0f0
-  "Evaporation time constant of the no-entry field, seconds.  [cal]
-Divided by *trail-decay-scale* exactly as the trail is, so the two
-chemicals stay on comparable clocks and the compression remains a single
-number.
-
-Half the trail's, and the ratio is the point rather than either value.
-The colony has to be able to change its mind about a dead end *faster*
-than it forgets a road, or the first temporary blockage becomes a
-permanent one — an aversive mark that outlives the reason for it is how a
-self-organised system talks itself out of a route that came good.")
-
-(defun repel-tau ()
-  "Effective no-entry evaporation time constant, seconds."
-  (/ *repel-tau* (max 1.0f-3 *trail-decay-scale*)))
-
-(defparameter *repel-deposit* 10.0f0
-  "No-entry units laid per metre of wasted walking.  [cal]
-
-This is a *conversion*, not a strength: Layer 0 measures the waste in
-metres and the field is denominated in units, and something has to carry
-one into the other.  The magnitude itself comes from the evidence — an
-ant marks in proportion to the effort it actually lost — so there is no
-separate knob saying how loudly to complain, which is the property worth
-keeping.  At 10 a typical stalled window of about 10 cm lays one unit,
-so a unit is one ant's verdict and *repel-cap* is readable as a count of
-them.")
-
-(defparameter *repel-dead-end* 1.0f0
-  "No-entry units laid by one ant that walked somewhere and found nothing
-there.  [cal] One ant's verdict, in the units *repel-deposit* defines.
-
-Flat rather than proportional, and deliberately so.  A stalled ant has a
-*quantity* of evidence — the metres it wasted — and marks in proportion to
-it, but a dead end is categorical: the branch either led nowhere or it did
-not, and there is no sense in which one empty source is emptier than
-another.  Inventing a magnitude here would be dressing a boolean up as a
-measurement.
-
-0 switches off dead-end marking while leaving stall marking alone, which
-is what lets the two uses be measured apart — they answer to different
-literature and one of them is an extrapolation.")
-
-(defparameter *repel-cap* 20.0f0
-  "Saturation ceiling on the no-entry field.  [cal] Twenty ants' worth of
-verdict, past which further agreement changes nothing.  A ceiling matters
-more here than on the trail: an aversive mark that can grow without bound
-would eventually beat any amount of contrary evidence, and the colony
-could never walk that ground again.")
-
-(defparameter *repel-weight* 1.0f0
-  "How strongly a no-entry mark divides down a direction's choice weight,
-as the w in 1/(1 + w*R) (§3.3).  0 disables the field's effect on
-steering entirely, which is what makes every consequence of it measurable
-against the model without it.
-
-Applied as a divisor on the finished Deneubourg weight rather than as a
-negative term inside it, and the difference is not cosmetic.  Subtracting
-inside (k + C - R)^n can drive the base negative, which makes the
-exponentiation complex for fractional n and is meaningless besides; a
-divisor is bounded, always positive, and says the honest thing — a marked
-direction is less attractive by a factor, never impossible.")
-
-(defparameter *repel-threshold* 2.0f0
-  "How heavily marked a cell must be before a *homing* ant will treat it
-as ground to route around, in no-entry units.  [cal] Two ants' verdict.
-
-The choice function is not enough on its own here, and the reason is the
-same one *homing-scan-steps* exists for: a laden ant's heading is set by
-the homing term afterwards, so whatever the choice function concluded is
-overwritten before the ant moves.  A returning ant is precisely the one
-that has to be able to route around a pocket, so the mark has to reach
-CLEAR-BEARING or it does not reach the ants that need it.
-
-Higher than a single ant's mark on purpose.  One ant's bad window should
-bias its nestmates, not close a route to them.")
-
-;;; --------------------------------------------------------------------
-;;; Knowing you are stuck (§3.4, docs/navigation.md Layer 0)
-;;; --------------------------------------------------------------------
-;;;
-;;; An ant that maintains a home vector is already carrying everything it
-;;; needs to notice that it is getting nowhere, and until now the model
-;;; threw half of it away: the vector's *length* was computed every tick
-;;; and used only for a validity check.  Snapshot it, count the walking
-;;; between snapshots, and three readings fall out of the same two numbers:
-;;;
-;;;     L  >=  |h - h0|  >=  |h0| - |h|
-;;;     walked   got        got closer
-;;;
-;;; The magnitude of the difference and the difference of the magnitudes.
-;;; Both gaps are diagnoses and they are not the same diagnosis, which is
-;;; the reason for taking both:
-;;;
-;;;   L - |h - h0|            walking that went nowhere.  An ant pinned in
-;;;                           a crowd or wedged in a notch — it is stepping
-;;;                           and it is not moving.
-;;;   |h-h0| - (|h0| - |h|)   travel that went somewhere but not homeward.
-;;;                           The concavity trap: real progress, spent
-;;;                           going round rather than back.
-;;;
-;;; The pair is not interchangeable and a metres-denominated test cannot
-;;; stand in for both.  A pinned ant barely displaces at all, so anything
-;;; measured against distance crawls on exactly the case that most needs
-;;; catching; the first gap is denominated in *walking*, which a pinned ant
-;;; still does at full rate.
-;;;
-;;; Both of the ant-oscillation bugs this repository has recorded — 12 mm
-;;; in 20 000 ticks (ANT-HANDEDNESS) and 8 mm in 20 000 ticks
-;;; (*homing-scan-steps*) — are the first gap, and neither ant had any way
-;;; to notice.  This makes them visible from inside the model, which makes
-;;; Layer 0 a diagnostic as much as a sensor.
-
-(defparameter *stall-window* 100
-  "How often an ant compares where it has walked with where it has got
-to, in motion ticks.  [cal] 100 is five seconds at 20 Hz — about 10 cm of
-free walking, so a window is a meaningful fraction of a 1 m arena and
-still short enough that a wedged ant is not wedged for long.
-
-0 disables the whole of Layer 0, which is what makes every consequence of
-it measurable against the model without it rather than merely asserted.
-
-The window has to be long enough that ordinary walking does not trip it.
-Over a handful of ticks the heading noise alone makes L exceed the net
-displacement by a wide margin, so a short window reads every ant as
-pinned; over five seconds a correlated random walk has a persistence
-length of about 20 cm (*turn-sigma*) and still covers most of what it
-walks.")
-
-(defparameter *detour-ticks* 0
-  "How long an ant that has decided it is detouring stops steering at the
-nest, in motion ticks (docs/navigation.md Layer 1).  **0 — off — is the
-default**, and the reason is a long one worth reading before switching it
-on.  400 is twenty seconds; 100 is five.
-
-**It is implemented, measured, and shipped off, like
-*trail-lost-threshold*.**  What it does when enabled is suppress the
-homing urge for a window, so an ant can walk *away* from the nest — the
-thing a bearing cannot express and the reason CLEAR-BEARING's own
-docstring says a pocket is a trap however wide the scan.
-
-The first version re-armed itself, and the failure is the instructive
-part.  A latched ant makes no homeward progress *because it is latched*,
-and no homeward progress is precisely the evidence the detour test looks
-for — so every window re-armed the latch on evidence the latch had
-manufactured, and homing was off for the rest of the ant's life.  Three
-separate symptoms, all reported from the window and none visible in any
-delivery aggregate, because the ants not yet caught were still feeding
-the nest:
-
-  - laden ants drifting along 'interesting paths' to arena corners and
-    piling into furballs there, full sources untouched, larder emptying;
-  - weird trails, because a latched ant still deposited — so it painted
-    a road to wherever it had drifted;
-  - saturated blobs at obstacle corners with balls of laden ants on
-    them, which is the *obstacle-avoidance* runaway rebuilt by a new
-    route: edge-follow, mark the edge, recruit nestmates onto it, repeat.
-
-Both are fixed — STALL-STEP! measures nothing while committed, and a
-committed ant lays no trail — and with them fixed the latch turns out to
-be a much smaller thing than it looked.  Its apparent ability to walk an
-ant round a wall was the runaway: homing off permanently is a random
-walk, and a random walk does eventually get round a wall.  A bounded
-window breaks the step-out-and-turn-back oscillation and does not
-navigate an obstacle.  Doing that needs remembered corners — Layer 2 —
-which is not built.
-
-So the honest position is: the mechanism is here, the traps in it are
-documented, and it is off until there is a measurement that says it pays
-on a model where it is not also doing damage.  Every number recorded for
-it before this was taken on the version with the feedback loop and should
-be treated as void.
-
-**Swept**, `scenarios/antsim.json`, 12 000 ticks, three seeds summed.
-Stuck is ants that travel under 3 cm in 400 ticks:
-
-    ticks   stuck   corpses   taken   stock   pop
-        0     213        54    2252    2596   1218
-      100      78         0    2151    2331   1272
-      200     133         2    2150    2367   1270
-      400     113         2    1840    2070   1270
-
-The first value tried was 400, on the reasoning that a commitment should
-last long enough to walk round a letter — and that is 18% of the colony's
-food for no fewer corpses than 100 buys.  The reasoning was wrong in an
-instructive way: the latch does not have to last as long as the detour,
-only long enough to break the *cycle* of stepping out and turning
-straight back in.  Once the ant is clear the release condition ends it,
-and once it is committed the edge-following carries it the rest of the
-way.  Five seconds is enough to stop the oscillation; the rest was the
-ant declining to go home while it still could.
-
-At 100 the pockets empty — 54 corpses to none — for about 4% of the food,
-and the colony carries more workers than it does without the latch at
-all.
-
-**Why a latch and not a better bearing.**  CLEAR-BEARING chooses from
-where the ant stands, with no memory of where it has been, and re-chooses
-every tick.  So an ant in a concavity walks out a few centimetres, the
-direct bearing home comes clear, it turns back, and re-enters — for as
-long as its energy lasts.  Measured on the word scenario at 12 000 ticks:
-57 ants going nowhere, 38 of them *returning*, and every corpse in the
-run lying against terrain.  No width of scan reaches this, because the
-information the ant needs is not in front of it; it is in the fact that
-it has been here before.
-
-Commitment is the cheapest thing that supplies it.  The ant does not need
-to know the shape of the obstacle, only to stop asking the question for a
-while — and the release condition does the rest.")
-
-(defparameter *detour-release* 0.9f0
-  "How much of the range home an ant must actually close before it calls
-a detour finished, as a fraction of the range when the latch shut.  [cal]
-0.9 is 'ten percent nearer than when I gave up'.
-
-The release matters as much as the latch.  Ending the detour when the
-bearing merely looks clear is the same error one level up — that is what
-CLEAR-BEARING already does every tick — so the test is against *ground
-actually made*, which is the one thing a pocket cannot fake.  An ant
-circling inside a concavity never improves on the range it had when it
-entered, so it stays committed; one that has genuinely rounded the corner
-beats it within a few strides and goes back to homing immediately.")
-
-(defparameter *detour-abandon* 1.6f0
-  "How far the range home may *grow* during a detour before the ant gives
-the detour up, as a multiple of the range when the latch shut.  [cal]
-
-The other half of the release, and it needs its own number rather than
-mirroring *detour-release*, which is what was tried first.  Reflecting the
-10% success margin gave a 10% failure margin, and that abandons the detour
-exactly when it is working: walking to the end of a wall genuinely takes
-an ant *further* from its nest before it can come back round, and in the
-wall regression fixture that excursion is 12%.  A symmetric threshold
-therefore fired on the manoeuvre it exists to protect.
-
-1.6 is loose enough for any detour that is actually going somewhere and
-tight enough to catch an ant that has stopped detouring and started
-leaving.  Without it a committed ant that drifts spends its whole window
-drifting — and, because it is carrying food, drifting is not free: it lays
-no trail while committed (see ANT-MOTION-STEP!) but it is also not
-delivering, and it will not try again until the counter runs out.")
-
-(defparameter *stall-pinned-fraction* 0.55f0
-  "How much of a window's walking must go nowhere before the ant decides
-it is pinned, as a fraction of the distance walked.  [cal]
-
-At 0.55 an ant that walks 10 cm and displaces less than 4.5 cm of it has
-noticed.  A correlated random walk at these parameters keeps well over
-half of what it walks over a five-second window, so this fires on genuine
-obstruction rather than on tortuosity.
-
-It applies to outbound and returning ants alike, and that is deliberate:
-being wedged has nothing to do with which way an ant is trying to go.")
-
-(defparameter *stall-detour-fraction* 0.5f0
-  "How much of a window's *displacement* may fail to close the range home
-before the ant decides it is detouring, as a fraction of that
-displacement.  [cal]
-
-An ant driving straight at the nest gets closer by exactly as far as it
-moves, so the gap is zero.  One walking a tangent gets no closer at all
-and the ratio is 1.  At 0.5 the trigger sits at 60 degrees off the
-bearing home, sustained for a whole window.
-
-**Returning ants only**, and the restriction is not a detail — it is what
-stops the rule being nonsense.  An outbound ant is *supposed* to walk
-away from the nest; measuring it against homeward progress would mark
-every successful foraging trip in the colony as a detour, and the first
-thing the repellent would write off is the route to the food.")
+makes it checkable by eye, which is how the flat version was caught.")
 
 ;;; --------------------------------------------------------------------
 ;;; Bodies (§3.11)
@@ -1749,55 +1181,33 @@ thing the repellent would write off is the route to the food.")
 (defparameter *ant-collision* t
   "Whether two *ants* push each other apart (§3.11).  T is the model; NIL
 lets ants pass through one another freely and is a **diagnostic**, not a
-species variant.
+species variant.  Bound to `c` in the live window.
 
 Terrain, food piles and corpses still block either way.  Only the ant-ant
 pair is switched off, because the question it exists to ask is narrow:
 how much of what looks like a navigation failure is actually the crowd?
 
-The case that prompted it.  A single ant escapes a concavity perfectly
-well — it feels the wall, follows the edge, and leaves.  Several ants in
-the same concavity do not, and get worse the more of them there are,
-which is the signature of a feedback rather than of a broken rule.  The
-suspected loop is that the non-overlap solver displaces an ant, the
-displacement changes what its antennae are over and therefore where it
-steers, its neighbours are displaced by the same solver on the same tick
-and steer in response to *it*, and the whole crowd stirs itself.  With
-ant-ant contact off the geometry is unchanged and the crowd is gone, so
-whatever remains is navigation.
-
-This is the same kind of switch as *resting-ants-block* and
-*obstacle-avoidance*: the value of it is that the difference is
-measurable rather than argued about.  It is not a claim that ants are
-ghosts.
-
-**Run, and the answer is no.**  `scenarios/antsim.json`, 12 000 ticks,
-three seeds summed; stuck is ants that travel under 3 cm in 400 ticks:
+**Run on the word scenario, and the answer is no.**  12 000 ticks, three
+seeds summed; stuck is ants that travel under 3 cm in 400 ticks:
 
     contact   stuck   of those against terrain   corpses   food taken
     on          197                        171        58        1617
     off         217                        185       114        3259
 
-Ants trapped against terrain are **unchanged** — 171 against 185, if
-anything slightly worse without the crowd.  So the pocket is not a
-crowding artefact and the furball is not the cause of it: take every ant
-out of every other ant's way and the same ants are still stuck in the
-same corners.  What the crowd supplies is the *appearance* — bodies pile
-up where ants are already failing to leave, which is what makes the
-failure look like a jam.
+Ants trapped against terrain are unchanged — 171 against 185, if anything
+slightly worse without the crowd.  Take every ant out of every other
+ant's way and the same ants are still stuck in the same corners, so the
+furball is the *appearance* of the failure and not its cause: bodies pile
+up where ants are already failing to leave.  Escaping a concavity is a
+navigation problem and no amount of tuning contact or the give-way rules
+reaches it.
 
-That redirects the work.  Escaping a concavity is a navigation problem —
-Layer 2, remembered corners — and no amount of tuning the collision
-solver or the give-way rules will reach it.  The rules that sort traffic
-are worth having for traffic; they were never going to fix this.
-
-The other number is worth staring at.  Contact costs **half the food** —
-1617 against 3259 — which is the price of congestion everywhere at once:
-the nest entrance, the source, and every metre of trail between them.
-That is not an argument for switching it off, because a colony whose ants
-occupy no space is not a colony and §3.11 exists for good reasons, but it
-does say how large the term is, and nothing in this project had measured
-it before.")
+The other number was not the question and is the larger finding: contact
+costs **half the food delivered**, 1617 against 3259.  That is congestion
+at the nest entrance, at the source, and along every metre between them,
+and nothing in this project had measured it before.  It is not an
+argument for switching it off — a colony whose ants occupy no space is
+not a colony — but it does say how large the term is.")
 
 (defparameter *relax-iterations* 3
   "Jacobi relaxation iterations per motion tick.  [cal] §8: the
@@ -1824,13 +1234,12 @@ relaxation from chasing floating-point noise forever.")
                *speed-spread*
                *gait-stride* *ant-disc-pixels* *ant-detail-pixels*
                *sensor-offset* *sensor-spread* *turn-rate*
-               *trail-turn-gain* *trail-noise-suppression* *trail-lane-offset*
+               *trail-turn-gain* *trail-noise-suppression*
                *choice-n* *choice-k* *choice-eavesdrop*
                *trail-tau* *trail-decay-scale* *trail-cap* *trail-deposit*
                *trail-packet-spacing* *trail-packet-radius*
                *trail-packet-falloff*
                *trail-quality-threshold*
-               *food-odour-reach* *food-odour-strength*
                *energy-drain-walking* *energy-drain-resting*
                *energy-return-threshold* *crop-fill-rate* *crop-to-energy*
                *leave-probability* *nest-feed-rate*
@@ -1845,19 +1254,15 @@ relaxation from chasing floating-point noise forever.")
                *brood-investment*
                *trail-lost-threshold* *trail-follow-threshold*
                *trail-memory-decay* *uturn-cast-gain*
-               *stall-pinned-fraction* *stall-detour-fraction*
-               *detour-release* *detour-abandon*
-               *repel-tau* *repel-deposit* *repel-cap* *repel-weight*
-               *repel-threshold* *repel-dead-end*
                *antennal-range* *encounter-cone* *yield-rate*
                *yield-laden* *yield-returning* *yield-outbound*
-               *yield-overtake* *stranger-avoidance* *encounter-confidence*
-               *confidence-decay* *encounter-resolve-gain*
+               *yield-overtake* *stranger-avoidance*
+               *encounter-confidence* *confidence-decay*
+               *encounter-resolve-gain*
                *trophallaxis-rate* *trophallaxis-threshold*
                *relax-slop*))
 
 (declaim (type fixnum *max-age-ticks* *relax-iterations* *homing-scan-steps*
                *nest-meals-per-tick*
                *uturn-ticks* *brood-development-minutes*
-               *forager-maturity-ticks* *age-shade-ticks*
-               *stall-window* *detour-ticks*))
+               *forager-maturity-ticks* *age-shade-ticks*))

@@ -40,15 +40,6 @@ not.  One stream, one question.")
 Drawn on the ant's id alone, with no tick, so it is a fixed property of
 the individual rather than a per-tick coin flip.")
 
-(defconstant +stream-lane+ 9
-  "Which part of a trail's width this ant prefers — see ANT-TRAIL-OFFSET.
-
-On the ant's id alone with no tick, exactly like +STREAM-HAND+ and
-+STREAM-PACE+, and for the same reason: it is a property of the
-individual, and a value re-rolled every tick would be noise on the step
-rather than a trait.  The model already has noise on the step, in the
-heading, where it belongs.")
-
 (defconstant +stream-pace+ 8
   "How fast this ant walks relative to its colony — see ANT-PACE.
 
@@ -164,17 +155,6 @@ initial condition rather than merely a convenient one."
                  ;; actually is, which is not quite the nest centre
                  (aref (ants-hvx a) i) (- (colony-nest-x c) sx)
                  (aref (ants-hvy a) i) (- (colony-nest-y c) sy)
-                 ;; Layer 0 opens its first window on the same vector, so
-                 ;; the very first comparison is against something true
-                 ;; rather than against the origin.
-                 (aref (ants-h0x a) i) (- (colony-nest-x c) sx)
-                 (aref (ants-h0y a) i) (- (colony-nest-y c) sy)
-                 (aref (ants-walked a) i) 0.0f0
-                 (aref (ants-window a) i) 0
-                 (aref (ants-stalled a) i) 0.0f0
-                 (aref (ants-detour a) i) 0
-                 (aref (ants-hv-latch a) i) 0.0f0
-                 (aref (ants-homing a) i) 1.0f0
                  ;; nobody has told it anything yet
                  (aref (ants-confidence a) i) 0.0f0
                  (aref (ants-dturn a) i) 0.0f0
@@ -222,122 +202,6 @@ every line that reads a pheromone."
             (setf own v)
             (incf foreign v))))
     (+ own (* *choice-eavesdrop* foreign))))
-
-(defun food-odour-at (w x y)
-  "How strongly food can be smelled at a point, in pheromone units
-(*food-odour-strength*, *food-odour-reach*).
-
-Computed from the sources rather than kept in a field, and that is a
-decision rather than a shortcut.  A source is not a chemical the ants
-deposit — it is an object with a position and a shrinking radius, and it
-has no evaporation, no deposit buffer and nothing to accumulate.  Putting
-it in a FIELD would mean rasterising a disc that changes size every tick
-and would buy nothing: there are a handful of sources and three sample
-points per ant, where a field costs a full grid sweep on the pheromone
-clock.
-
-Linear from full at the pile's edge to nothing at the reach, which is
-about as much shape as a number nobody has measured deserves."
-  (declare (type world w) (type f32 x y) (optimize (speed 3) (safety 1)))
-  (let ((reach *food-odour-reach*)
-        (s 0.0f0))
-    (declare (type f32 reach s))
-    (when (<= reach 0.0f0) (return-from food-odour-at 0.0f0))
-    (dolist (f (world-foods w) s)
-      (unless (food-empty-p f)
-        (let* ((dx (- x (food-x f))) (dy (- y (food-y f)))
-               (d (sqrt (+ (* dx dx) (* dy dy))))
-               (edge (food-current-radius f)))
-          (declare (type f32 dx dy d edge))
-          (when (< d (+ edge reach))
-            (incf s (* *food-odour-strength*
-                       (- 1.0f0 (/ (max 0.0f0 (- d edge)) reach))))))))))
-
-(declaim (inline repel-at))
-(defun repel-at (c x y)
-  "No-entry concentration at a point, as this colony has marked it
-(§3.9, docs/navigation.md Layer 3).
-
-The colony's own field only, with no ε term of the kind SENSE-AT carries
-for the trail.  Eavesdropping on a neighbour's *trail* is reading where
-they have been, which is real information about the world; reading their
-no-entry marks would be letting a competitor close your routes for you.
-The two fields are not symmetric in what a stranger's opinion is worth."
-  (declare (type colony c) (type f32 x y) (optimize (speed 3) (safety 0)))
-  (field-at (colony-repel c) x y))
-
-(defun repel-deposit! (w c x y amount)
-  "Mark this ground as not worth walking (§3.9, docs/navigation.md).
-
-Two refusals, and the first is load-bearing.
-
-**Never at the nest door.**  The queue at a busy entrance is emergent and
-correct — §3.11 and *nest-arrival-radius* both record it as such — and
-every ant in it is stalled, jostled and getting nowhere by any measure the
-model has.  A colony that marked the ground there would chemically write
-off its own front door and starve in a ring around it, which is the exact
-failure widening the arrival radius had to fix.  So the arrival radius is
-also the exclusion radius, and it is the right constant for the job
-because it is already sized to contain the crowd.
-
-**Never on a live source.**  The same argument one step out: ants pile up
-at food, and the pile is the point.  Note the asymmetry — an *empty*
-source is not excluded, because a source that has run dry is precisely a
-dead end worth marking, and that falls out of the test rather than
-needing a rule.
-
-Writes through FIELD-DEPOSIT-PACKET!, so it lands in the deposit buffer
-and any two marks commute (§4.2)."
-  (declare (type world w) (type colony c) (type f32 x y amount)
-           (optimize (speed 3) (safety 1)))
-  (when (> amount 0.0f0)
-    (let ((rr *nest-arrival-radius*))
-      (declare (type f32 rr))
-      (let ((dx (- x (colony-nest-x c))) (dy (- y (colony-nest-y c))))
-        (declare (type f32 dx dy))
-        (when (<= (+ (* dx dx) (* dy dy)) (* rr rr))
-          (return-from repel-deposit! (values))))
-      (dolist (f (world-foods w))
-        (unless (food-empty-p f)
-          (let* ((dx (- x (food-x f))) (dy (- y (food-y f)))
-                 (fr (+ (food-current-radius f) rr)))
-            (declare (type f32 dx dy fr))
-            (when (<= (+ (* dx dx) (* dy dy)) (* fr fr))
-              (return-from repel-deposit! (values)))))))
-    (field-deposit-packet! (colony-repel c) x y amount))
-  (values))
-
-(defun terrain-near-p (f x y r)
-  "True if any of eight probes at radius R lands in terrain.
-
-The discriminator between an ant that is *wedged* and one that is merely
-*jammed*, and the whole reason the pinned signal can be allowed to
-deposit at all.
-
-Layer 0's first gap fires whenever an ant walks without covering ground,
-and that is true of a pocket and equally true of the queue at the nest
-entrance — which §3.11 and *nest-arrival-radius* both record as emergent
-and correct.  The original rule dealt with this by forbidding the pinned
-signal to deposit anywhere, and that was too blunt: a pocket fills with
-*outbound* ants, which never accumulate a detour gap because they have no
-homeward progress to fail to make, so the one place the repellent was
-designed for was the one place nothing ever marked.
-
-The physical difference is what an ant is stuck *against*.  A crowd is
-made of bodies and it clears; a pocket is made of terrain and it does
-not.  The field already carries the terrain mask for §3.3, so this costs
-eight array reads and adds no new sense — and it is the same antennal
-contact that CHOOSE-TURN already uses to feel a wall.
-
-It also makes the nest-door prohibition structural rather than a special
-case: a nest entrance is not terrain, so the queue around it cannot
-satisfy this however stuck it gets."
-  (declare (type field f) (type f32 x y r) (optimize (speed 3) (safety 1)))
-  (dotimes (k 8 nil)
-    (let ((a (* 0.7853982f0 (float k 1.0f0))))
-      (declare (type f32 a))
-      (when (field-blocked-p f (+ x (* r (cos a))) (+ y (* r (sin a))))
-        (return t)))))
 
 (declaim (inline blocked-factor))
 (defun blocked-factor (f x y avoid)
@@ -397,91 +261,9 @@ this width the two are indistinguishable anyway."
   (+ (- 1.0f0 *speed-spread*)
      (* 2.0f0 *speed-spread* (rnd01 id 0 +stream-pace+ seed))))
 
-(declaim (inline ant-trail-offset))
-(defun ant-trail-offset (id seed)
-  "How far to one side of the trail this ant likes to walk, in metres.
-Zero is the centre line.  Fixed for the life of the ant.
-
-Implemented by sliding the ant's whole three-point sensing frame sideways
-(CHOOSE-TURN), so the ant still steers to put *the ridge of the gradient*
-between its antennae — it simply holds those antennae offset from its
-body.  Its body therefore settles that far off the centre line, and the
-equilibrium is as stable as the centred one because it is the same
-equilibrium in a shifted frame.
-
-**The version that does not work, since it is the obvious one.**  Steering
-`bias` to a constant instead of to zero — telling the ant to hold a given
-left/right imbalance — reads naturally and measures badly: −21% food at a
-quarter of full scale.  `bias` is a *normalised* asymmetry, so a fixed
-target asks the ant to seek a place with a particular gradient shape
-rather than a particular position, and there is no such place at a stable
-distance from a trail whose strength changes as it is used.  Ants
-holding one drifted off the trail entirely.  Blocking fell, which looked
-like success and was ants leaving.  Offsetting in metres asks a question
-the geometry can answer.
-
-**Why this exists.**  Tropotaxis as first written steers to make the two
-antennal readings equal, and that is a definition of the ridge line of
-the pheromone gradient — so every ant on a trail converges onto the same
-one-dimensional curve, whatever the chemical trail's actual width.  A
-deposit is a packet 3 cm across (*trail-packet-radius*) and the ants were
-walking it in single file down the middle, shoulder to shoulder, with
-nowhere to pass and nothing to sort.  That is not what a trail looks like:
-real ones are broad, and the traffic spreads across the width.
-
-The fix is not to weaken the trail term, which would only make ants worse
-at following trails.  It is to notice that the ant was being told to hold
-the wrong quantity.  An ant holds *its own* offset from centre rather than
-zero, so the population spreads across the trail instead of stacking on
-its axis, and the road becomes a road.
-
-Uniform, and a lifelong trait rather than a per-tick draw, for the reasons
-given at +STREAM-LANE+ and in ANT-PACE.  It costs no per-ant storage at
-all: it is derived from the id the ant already has, on a stream of its
-own, which is what lets a new trait be added for the price of one
-constant.
-
-Lateralisation in ants is documented — ANT-HANDEDNESS already leans on it
-— so individual variation in antennal steering is the defensible reading
-rather than a convenience."
-  (declare (type (unsigned-byte 32) id seed) (optimize (speed 3) (safety 0)))
-  (* *trail-lane-offset* (- (* 2.0f0 (rnd01 id 0 +stream-lane+ seed)) 1.0f0)))
-
-(declaim (inline ant-speed))
-(defun ant-speed (a i seed crop)
-  "How fast ant I is walking, m/s: its lifelong pace times the speed its
-load allows.
-
-The same two factors ANT-MOTION-STEP! multiplies, factored out because
-the encounter pass needs to compare two ants' speeds to tell whether one
-is gaining on the other.  Kept as a function rather than duplicated, so
-the two places can never disagree about what an ant's speed is.
-
-Note that this is not private knowledge one ant has about another.  It is
-a property of the world, and the *sense* being modelled is only that an
-antenna keeps touching something that is still in the way — catching up
-is the sole reason that contact persists rather than fading."
-  (declare (type ants a) (type fixnum i) (type (unsigned-byte 32) seed)
-           (type f32 crop) (optimize (speed 3) (safety 0)))
-  (* (ant-pace (aref (the u32v (ants-id a)) i) seed)
-     (if (> crop 0.0f0) *walk-speed-laden* *walk-speed*)))
-
-(defun clear-bearing (f x y bearing prefer off &optional repel)
+(defun clear-bearing (f x y bearing prefer off)
   "BEARING if an antenna held that way is over open ground, else the
 nearest direction that is.
-
-REPEL, when given, is the colony's no-entry field, and a direction whose
-sample point is marked above *repel-threshold* counts as shut exactly as
-terrain does.  That is the whole of how Layer 3 reaches a laden ant: the
-antennal veto in CHOOSE-TURN cannot, because the homing term runs
-afterwards and overwrites the heading — the same reason this function had
-to exist at all.  A returning ant is precisely the one that needs to
-route around a pocket, so if the mark does not reach here it does not
-reach the ants it is for.
-
-Ground the ant has marked itself counts.  It walked in, wasted a window
-and marked the spot on the way out; refusing to re-enter it is the
-behaviour, not an accident of not distinguishing self from colony.
 
 The home vector points through walls, and until now a returning ant
 followed it through them: it pressed against the surface, slid along it
@@ -506,43 +288,15 @@ square across its way, and no further.  An ant in a pocket needs to walk
 *away* from the nest to get out, which a bearing cannot express however
 wide the scan; that is route memory (§3.4)."
   (declare (type field f) (type f32 x y bearing prefer off)
-           (type (or null field) repel)
            (optimize (speed 3) (safety 1)))
-  (let ((soft-ang bearing) (soft-rep 1.0f30) (soft-p nil))
-    (declare (type f32 soft-ang soft-rep))
-    (flet ((clear-p (ang)
-             (declare (type f32 ang))
-             (let ((sx (+ x (* off (cos ang))))
-                   (sy (+ y (* off (sin ang)))))
-               (declare (type f32 sx sy))
-               (cond
-                 ((field-blocked-p f sx sy) nil)
-                 ((null repel) t)
-                 (t
-                  ;; Walkable ground, however heavily marked — remember
-                  ;; the least objectionable of it.
-                  ;;
-                  ;; Without this the scan falls back to BEARING when
-                  ;; nothing is under the threshold, which is the raw
-                  ;; direction of the nest: an ant in a pocket it has
-                  ;; itself covered in no-entry marks therefore reads
-                  ;; every escape as shut and walks into the wall anyway.
-                  ;; Watched, that is ants standing on their own repellent
-                  ;; pressing at a wall until they starve — the field
-                  ;; being deposited, read, and then thrown away for want
-                  ;; of anywhere it considered good enough.
-                  ;;
-                  ;; A gradient, not a gate: the mark should say *which
-                  ;; way is less bad* when none of it is good.
-                  (let ((rv (field-at repel sx sy)))
-                    (declare (type f32 rv))
-                    (when (< rv soft-rep)
-                      (setf soft-rep rv soft-ang ang soft-p t))
-                    (< rv *repel-threshold*)))))))
-      (if (clear-p bearing)
-          bearing
-          (let ((steps *homing-scan-steps*))
-            (declare (type fixnum steps))
+  (flet ((clear-p (ang)
+           (declare (type f32 ang))
+           (not (field-blocked-p f (+ x (* off (cos ang)))
+                                 (+ y (* off (sin ang)))))))
+    (if (clear-p bearing)
+        bearing
+        (let ((steps *homing-scan-steps*))
+          (declare (type fixnum steps))
           ;; The whole of the preferred side before any of the other one.
           ;;
           ;; Interleaving them — trying prefer and -prefer at each
@@ -555,17 +309,13 @@ wide the scan; that is route memory (§3.4)."
           ;; Measured, it walked 8 mm in 20 000 ticks.  Committing to a
           ;; side costs a wider turn now and again and is the only
           ;; version that goes anywhere.
-              (dolist (side (list prefer (- prefer)))
-                (declare (type f32 side))
-                (loop for s of-type fixnum from 1 to steps
-                      for ang of-type f32
-                        = (wrap-angle (+ bearing (* side s +bearing-step+)))
-                      when (clear-p ang)
-                        do (return-from clear-bearing ang)))
-              ;; Nothing acceptable.  Take the least-marked walkable
-              ;; direction if the scan found one, and only then give up
-              ;; and keep the bearing.
-              (if soft-p soft-ang bearing))))))
+          (dolist (side (list prefer (- prefer)) bearing)
+            (declare (type f32 side))
+            (loop for s of-type fixnum from 1 to steps
+                  for ang of-type f32
+                    = (wrap-angle (+ bearing (* side s +bearing-step+)))
+                  when (clear-p ang)
+                    do (return-from clear-bearing ang)))))))
 
 (defun choose-turn (w colony-id id tick x y heading)
   "Sample three headings through the antennae and pick one, with the
@@ -593,36 +343,10 @@ switch into and no switching logic to get wrong (§3.5)."
          (k *choice-k*)
          (hl (- heading spread))
          (hr (+ heading spread))
-         ;; The three antennal sample points, bound once.  Every sense
-         ;; this ant has is taken at these same three places — trail,
-         ;; terrain and no-entry — so computing them once is both cheaper
-         ;; than the three copies this grew and the only way the readings
-         ;; cannot drift apart from one another.
-         ;; This ant's own place across the width of a trail
-         ;; (ANT-TRAIL-OFFSET): the whole sensing frame slides sideways,
-         ;; so the ant still centres the gradient's ridge between its
-         ;; antennae and its *body* ends up that far off the middle.
-         ;;
-         ;; Without it every ant nulls the same imbalance, and nulling the
-         ;; imbalance is the definition of standing on the ridge — so the
-         ;; colony walked a 3 cm trail in single file down one line, with
-         ;; nowhere to pass and no width for traffic to sort into.
-         (lane (ant-trail-offset id (world-seed w)))
-         (lx (* lane (- (sin heading)))) (ly (* lane (cos heading)))
-         (xl (+ x lx (* off (cos hl)))) (yl (+ y ly (* off (sin hl))))
-         (xc (+ x lx (* off (cos heading)))) (yc (+ y ly (* off (sin heading))))
-         (xr (+ x lx (* off (cos hr)))) (yr (+ y ly (* off (sin hr))))
-         ;; Trail, plus the smell of any food within a few body lengths.
-         ;;
-         ;; Added to the concentration rather than steered on separately,
-         ;; so it goes through the same (k + C)^n weight the trail does
-         ;; and inherits the nonlinearity §3.8 is a test of.  An ant a
-         ;; centimetre from a sugar drop then turns toward it as sharply
-         ;; as it would toward a strong road, which is what it should do
-         ;; and what walking blind past it was not.
-         (cl (+ (sense-at w colony-id xl yl) (food-odour-at w xl yl)))
-         (cc (+ (sense-at w colony-id xc yc) (food-odour-at w xc yc)))
-         (cr (+ (sense-at w colony-id xr yr) (food-odour-at w xr yr)))
+         (cl (sense-at w colony-id (+ x (* off (cos hl))) (+ y (* off (sin hl)))))
+         (cc (sense-at w colony-id (+ x (* off (cos heading)))
+                       (+ y (* off (sin heading)))))
+         (cr (sense-at w colony-id (+ x (* off (cos hr))) (+ y (* off (sin hr)))))
          ;; Feel for terrain with the same three antennal points (§3.2).
          ;;
          ;; An ant that cannot tell a wall is there until it has walked
@@ -644,30 +368,17 @@ switch into and no switching logic to get wrong (§3.5)."
          ;; antennal contact is how a real ant learns a wall is in front
          ;; of it, and thigmotaxis is a documented behaviour rather than a
          ;; convenience.
-         (col (nth colony-id (world-colonies w)))
-         (fld (colony-field col))
+         (fld (colony-field (nth colony-id (world-colonies w))))
          (avoid *obstacle-avoidance*)
-         (bl (blocked-factor fld xl yl avoid))
-         (bc (blocked-factor fld xc yc avoid))
-         (br (blocked-factor fld xr yr avoid))
-         ;; and the no-entry field, as a divisor (§3.9).
-         ;;
-         ;; 1/(1 + w*R) rather than a term subtracted inside the
-         ;; Deneubourg base.  Subtracting can drive (k + C - R) negative,
-         ;; which makes the exponentiation complex for fractional n and
-         ;; means nothing anyway; a divisor is bounded, always positive,
-         ;; and says the honest thing — a marked direction is less
-         ;; attractive by a factor, never impossible.  At *repel-weight*
-         ;; = 0 every factor is exactly 1 and this is the model without
-         ;; the field at all, which is what makes it measurable.
-         (rw *repel-weight*)
-         (rfd (colony-repel col))
-         (ql (/ 1.0f0 (+ 1.0f0 (* rw (field-at rfd xl yl)))))
-         (qc (/ 1.0f0 (+ 1.0f0 (* rw (field-at rfd xc yc)))))
-         (qr (/ 1.0f0 (+ 1.0f0 (* rw (field-at rfd xr yr)))))
-         (wl (* bl ql (choice-weight (+ k cl) n)))
-         (wc (* bc qc (choice-weight (+ k cc) n)))
-         (wr (* br qr (choice-weight (+ k cr) n)))
+         (bl (blocked-factor fld (+ x (* off (cos hl))) (+ y (* off (sin hl)))
+                             avoid))
+         (bc (blocked-factor fld (+ x (* off (cos heading)))
+                             (+ y (* off (sin heading))) avoid))
+         (br (blocked-factor fld (+ x (* off (cos hr))) (+ y (* off (sin hr)))
+                             avoid))
+         (wl (* bl (choice-weight (+ k cl) n)))
+         (wc (* bc (choice-weight (+ k cc) n)))
+         (wr (* br (choice-weight (+ k cr) n)))
          ;; All three walled in — a corner.  Fall back to the unweighted
          ;; choice rather than dividing by zero; the collision pass will
          ;; get the ant out, and refusing to choose at all would freeze it.
@@ -675,8 +386,7 @@ switch into and no switching logic to get wrong (§3.5)."
                     (+ wl wc wr)
                     (progn (setf wl 1.0f0 wc 1.0f0 wr 1.0f0) 3.0f0)))
          (u (* (rnd01 id tick +stream-choice+ (world-seed w)) total)))
-    (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u
-                      xl yl xc yc xr yr rw ql qc qr lane lx ly))
+    (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u))
     ;; Second value: how strongly this ant can smell a trail at all,
     ;; as C/(k+C) of the best sensor — 0 in clean ground, approaching 1
     ;; on a saturated road.  The caller uses it to decide how *hard* to
@@ -860,13 +570,7 @@ switch into and no switching logic to get wrong (§3.5)."
                      ;; the window, where it is obvious and where no
                      ;; aggregate statistic showed it.
                      (aref (ants-hvx a) i) (- (colony-nest-x c) x)
-                     (aref (ants-hvy a) i) (- (colony-nest-y c) y))
-               ;; and Layer 0's first window opens on that same corrected
-               ;; vector.  Without this the ant sets out comparing itself
-               ;; against the snapshot taken before departure re-fixed the
-               ;; home vector, so its very first window reports the
-               ;; correction as travel it never made.
-               (stall-reset! a i)))
+                     (aref (ants-hvy a) i) (- (colony-nest-y c) y))))
 
             ;; --- AT-FOOD -------------------------------------------
             ((= state +ant-at-food+)
@@ -903,14 +607,8 @@ switch into and no switching logic to get wrong (§3.5)."
              (let ((f (world-food-near w x y *ant-radius*)))
                (cond
                  ((null f)
-                  ;;
                   ;; Nothing within reach at all, so the meal really is
-                  ;; over.  A dead end, and the published one (§3.9): this
-                  ;; ant walked here and there is nothing here.  Marking it
-                  ;; is the only fast brake the model has on a trail that
-                  ;; outlives its source — evaporation alone keeps
-                  ;; dispatching ants down it for another *trail-tau*.
-                  (repel-deposit! w c x y *repel-dead-end*)
+                  ;; over and the ant turns for home with what it has.
                   (setf (aref (ants-state a) i) +ant-returning+))
                  (t
                   ;; Shoved off the pile: walk back on, exactly as a
@@ -1047,19 +745,6 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; forget it — otherwise the latch is still armed
                     ;; when the casting ends and the ant U-turns again.
                     (setf (aref (ants-smelled a) i) 0.0f0)
-                    ;; The other published dead end: a trail followed to
-                    ;; its end with nothing at the end of it.  This is
-                    ;; Robinson's bifurcation seen from the inside — the
-                    ;; ant that found out marks the spot, and nestmates
-                    ;; that never went avoid it.
-                    ;;
-                    ;; Dormant at the shipped defaults, because
-                    ;; *trail-lost-threshold* is 0 and U-turns are off
-                    ;; (see its docstring for the measurement).  Written
-                    ;; anyway: the rule belongs with the edge that
-                    ;; detects it, not in a later patch that has to
-                    ;; rediscover where the edge was.
-                    (repel-deposit! w c x y *repel-dead-end*)
                     (setf (aref (ants-cast a) i)
                           (min 255 (max 0 *uturn-ticks*)))
                     (setf heading
@@ -1100,68 +785,16 @@ switch into and no switching logic to get wrong (§3.5)."
                       ;; traded for a worse one.  A proper fix is route
                       ;; memory — the path walked out, not the trail field
                       ;; — which is §3.4's landmark system and is not M1.
-                      ;; Layer 1: an ant that has committed to a detour
-                      ;; is not steering at the nest at all
-                      ;; (docs/navigation.md §4.2, *detour-ticks*).
-                      ;;
-                      ;; Getting out of a concavity means walking *away*
-                      ;; from home, and no bearing can say that — which
-                      ;; is why widening CLEAR-BEARING's scan never fixed
-                      ;; it and could not.  With the urge off the ant
-                      ;; falls back on the choice function and the
-                      ;; antennal wall veto, which is exactly the
-                      ;; edge-following that walks a pocket's perimeter
-                      ;; to its mouth.
-                      (committed (plusp (aref (ants-detour a) i)))
                       (urge (if returning
-                                ;; Only when the last window says this ant
-                                ;; is not making ground (*homing-progress*)
-                                ;; — homing is a medium-run constraint, not
-                                ;; a heading held every tick.  An ant that
-                                ;; is closing on the nest by whatever route
-                                ;; it has found is not steered at all.
-                                (if committed
-                                    0.0f0
-                                    (* (aref (ants-homing a) i)
-                                       (- 1.0f0
-                                          (* *trail-homing-suppression*
-                                             smell))))
+                                ;; Total, unless a trail is allowed to
+                                ;; argue with it (§3.4).
+                                (- 1.0f0 (* *trail-homing-suppression* smell))
                                 (* *homing-weight-low-energy*
                                    (max 0.0f0
                                         (/ (- ethr
                                               (aref (ants-energy a) i))
                                            (max 1.0f-6 ethr)))))))
                  (declare (type f32 hv-len urge ethr))
-                 ;; Run the commitment down, and end it early the moment
-                 ;; the ant has genuinely closed on the nest — ground
-                 ;; made, not a bearing that merely looks open, which is
-                 ;; the distinction the whole latch exists to draw.
-                 ;; Two ways out, and the second is what keeps a
-                 ;; commitment from becoming a wandering.
-                 ;;
-                 ;; *Succeeded*: the ant has closed on the nest, so the
-                 ;; detour worked and homing resumes at once.
-                 ;;
-                 ;; *Failed*: the range home has grown instead.  Walking
-                 ;; round an obstacle holds the range roughly constant —
-                 ;; that is what going round something looks like — so a
-                 ;; range that is growing means this is not a detour any
-                 ;; more, it is an ant leaving.  Without this the ant
-                 ;; spends the whole window drifting, laying trail as it
-                 ;; goes (deposition does not care that it is lost), and
-                 ;; what it paints is a road to wherever it ended up.
-                 ;;
-                 ;; The two thresholds are deliberately *not* symmetric —
-                 ;; see *detour-abandon* for why a mirrored margin
-                 ;; abandons the manoeuvre it exists to protect.
-                 (when committed
-                   (let ((d (aref (ants-detour a) i))
-                         (latched (aref (ants-hv-latch a) i)))
-                     (declare (type (unsigned-byte 16) d) (type f32 latched))
-                     (if (or (< hv-len (* *detour-release* latched))
-                             (> hv-len (* *detour-abandon* latched)))
-                         (setf (aref (ants-detour a) i) 0)
-                         (setf (aref (ants-detour a) i) (1- d)))))
                  (when (and (> hv-len 1.0f-4) (> urge 0.0f0))
                    ;; Home on the bearing if it is walkable and on the
                    ;; nearest walkable direction if it is not — the same
@@ -1174,38 +807,8 @@ switch into and no switching logic to get wrong (§3.5)."
                                        (clear-bearing (colony-field c) x y
                                                       (atan hvy hvx)
                                                       (ant-handedness id seed)
-                                                      *sensor-offset*
-                                                      (colony-repel c))
+                                                      *sensor-offset*)
                                        (min 1.0f0 (/ urge (+ 1.0f0 urge)))))))
-               ;; --- one wall veto, for every rule at once -------------
-               ;;
-               ;; Three separate things can turn an ant on a given tick —
-               ;; the choice function, the homing term, and giving way to
-               ;; a nestmate — and any of them can leave it facing rock.
-               ;; Each *could* carry its own terrain test; the antennal
-               ;; veto in CHOOSE-TURN and the scan in CLEAR-BEARING are
-               ;; two that already do, written at different times and in
-               ;; different shapes, and giving way was about to become a
-               ;; third.
-               ;;
-               ;; One check at the point where the heading is finally
-               ;; settled subsumes all of them and cannot drift out of
-               ;; step with any rule added later, because a later rule
-               ;; does not have to know it exists.  It is also the more
-               ;; faithful account: an ant feels the wall in front of it
-               ;; with its antennae whatever reasoning turned it that
-               ;; way, and it does that *as it steps*, not while
-               ;; deliberating.
-               ;;
-               ;; CLEAR-BEARING is exactly this scan already, so it is
-               ;; reused rather than reimplemented — terrain only, with no
-               ;; no-entry field, because this is about what the ant can
-               ;; physically walk into and not about where it would
-               ;; rather not go.
-               (when *wall-veto*
-                 (setf heading (clear-bearing (colony-field c) x y heading
-                                              (ant-handedness id seed)
-                                              *sensor-offset*)))
                (setf (aref (ants-heading a) i) heading)
 
                ;; advance
@@ -1242,12 +845,6 @@ switch into and no switching logic to get wrong (§3.5)."
                  (when (/= ny (+ y dy))
                    (setf heading (wrap-angle (- heading))))
                  (setf (aref (ants-heading a) i) heading)
-                 ;; The pedometer, and it counts the step the ant *tried*
-                 ;; to take (ANTS-WALKED).  Taken here, before the arena
-                 ;; clamp and before BODIES-RESOLVE! has had its say, so
-                 ;; that an ant walking on the spot still registers as
-                 ;; walking — which is the entire point of the reading.
-                 (incf (aref (ants-walked a) i) (* speed dt))
                  ;; Path integration happens in PATH-INTEGRATION-STEP!,
                  ;; after collision resolution — see the note there.
                  (setf (aref bxs bi) nx (aref bys bi) ny))
@@ -1297,31 +894,7 @@ switch into and no switching logic to get wrong (§3.5)."
                                           (* (- y2 y) (- y2 y))))))
                       (declare (type f32 moved))
                       (incf (aref (ants-trailed a) i) moved)
-                      ;; **A lost ant does not recruit.**
-                      ;;
-                      ;; An ant committed to a detour has just declared
-                      ;; that the ground it is on did not get it home, and
-                      ;; trail pheromone means the opposite of that — it
-                      ;; says 'this way'.  Laying it while detouring
-                      ;; rebuilt, through a new route, the exact runaway
-                      ;; *obstacle-avoidance* was written to kill: the ant
-                      ;; edge-follows round an obstacle, marks the edge as
-                      ;; it goes, the mark recruits nestmates onto the same
-                      ;; edge, they get stuck too and mark it harder.  What
-                      ;; that produces is a saturated blob at an obstacle
-                      ;; corner with a ball of laden ants sitting on it,
-                      ;; none of them going home.  Seen from the window;
-                      ;; no aggregate showed it, because the food was
-                      ;; still arriving from the ants that had not been
-                      ;; caught yet.
-                      ;;
-                      ;; Suppressed rather than reduced.  A detour is
-                      ;; brief by construction (*detour-ticks*), and the
-                      ;; ant resumes marking the moment it is homing
-                      ;; again — so what is lost is a few centimetres of
-                      ;; road that was misleading anyway.
                       (when (and (> (aref (ants-crop a) i) 0.0f0)
-                                 (zerop (aref (ants-detour a) i))
                                  (>= (aref (ants-load-quality a) i)
                                      *trail-quality-threshold*)
                                  (>= (aref (ants-trailed a) i)
@@ -1338,28 +911,6 @@ switch into and no switching logic to get wrong (§3.5)."
                            (* (trail-deposit-rate)
                               (aref (ants-load-quality a) i)
                               (/ n (* *walk-speed-laden* *motion-dt*)))))))
-                    ;; and the aversive half of the same trip (§3.9,
-                    ;; docs/navigation.md Layer 3).  Layer 0 measured a
-                    ;; window's worth of travel that went somewhere other
-                    ;; than homeward; the mark is that measurement, so its
-                    ;; strength is the effort actually wasted and there is
-                    ;; no separate parameter saying how loudly to complain.
-                    ;;
-                    ;; Cleared on deposit, so one bad window leaves one
-                    ;; mark.  An ant still stuck simply books another
-                    ;; window and marks again, which is the honest rate:
-                    ;; the ground gets marked in proportion to how long it
-                    ;; goes on costing ants their walking.
-                    ;;
-                    ;; Note what is *not* here: the pinned gap.  It never
-                    ;; deposits, at any strength, anywhere — see
-                    ;; STALL-STEP! and REPEL-DEPOSIT! for why the nest
-                    ;; queue makes that prohibition load-bearing.
-                    (let ((s (aref (ants-stalled a) i)))
-                      (declare (type f32 s))
-                      (when (> s 0.0f0)
-                        (repel-deposit! w c x2 y2 (* *repel-deposit* s))
-                        (setf (aref (ants-stalled a) i) 0.0f0)))
                     ;; home?
                     (let ((ddx (- x2 (colony-nest-x c)))
                           (ddy (- y2 (colony-nest-y c))))
@@ -1477,218 +1028,6 @@ leak."
                 (mod (+ (aref (ants-gait a) i)
                         (/ (sqrt (+ (* mx mx) (* my my))) *gait-stride*))
                      1.0f0))))))
-  (values))
-
-(defun stall-step! (w)
-  "Close each ant's stall window when it falls due, and read the three
-numbers off it (§3.4, docs/navigation.md Layer 0).
-
-      L  >=  |h - h0|  >=  |h0| - |h|
-    walked      got        got closer
-
-Two gaps, two diagnoses, one pair of snapshots.  See the note above
-*STALL-WINDOW* for why both are needed and why neither substitutes for
-the other.
-
-Runs after PATH-INTEGRATION-STEP!, which is not arbitrary: h has to be
-this tick's vector, closed over actual net displacement, or the ant is
-comparing its pedometer against a stale estimate of where it got to.
-
-**The pinned gap drives behaviour and never a deposit, and that
-prohibition is load-bearing.**  The densest crowd in any run is the queue
-at the nest entrance, which §3.11 and *nest-arrival-radius* both record as
-correct and emergent; every ant in it satisfies the pinned test perfectly.
-An ant that marked the ground when it fired would have the colony
-chemically writing off its own front door, and a colony that does that
-starves in a ring around its nest — the same failure widening the arrival
-radius had to fix.  Crowding is not an obstacle.  It clears.
-
-What a pinned ant does instead is cast: the same widened search
-(*uturn-cast-gain*) an ant makes when it loses a trail, which is the
-cheapest thing that can shake a wedged ant loose and adds no mechanism.
-Walking *away* from the nest to escape a pocket is a stronger response
-and a separate layer, because it needs a commitment latch to keep the
-homing term from simply undoing it on the next tick."
-  (declare (type world w) (optimize (speed 3) (safety 1)))
-  (let ((a (world-ants w))
-        (win *stall-window*))
-    (declare (type fixnum win))
-    (when (plusp win)
-      (dotimes (i (ants-n a))
-        (when (ant-live-p a i)
-          (let ((state (aref (the u8v (ants-state a)) i)))
-            (cond
-              ((not (or (= state +ant-outbound+) (= state +ant-returning+)))
-               (stall-reset! a i))
-              ;; **Committed to a detour: measure nothing.**
-              ;;
-              ;; This is not an optimisation, it is the fix for a
-              ;; positive feedback that made Layer 1 catastrophic.  A
-              ;; latched ant has its homing urge switched off, so of
-              ;; course it makes no homeward progress — and the detour
-              ;; test looks for exactly that, so at the next window close
-              ;; it re-armed the latch on evidence the latch itself had
-              ;; manufactured.  The ant then never homed again: it
-              ;; random-walked until it reached a corner and piled up
-              ;; there with everything else that had done the same, while
-              ;; its colony's larder emptied and full sources sat
-              ;; untouched.  Reported from the window, where it is
-              ;; unmistakable, and invisible in every aggregate that
-              ;; measures delivery rather than who is delivering.
-              ;;
-              ;; The window measures 'I am trying to go home and
-              ;; failing'.  A committed ant is not trying, so the reading
-              ;; is meaningless rather than merely inconvenient — and the
-              ;; window is restarted so that measurement resumes cleanly
-              ;; once the commitment ends.
-              ((plusp (aref (the u16v (ants-detour a)) i))
-               (let ((s (aref (the f32v (ants-stalled a)) i)))
-                 (stall-reset! a i)
-                 ;; keep any mark it has not yet laid: the ground really
-                 ;; was wasted, and Layer 3 has not read it yet
-                 (setf (aref (the f32v (ants-stalled a)) i) s)))
-              (t
-               (let ((k (1+ (aref (the u16v (ants-window a)) i))))
-                 (declare (type fixnum k))
-                 (setf (aref (the u16v (ants-window a)) i) (min 65535 k))
-                 (when (>= k win)
-                   (let* ((hx (aref (the f32v (ants-hvx a)) i))
-                          (hy (aref (the f32v (ants-hvy a)) i))
-                          (zx (aref (the f32v (ants-h0x a)) i))
-                          (zy (aref (the f32v (ants-h0y a)) i))
-                          (l (aref (the f32v (ants-walked a)) i))
-                          (dx (- hx zx)) (dy (- hy zy))
-                          ;; |h - h0|: the magnitude of the difference —
-                          ;; how far the ant actually got, whatever route
-                          ;; it took to get there.
-                          (got (sqrt (+ (* dx dx) (* dy dy))))
-                          (hn (sqrt (+ (* hx hx) (* hy hy))))
-                          (h0n (sqrt (+ (* zx zx) (* zy zy))))
-                          ;; |h0| - |h|: the difference of the magnitudes
-                          ;; — how much of that became range closed on the
-                          ;; nest.  Negative for an ant going the other
-                          ;; way, which is correct and is why the detour
-                          ;; test is restricted to returning ants.
-                          (closer (- h0n hn))
-                          (pinned (- l got))
-                          (detour (- got closer)))
-                     (declare (type f32 hx hy zx zy l dx dy got hn h0n
-                                       closer pinned detour))
-                     ;; Walking that went nowhere.
-                     (when (and (> l 1.0f-6)
-                                (> pinned (* *stall-pinned-fraction* l)))
-                       (setf (aref (the u8v (ants-cast a)) i)
-                             (min 255 (max 0 *uturn-ticks*)))
-                       ;; and if it is *terrain* holding this ant rather
-                       ;; than other ants, mark it (§3.9).
-                       ;;
-                       ;; This is the one deposit an outbound ant can
-                       ;; make, and without it a pocket never gets marked
-                       ;; at all: an ant wanders in while outbound, has
-                       ;; no homeward progress to fail to make, and so
-                       ;; never books a detour however long it circles.
-                       ;; Watched, that is ants milling in a concavity
-                       ;; until they starve — with the repellent working
-                       ;; exactly as specified and pointed at the wrong
-                       ;; half of the problem.
-                       ;;
-                       ;; TERRAIN-NEAR-P is what makes this safe.  A
-                       ;; crowd is bodies and clears; a pocket is terrain
-                       ;; and does not.  The nest entrance is not terrain,
-                       ;; so the queue cannot mark its own doorway however
-                       ;; stuck it gets — the prohibition that used to be
-                       ;; a blanket ban is now structural.
-                       (let* ((c (nth (aref (the u8v (ants-colony a)) i)
-                                      (world-colonies w)))
-                              (bi (aref (the u32v (ants-body a)) i))
-                              (bx (aref (the f32v (bodies-x (world-bodies w))) bi))
-                              (by (aref (the f32v (bodies-y (world-bodies w))) bi)))
-                         (when (terrain-near-p (colony-field c) bx by
-                                               *sensor-offset*)
-                           (repel-deposit! w c bx by
-                                           (* *repel-deposit* pinned)))))
-                     ;; **Did this window make ground on the nest?**
-                     ;;
-                     ;; The homing decision, taken once per window rather
-                     ;; than once per tick (*homing-progress*).  An ant
-                     ;; that closed a reasonable share of what it walked
-                     ;; is doing fine by whatever route it found and is
-                     ;; left alone; one that did not gets the urge back
-                     ;; until a window says otherwise.
-                     ;;
-                     ;; Outbound ants are exempt for the same reason they
-                     ;; are exempt from the detour test: walking away from
-                     ;; the nest is their job.
-                     (when (and (= state +ant-returning+)
-                                (< *homing-progress* 1.0f0))
-                       (setf (aref (the f32v (ants-homing a)) i)
-                             (if (and (> l 1.0f-6)
-                                      (>= closer (* *homing-progress* l)))
-                                 0.0f0
-                                 1.0f0))
-                       ;; **Got further away: turn round and try
-                       ;; something else.**
-                       ;;
-                       ;; Not 'steer harder at the nest', which is what a
-                       ;; servo would do and what walks an ant into the
-                       ;; wall the nest lies behind.  A window that went
-                       ;; backwards is evidence about the direction the
-                       ;; ant has been walking, so the thing to change is
-                       ;; that direction — and the ant already has the
-                       ;; machinery, because this is exactly what it does
-                       ;; when it loses a trail (*uturn-ticks*).
-                       ;;
-                       ;; This is the whole of what an ant can honestly
-                       ;; do.  It has no compass and no map; it has a
-                       ;; sense of how far home is and whether that has
-                       ;; been getting better, and 'it got worse, so go
-                       ;; another way' is what that sense is *for*.
-                       ;;
-                       ;; The heading change *is* the response; ANTS-CAST
-                       ;; is deliberately not touched.  Casting means
-                       ;; 'sweep for a trail I have lost', and the pinned
-                       ;; gap already uses it; borrowing it here would
-                       ;; make two different diagnoses indistinguishable
-                       ;; from the outside, which is exactly what keeping
-                       ;; the two gaps separate was for.
-                       (when (< closer 0.0f0)
-                         (setf (aref (the f32v (ants-heading a)) i)
-                               (wrap-angle
-                                (+ (aref (the f32v (ants-heading a)) i)
-                                   3.1415927f0
-                                   (* 0.6f0
-                                      (rnd-normal (aref (ants-id a) i)
-                                                  (world-tick w)
-                                                  +stream-uturn+
-                                                  (world-seed w))))))))
-                     ;; Travel that went somewhere other than homeward.
-                     ;; Returning ants only — an outbound ant is supposed
-                     ;; to be walking away from the nest.
-                     (if (and (= state +ant-returning+)
-                              (> got 1.0f-6)
-                              (> detour (* *stall-detour-fraction* got)))
-                         (progn
-                           (incf (aref (the f32v (ants-stalled a)) i) detour)
-                           ;; Layer 1: stop steering at the nest, and
-                           ;; commit to it (docs/navigation.md §4.2).
-                           ;; The latch records the range home *now*, so
-                           ;; the release test below is against ground
-                           ;; actually made rather than against how open
-                           ;; the bearing happens to look.
-                           (when (plusp *detour-ticks*)
-                             (setf (aref (the u16v (ants-detour a)) i)
-                                   (min 65535 *detour-ticks*)
-                                   (aref (the f32v (ants-hv-latch a)) i) hn)))
-                         ;; A window that went well clears the evidence.
-                         ;; Without this an ant that escaped a pocket
-                         ;; would carry the stall for the rest of the trip
-                         ;; and keep acting on ground it has already left.
-                         (setf (aref (the f32v (ants-stalled a)) i) 0.0f0))
-                     ;; and the next window opens on where it is now
-                     (setf (aref (the f32v (ants-h0x a)) i) hx
-                           (aref (the f32v (ants-h0y a)) i) hy
-                           (aref (the f32v (ants-walked a)) i) 0.0f0
-                           (aref (the u16v (ants-window a)) i) 0)))))))))))
   (values))
 
 (declaim (inline ant-afield-p))
@@ -1823,9 +1162,6 @@ as BODIES-RESOLVE! does."
                  (role (cond ((and returning (> cropi 0.0f0)) *yield-laden*)
                              (returning *yield-returning*)
                              (t *yield-outbound*)))
-                 ;; this ant's own walking speed, for telling whether it
-                 ;; is gaining on the one in front (see *yield-overtake*)
-                 (myspeed (ant-speed a i seed cropi))
                  (turn 0.0f0)
                  ;; the neediest nestmate this ant could feed, and how
                  ;; empty it is — one partner per donor, so a donor can
@@ -1836,7 +1172,7 @@ as BODIES-RESOLVE! does."
                  ;; renderer draws as spent, so the rule is checkable
                  ;; by eye
                  (tthr (the f32 (aref thresholds coli))))
-            (declare (type f32 xi yi hi cropi role myspeed turn mouth-e tthr)
+            (declare (type f32 xi yi hi cropi role turn mouth-e tthr)
                      (type fixnum bi mouth))
             (do-shash-neighbours (jb hash xi yi range)
               (let ((jbb (the fixnum jb)))
@@ -2168,20 +1504,13 @@ stops producing brood, and decays."
   ;; overlapping at.
   (ant-encounter-step! w)
   (path-integration-step! w)
-  ;; after path integration, so the window closes on this tick's home
-  ;; vector rather than on last tick's estimate of where the ant got to
-  (stall-step! w)
   ;; after the drain, so a meal is measured against what the ant has
   ;; actually spent this tick
   (colony-feed! w)
   (incf (world-tick w))
   (when (zerop (mod (world-tick w) (world-pheromone-every w)))
     (dolist (c (world-colonies w))
-      (field-step! (colony-field c) *pheromone-dt*)
-      ;; The no-entry field runs on the same clock and its own tau, which
-      ;; the field carries (§3.9).  One clock for all chemistry, so the
-      ;; two can never drift out of step with each other.
-      (field-step! (colony-repel c) *pheromone-dt*)))
+      (field-step! (colony-field c) *pheromone-dt*)))
   (when (zerop (mod (world-tick w) (world-colony-every w)))
     (dolist (f (world-foods w))
       (when (plusp (food-renew f))

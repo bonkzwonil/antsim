@@ -458,20 +458,6 @@ navigation systems in parallel and weights them by confidence:
      trap: it walks out, the bearing comes clear, it turns back into the
      pocket. That case needs the route memory below, and the honest
      statement is that the model does not have it yet.
-   - **The phase that fixes it is designed, in `docs/navigation.md`.**
-     Four layers in dependency order. First, read the half of the
-     integrator this model throws away: snapshot the home vector over a
-     window and the gap between how far the ant *walked*, how far it
-     *got*, and how much closer to *home* it got tells it whether it is
-     pinned, detouring, or fine — the two most expensive bugs in this
-     file's history were ants stuck with no way to notice. Then latch a
-     detour and hold it until that measure clears; remember the corner
-     it got round, in nest-centred coordinates; and mark both obstructing
-     faces and dead ends with the no-entry repellent §3.9 already
-     schedules — the dead-end half being the published experiment and the
-     fast negative feedback this model has never had. The same document
-     argues that modelling PI *error* faithfully is not worth doing at
-     this arena scale, and why.
 2. **Trail following.** §3.3. Used when trail concentration exceeds the
    detection threshold.
 3. **Landmark / route memory.** A learned association between a remembered
@@ -867,10 +853,9 @@ acceptance list*. Everything below passes that test.
 | Corpses as bodies | **in** | Dying leaves a blocking disc. Passive — it costs one body kind and nothing else, and it makes the missing behaviour visible. |
 | Per-colony trail fields + ε | **in** | §3.12. M1 runs one colony, so ε never fires — but the indirection is free now and unaddable later. |
 | — | — | — |
-| No-entry field | **built, M3.2** | The claim that a further chemical is another instance of the field rather than new machinery, tested and true: a slot on the colony, one more `FIELD-STEP!`, one rasterize call. Three deposition sites, two of them prohibitions. `docs/navigation.md` Layer 3, and §3.4's only *fast* negative feedback. |
-| Alarm, nest-marking fields | *later* | The other two of the four. Neither is needed for §3.8, and the no-entry field has now shown what each costs to add. |
+| No-entry, alarm, nest-marking fields | *later* | Three of the four fields. None is needed for §3.8; each is a self-contained addition to an existing field abstraction. |
 | Response thresholds, age polyethism | *later* | M1 has one task. Age still accumulates and still kills — it just does not yet steer behaviour. |
-| Trophallaxis between ants | **built, M3.2** | The pairwise coupling, and it really was the only one. It rides on the encounter event rather than needing a mechanism of its own, and the tick stays order-independent because donors accumulate into a buffer instead of writing to each other. Changes sign with range — see `*trophallaxis-rate*`. |
+| Trophallaxis between ants | **built, M3** | The pairwise coupling, and it really was the only one — but it rides on the encounter event rather than needing machinery of its own, which is why it arrived with M3 rather than M4. The tick stays order-independent because donors accumulate into a buffer instead of writing to each other. Changes sign with range; see `*trophallaxis-rate*`. |
 | Landmark / route memory | *later* | The *Formica* mode; irrelevant to a mass recruiter. |
 | Thigmotaxis | **built, M2.1** | Not an addition but a *correction*: the model had wall-following nobody wrote, and it was starving colonies. See §3.2. |
 | U-turns | **built, M2.1, off** | Works — trail residence ×3 — and does not pay: neutral on the bridge, −4% foraging. §3.2. |
@@ -1986,95 +1971,90 @@ The candidates and their costs are in §3.11; the short version is that
 lane formation leaves the published figures alone and depositing by
 actual displacement would not.
 
-**The second half is built too, and it took the exchange with it.** The
-plan above was to build the *event* — this ant met that ant, at this
-bearing — and leave what rides on it to a later milestone. The event was
-indeed the expensive part, and the prediction that followed from it held
-exactly: once the broad phase reports encounters, recognition, giving way
-and trophallaxis are one function between them, and none is more than a
-handful of lines. So they are all here.
+**The second half is built, and it took the exchange with it.** The plan
+was to build the *event* — this ant met that ant, at this bearing — and
+leave what rides on it to a later milestone. The event was indeed the
+expensive part, and the prediction that followed held exactly: once the
+broad phase reports encounters, recognition, giving way and trophallaxis
+are one function between them and none is more than a handful of lines.
+So they are all here.
 
-Three findings, and the first is a correction to the paragraph this
+Four findings, and the first is a correction to the paragraph this
 replaces.
 
 *The content of an encounter is not navigational.* The plan said a laden
 ant coming the other way is "current evidence that there is food behind
-her", and half of that is right in a way that matters. It is current
-evidence, and that is exactly what pheromone — an average over the last
-several minutes — cannot be. But "behind her" is a direction, and ants of
-this genus have been tested for tactile transfer of direction with a
-negative result (Grüter, Czaczkes et al., *Insectes Sociaux* 2017). A
-model that let a contact hand over a bearing would be inventing a channel
-the animal has been shown not to have. What a contact honestly carries is
-that nestmates are coming back loaded, which is a statement about *when*
-and not about *where* — so it buys persistence, a lower give-up
-threshold, and nothing else. One quantity, one consequence, and a test
-that asserts the heading does not move.
+her", and half of that is right in a way that matters. It **is** current
+evidence, which is the one thing an average over the last several minutes
+cannot be. But "behind her" is a direction, and ants of this genus have
+been tested for tactile transfer of direction with a negative result
+(Grüter, Czaczkes et al., *Insectes Sociaux* 2017). A model that let a
+contact hand over a bearing would be inventing a channel the animal has
+been shown not to have. So a contact here carries evidence about *when*
+and never about *where*: it buys persistence, a lower give-up threshold,
+and nothing else. A test asserts the heading does not move.
 
-*Right of way is a ratio, not a rule about sides — and it does not
-produce lanes.* Both ants in a head-on meeting turn aside; the laden one
-turns least and the outbound one most, which is the asymmetry the traffic
-literature reports. The plan above expected lane formation to follow.
-**Measured, it does not.** 600 ants on a 55 cm trail, three seeds: the
-mean lateral offset between the outbound and returning streams is 1.7 mm
-with the rule on and 2.1 mm with it off — less than one ant radius, and
-slightly *worse* with the rule than without.
+*Lanes do not form, and that was the reason for preferring this fix.*
+§3.11 expected lane segregation to fall out of an asymmetric yield.
+Measured on a 55 cm trail with 600 ants, the mean lateral offset between
+the outbound and returning streams is 1.7 mm with the rule and 2.1 mm
+without — less than one ant radius, and slightly *worse* with it. The
+rule is symmetric in a way the reported behaviour is not: each ant turns
+away from where the other actually is, so deflections cancel across a
+population, and `ANT-HANDEDNESS` is a deliberate even split. A lane needs
+a shared convention or a population-level bias to seed it and there is
+neither. What giving way does buy is throughput — fewer head-on stalls —
+which is a smaller claim than §3.11 hoped for and the one there is
+evidence for.
 
-The reason is that this rule is symmetric in a way the reported behaviour
-is not. Each ant turns away from where the other actually is, so left and
-right deflections cancel across a population; the only tie-break is
-`ANT-HANDEDNESS`, which is a deliberate even split. A lane needs a shared
-convention or a population-level bias to seed it, and there is neither —
-and the army-ant column that the literature describes has a geometry
-doing half the work that a diffuse trail in an open arena does not.
-
-So the throughput claim holds and the organisation claim does not. Giving
-way carries most of the food gain below, which is fewer head-on stalls
-rather than tidier traffic. That is a smaller result than §3.11 hoped for
-and it is the one there is evidence for; a population-level turning bias
-is documented in ants and is the obvious next thing to try, against
-`ANT-HANDEDNESS`'s stated reason for staying even.
+*Overtaking triggers on being obstructed, not on being faster.*
+Comparing free-walking speeds is the wrong question in a stalled column,
+where nobody is moving: only the ants quicker on paper try to pass and
+the rest shove, which is a queue whose leader presses an obstacle while
+everyone behind presses into the ant in front. Its aggregate effect
+measures as null and is kept anyway, because an ant pressed against
+another's back for seconds is visibly wrong in a way no aggregate catches
+and it costs nothing measurable.
 
 *The determinism discipline paid for itself immediately.* Every rule
 reads the state the tick began with and writes to a buffer applied
 afterwards, exactly as the Jacobi collision buffers and the field deposit
 buffer do. An ant that turned in place would be seen already turned by
 every higher-numbered neighbour, which makes the outcome depend on table
-order — invisible until the day something is threaded. It has its own
-test: two donors and one recipient poised just under the threshold at
-which it stops accepting food, where the in-place version feeds it once
-and the buffered version twice.
+order — invisible until something is threaded. It has its own test: two
+donors and one recipient poised just under the threshold at which it
+stops accepting food, where the in-place version feeds it once and the
+buffered version twice.
 
-Measured against the model without any of it, together with the no-entry
-field of §3.9: **8108 units of food against 7537 over six seeds, up on
-every one of them**, +2.4% to +12.0%. Giving way is the half that carries
-it. Trophallaxis changes sign with range and the negative half is
-recorded on the parameter rather than smoothed over — feeding an outbound
-ant is an investment, and it stops paying at the distance the investment
-stops returning.
+**One bug fixed on the way, and it was large.** A feeding ant does not
+hold its own position — the pile is a blocking body with a queue round
+it, and its edge retreats as it is eaten — so asking whether the ant was
+still *on* the source treated every shove as the food running out and
+sent it home with whatever it had. Measured, **48% of all departures from
+food were ants that had been pushed off rather than filled up**, mean
+load 0.63 of a crop instead of 1.0. Ants now step back onto the pile and
+feed from a radius rather than a point.
+
+**What is deliberately not here.** A larger body of navigation work was
+built alongside this and lives on the `navigation-experiments` branch
+rather than shipping with the milestone: a stall window that lets an ant
+notice it is getting nowhere, the no-entry repellent field §3.9
+schedules, a per-ant lane preference across the width of a trail, and
+four mechanisms aimed at the concavity trap that each measure as costing
+a published §3.8 row — short-range food odour, a detour commitment latch,
+windowed homing, and a global terrain veto. They are documented with
+their measurements there. The concavity trap of §3.4 is **not** fixed,
+and one experiment worth recording says why: switching ant-ant contact
+off entirely leaves the same ants stuck against the same terrain (171
+against 185 over three seeds), so the furball is the appearance of that
+failure rather than its cause, and no amount of tuning traffic reaches
+it. Escaping a concavity needs route memory, which is M4.
 
 **M4 — scenarios and behaviour depth.** JSON loading, richer scenes, and
-then the deferred half of §3.9 in dependency order: response thresholds
-and age polyethism, the alarm field, necrophoresis and middens, search
-spirals. Multiple colonies and the ε competition scenario.
-
-Two items left that list early, having been pulled forward into M3.2.
-Trophallaxis came with the encounter event rather than needing anything of
-its own, which is what the paragraph above predicted and is the whole
-argument for building the event first. The no-entry field came with Layer
-0 of `docs/navigation.md`, because the two are one mechanism read twice: an
-ant that can tell it is getting nowhere is an ant with something to say,
-and the field is where it says it.
-
-What that leaves for M4 in this area is the two layers in the middle of
-`docs/navigation.md` — the detour commitment latch and the ant's private
-memory of corners — which are what turn "do not go back in there" into
-"go round it this way". The chemistry is built; the route memory is not.
-
-Multiple colonies are now nearer than the list suggests, because
-recognition already exists: a stranger is avoided harder, never fed and
-never believed, and the ε competition scenario needs consequences hung on
-a channel that is already there rather than a channel.
+then the deferred half of §3.9 in dependency order: response thresholds and
+age polyethism, trophallaxis, the no-entry and alarm fields, necrophoresis
+and middens, U-turns and search spirals. Multiple colonies and the ε
+competition scenario.
 
 **M5 — interaction.** Click an ant to inspect its state, drop food, place
 obstacles, poke the nest and watch the alarm field propagate. The window
