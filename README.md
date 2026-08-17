@@ -1,15 +1,15 @@
 # antsim
 
+**A 2D ant colony simulation built on real behavioural science, in Common Lisp,
+rendered with OpenGL.**
+
 ![The word ANTSIM spelled in solid terrain, with two ant trails threading through the letters](docs/images/15-antsim.png)
 
-*The project's own name, spelled in obstacles, run as a scenario. The nest is
-below the word and two food sources sit above it, so every trail has to find its
-way through the lettering. Nothing in the simulation can see the word, plan a
+<sub>*The project's own name, spelled in obstacles, run as a scenario. The nest
+is below the word and two food sources sit above it, so every trail has to find
+its way through the lettering. Nothing in the simulation can see the word, plan a
 route, or measure a distance — those two roads are a few thousand pheromone
-packets, each one deposited by an ant that walked there.*
-
-A 2D ant colony simulation built on real behavioural science, in Common Lisp,
-rendered with OpenGL.
+packets, each one deposited by an ant that walked there.*</sub>
 
 Ants leave the nest, walk a correlated random walk, find food, fill their crop,
 navigate home by path integration, and lay pheromone on the return trip in
@@ -21,6 +21,16 @@ converts food into workers, and a colony that cannot reach food starves.
 None of that is scripted. **There is no way to author a trail** — the scenario
 format cannot express one, and no function exists to paint one.
 
+And close enough, an ant is an ant.
+
+![Ants on a trail at four and a half centimetres, with legs, antennae and carried food visible](docs/images/15-vector-ant.png)
+
+<sub>*A trail at 4.5 cm. Six legs on an alternating tripod, sweeping antennae,
+mandibles, a swollen gaster on the ants carrying a load — one mesh of ninety-odd
+triangles, articulated in the vertex shader from eight floats per ant. The legs
+do not slide, because the stride is driven by distance walked rather than by the
+clock. [More in the diary](docs/DIARY.md#traffic--and-an-ant-close-enough).*</sub>
+
 ## It reproduces the published experiments
 
 The point of building on real behavioural science is that the results are
@@ -30,10 +40,10 @@ papers' own criteria. `make acceptance` runs them.
 
 ![The double bridge: two routes to the same food, one of them shorter](docs/images/14-hero.png)
 
-*Goss's double bridge. Two corridors lead from the nest to the food and one is
-longer. Nothing in the model can measure a distance, compare two routes, or tell
-that an alternative exists — yet the traffic collapses onto the short one,
-because ants that take it get home sooner and lay pheromone sooner.*
+<sub>*Goss's double bridge. Two corridors lead from the nest to the food and one
+is longer. Nothing in the model can measure a distance, compare two routes, or
+tell that an alternative exists — yet the traffic collapses onto the short one,
+because ants that take it get home sooner and lay pheromone sooner.*</sub>
 
 Sixteen seeds each, the acceptance protocol — fixed colony, six minutes to
 commit, six minutes measured:
@@ -45,9 +55,9 @@ commit, six minutes measured:
 
 ![The binary bridge: two identical corridors, and the colony committed to one of them](docs/images/12-binary-bridge.png)
 
-*Deneubourg's binary bridge. The two corridors are identical and one of them is
-carrying all the traffic — that asymmetry is the entire result, and which side
-it lands on changes with the seed.*
+<sub>*Deneubourg's binary bridge. The two corridors are identical and one of them
+is carrying all the traffic — that asymmetry is the entire result, and which side
+it lands on changes with the seed.*</sub>
 
 The binary bridge's second half is the harder one: a model that always picked
 arm A would pass the first and be broken. The result is that the colony **makes

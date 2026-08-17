@@ -62,11 +62,11 @@ has emerged, paid for by the trail in the picture.
 
 ![An established trail between nest and food](images/03-trail.png)
 
-*The nest is the disc at the bottom, the food source the green disc at the top,
+<sub>*The nest is the disc at the bottom, the food source the green disc at the top,
 and the blue field is pheromone the ants laid themselves. The colour turns where
 the concentration crosses `k`, the point at which ants stop exploring and start
 committing — so the bright core is the part they are actually reading as a road,
-and the halo around it is the same deposits fading off by radius.*
+and the halo around it is the same deposits fading off by radius.*</sub>
 
 Nothing chose between them. The choice function is nonlinear —
 `P(i) ∝ (k + C_i)ⁿ` with `n = 2`
@@ -91,17 +91,17 @@ On the surviving road, traffic runs both ways at once.
 
 ![Traffic on the route](images/05-traffic.png)
 
-*Outbound ants are pale, laden returners warm orange, and both streams share one
+<sub>*Outbound ants are pale, laden returners warm orange, and both streams share one
 road. Zoomed to 18 cm — close enough that the level of detail has already handed
-over to the articulated body.*
+over to the articulated body.*</sub>
 
 ![The same road, close enough to see the ants](images/15-vector-ant.png)
 
-*The same stretch of trail at 4.5 cm. Six legs on an alternating tripod, two
+<sub>*The same stretch of trail at 4.5 cm. Six legs on an alternating tripod, two
 antennae, mandibles, a swollen crop on the ants carrying one, and the pale blue
 dot at a gaster tip is the exact moment a pheromone packet went into the ground.
 Nothing here is a sprite: it is one mesh of ninety-odd triangles, articulated in
-the vertex shader from eight floats per ant.*
+the vertex shader from eight floats per ant.*</sub>
 
 The thing worth watching is the **legs**, and specifically that they do not
 slide. The stride phase advances with the **distance an ant has walked**, not
@@ -144,12 +144,12 @@ shader that drew it before the ant had legs.
 
 ![The nest](images/04-nest.png)
 
-*The nest disc with its arrival radius as the surrounding ring, and the trail
+<sub>*The nest disc with its arrival radius as the surrounding ring, and the trail
 coming in from the source. The gold disc inside is the food stored in the nest,
 drawn so its **area** is the quantity — it visibly empties rather than staying
 full until the instant it is gone. Food sources do the same thing, except that
 theirs is the real collision circle: a pile half eaten is half the area, offers
-a shorter edge, and so feeds fewer ants at once.*
+a shorter edge, and so feeds fewer ants at once.*</sub>
 
 Whether resting ants collide with each other is a live toggle (**N**) rather
 than a default. Passing delivers about 4.5% more food and keeps a departing ant
@@ -207,10 +207,10 @@ say a road was ever there.
 
 ![After the source ran out](images/06-aftermath.png)
 
-*The corpses are the pale discs, packed into a rosette around the nest entrance
+<sub>*The corpses are the pale discs, packed into a rosette around the nest entrance
 — they came home to die. Nothing removes them, because nothing in the colony
 knows how yet: necrophoresis is a later milestone, and until it exists the dead
-stay where they fell.*
+stay where they fell.*</sub>
 
 ---
 
