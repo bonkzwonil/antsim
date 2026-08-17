@@ -981,6 +981,109 @@ than modelled.  What was wrong was requiring an ant to reach the *centre*
 of a crowd it is part of.")
 
 ;;; --------------------------------------------------------------------
+;;; The no-entry field (§3.9, docs/navigation.md Layer 3)
+;;; --------------------------------------------------------------------
+;;;
+;;; A second chemical, per colony, carrying the opposite sign.  It is the
+;;; same FIELD structure as the trail — §3.3 says each further chemical is
+;;; another instance rather than new machinery, and this is the first one
+;;; to test that claim.
+;;;
+;;; Two uses, and it is worth being explicit about which is which.
+;;; **Marking a branch that led nowhere is the published behaviour**
+;;; (Robinson et al. 2005, on *Monomorium pharaonis*): a bifurcation with
+;;; one dead branch, marked by the ants that found out and avoided by
+;;; nestmates that never went.  **Marking an obstacle face is the
+;;; extrapolation** — no ant has been shown to chemically mark a rock —
+;;; and it is here because the mechanism is identical and the model's
+;;; concavity trap is exactly a place that repeatedly costs ants their
+;;; walking.  Both are labelled in §9 of docs/navigation.md.
+;;;
+;;; What it buys that nothing else in this model has: **fast negative
+;;; feedback**.  Today recruitment can only be braked by evaporation, which
+;;; is tens of minutes, so a branch that has stopped paying keeps
+;;; dispatching ants for another *trail-tau* — the loop behind the collapse
+;;; traced in §3.4.  A dead end can now be written off in the seconds it
+;;; takes one ant to walk back out of it.
+
+(defparameter *repel-tau* 900.0f0
+  "Evaporation time constant of the no-entry field, seconds.  [cal]
+Divided by *trail-decay-scale* exactly as the trail is, so the two
+chemicals stay on comparable clocks and the compression remains a single
+number.
+
+Half the trail's, and the ratio is the point rather than either value.
+The colony has to be able to change its mind about a dead end *faster*
+than it forgets a road, or the first temporary blockage becomes a
+permanent one — an aversive mark that outlives the reason for it is how a
+self-organised system talks itself out of a route that came good.")
+
+(defun repel-tau ()
+  "Effective no-entry evaporation time constant, seconds."
+  (/ *repel-tau* (max 1.0f-3 *trail-decay-scale*)))
+
+(defparameter *repel-deposit* 10.0f0
+  "No-entry units laid per metre of wasted walking.  [cal]
+
+This is a *conversion*, not a strength: Layer 0 measures the waste in
+metres and the field is denominated in units, and something has to carry
+one into the other.  The magnitude itself comes from the evidence — an
+ant marks in proportion to the effort it actually lost — so there is no
+separate knob saying how loudly to complain, which is the property worth
+keeping.  At 10 a typical stalled window of about 10 cm lays one unit,
+so a unit is one ant's verdict and *repel-cap* is readable as a count of
+them.")
+
+(defparameter *repel-dead-end* 1.0f0
+  "No-entry units laid by one ant that walked somewhere and found nothing
+there.  [cal] One ant's verdict, in the units *repel-deposit* defines.
+
+Flat rather than proportional, and deliberately so.  A stalled ant has a
+*quantity* of evidence — the metres it wasted — and marks in proportion to
+it, but a dead end is categorical: the branch either led nowhere or it did
+not, and there is no sense in which one empty source is emptier than
+another.  Inventing a magnitude here would be dressing a boolean up as a
+measurement.
+
+0 switches off dead-end marking while leaving stall marking alone, which
+is what lets the two uses be measured apart — they answer to different
+literature and one of them is an extrapolation.")
+
+(defparameter *repel-cap* 20.0f0
+  "Saturation ceiling on the no-entry field.  [cal] Twenty ants' worth of
+verdict, past which further agreement changes nothing.  A ceiling matters
+more here than on the trail: an aversive mark that can grow without bound
+would eventually beat any amount of contrary evidence, and the colony
+could never walk that ground again.")
+
+(defparameter *repel-weight* 1.0f0
+  "How strongly a no-entry mark divides down a direction's choice weight,
+as the w in 1/(1 + w*R) (§3.3).  0 disables the field's effect on
+steering entirely, which is what makes every consequence of it measurable
+against the model without it.
+
+Applied as a divisor on the finished Deneubourg weight rather than as a
+negative term inside it, and the difference is not cosmetic.  Subtracting
+inside (k + C - R)^n can drive the base negative, which makes the
+exponentiation complex for fractional n and is meaningless besides; a
+divisor is bounded, always positive, and says the honest thing — a marked
+direction is less attractive by a factor, never impossible.")
+
+(defparameter *repel-threshold* 2.0f0
+  "How heavily marked a cell must be before a *homing* ant will treat it
+as ground to route around, in no-entry units.  [cal] Two ants' verdict.
+
+The choice function is not enough on its own here, and the reason is the
+same one *homing-scan-steps* exists for: a laden ant's heading is set by
+the homing term afterwards, so whatever the choice function concluded is
+overwritten before the ant moves.  A returning ant is precisely the one
+that has to be able to route around a pocket, so the mark has to reach
+CLEAR-BEARING or it does not reach the ants that need it.
+
+Higher than a single ant's mark on purpose.  One ant's bad window should
+bias its nestmates, not close a route to them.")
+
+;;; --------------------------------------------------------------------
 ;;; Knowing you are stuck (§3.4, docs/navigation.md Layer 0)
 ;;; --------------------------------------------------------------------
 ;;;
@@ -1110,6 +1213,8 @@ relaxation from chasing floating-point noise forever.")
                *trail-lost-threshold* *trail-follow-threshold*
                *trail-memory-decay* *uturn-cast-gain*
                *stall-pinned-fraction* *stall-detour-fraction*
+               *repel-tau* *repel-deposit* *repel-cap* *repel-weight*
+               *repel-threshold* *repel-dead-end*
                *relax-slop*))
 
 (declaim (type fixnum *max-age-ticks* *relax-iterations* *homing-scan-steps*

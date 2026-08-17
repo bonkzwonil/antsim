@@ -1137,3 +1137,148 @@ exact off switch."
     (is-false (ever-cast 0)
               "noticed with the window switched off, so this test does
 not test the window")))
+
+;;; ------------------------------------- Layer 3: the no-entry field
+;;;
+;;; The colony's only *fast* negative feedback.  Everything else it can do
+;;; to stop recruiting runs at the speed of evaporation — tens of minutes —
+;;; so a branch that has stopped paying keeps dispatching ants for another
+;;; *trail-tau*, which is the loop behind the collapse traced in §3.4.
+;;;
+;;; The first test here is the one that matters most, and it is a
+;;; prohibition rather than a behaviour.
+
+(defun %repel-world ()
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16))
+         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :nest-r 0.02f0
+                              :stock 1.0f6)))
+    (values w c)))
+
+(test the-nest-door-is-never-marked
+  "The load-bearing prohibition, and the reason the two Layer 0 gaps are
+kept apart at all.
+
+The densest crowd in any run is the queue at the nest entrance.  It is
+emergent, it is correct, and §3.11 and *nest-arrival-radius* both record
+it as such — and every ant in it is stalled, jostled and getting nowhere
+by any measure this model has.  If that could deposit, the colony would
+chemically write off its own front door and starve in a ring around it,
+which is precisely the failure widening the arrival radius had to fix.
+
+Crowding is not an obstacle.  It clears."
+  (multiple-value-bind (w c) (%repel-world)
+    ;; every direction, at and just inside the arrival radius
+    (dotimes (k 12)
+      (let* ((ang (* 0.5236f0 k))
+             (r (* 0.9f0 ant:*nest-arrival-radius*)))
+        (ant:repel-deposit! w c (+ 0.5f0 (* r (cos ang)))
+                            (+ 0.5f0 (* r (sin ang))) 5.0f0)))
+    (ant:field-step! (ant:colony-repel c))
+    (is (zerop (ant:field-total (ant:colony-repel c)))
+        "the colony marked its own doorway: ~,4f units"
+        (ant:field-total (ant:colony-repel c))))
+  ;; and the exclusion is a radius, not a blanket ban — ground further out
+  ;; is markable, or the rule would do nothing at all
+  (multiple-value-bind (w c) (%repel-world)
+    (ant:repel-deposit! w c 0.80f0 0.5f0 5.0f0)
+    (ant:field-step! (ant:colony-repel c))
+    (is (plusp (ant:field-total (ant:colony-repel c)))
+        "nothing anywhere is markable, so the prohibition proves nothing")))
+
+(test a-live-source-is-never-marked-but-a-dry-one-is
+  "The same argument one step out: ants pile up at food and the pile is
+the point.  The asymmetry is the interesting half — a source that has run
+dry is exactly a dead end worth marking, and that falls out of the
+emptiness test rather than needing a rule of its own."
+  (multiple-value-bind (w c) (%repel-world)
+    (ant:add-food w 0.8f0 0.5f0 0.02f0 100.0f0)
+    (ant:repel-deposit! w c 0.8f0 0.5f0 5.0f0)
+    (ant:field-step! (ant:colony-repel c))
+    (is (zerop (ant:field-total (ant:colony-repel c)))
+        "marked a source with 100 units still in it"))
+  (multiple-value-bind (w c) (%repel-world)
+    (let ((f (ant:add-food w 0.8f0 0.5f0 0.02f0 100.0f0)))
+      (setf (ant:food-amount f) 0.0f0)
+      (ant:repel-deposit! w c 0.8f0 0.5f0 5.0f0)
+      (ant:field-step! (ant:colony-repel c))
+      (is (plusp (ant:field-total (ant:colony-repel c)))
+          "an exhausted source is a dead end and was not marked"))))
+
+(test a-marked-direction-loses-the-choice
+  "The field has to reach the choice function, and *repel-weight* = 0 has
+to be an exact off position — a sensor whose consequence appears without
+it is not being tested."
+  (flet ((left-share (weight)
+           (let ((ant:*repel-weight* weight))
+             (multiple-value-bind (w c) (%repel-world)
+               ;; mark the left antenna's sample point only
+               (let ((hl (- 0.0f0 ant:*sensor-spread*)))
+                 (ant:field-deposit!
+                  (ant:colony-repel c)
+                  (+ 0.5f0 (* ant:*sensor-offset* (cos hl)))
+                  (+ 0.5f0 (* ant:*sensor-offset* (sin hl)))
+                  8.0f0))
+               (ant:field-step! (ant:colony-repel c))
+               (let ((left 0) (n 3000))
+                 (dotimes (id n)
+                   (when (< (ant:choose-turn w 0 id 7 0.5f0 0.5f0 0.0f0) 0.0f0)
+                     (incf left)))
+                 (/ (float left) n))))))
+    (let ((marked (left-share 1.0f0))
+          (off (left-share 0.0f0)))
+      (is (< marked (* 0.6f0 off))
+          "a marked direction was still chosen ~,3f of the time against ~,3f
+unmarked, so the field is not reaching the choice function" marked off)
+      (is (< (abs (- off 1/3)) 0.05f0)
+          "with the field off the three directions must be equally likely,
+and left came out ~,3f" off))))
+
+(test a-homing-ant-routes-around-a-marked-pocket
+  "Why the field has to reach CLEAR-BEARING as well, and not only the
+choice function.
+
+A laden ant's heading is set by the homing term *after* the choice
+function has spoken, so whatever the antennae concluded is overwritten
+before the ant moves — the same reason *homing-scan-steps* had to exist.
+A returning ant is precisely the one that needs to route around a pocket,
+so a mark that stops at the choice function does not reach the ants it is
+for."
+  (multiple-value-bind (w c) (%repel-world)
+    (declare (ignore w))
+    (let ((f (ant:colony-field c))
+          (rf (ant:colony-repel c)))
+      ;; heavily mark the ground due east of the ant
+      (loop for dx from 0.0f0 to 0.03f0 by 0.004f0
+            do (ant:field-deposit! rf (+ 0.5f0 dx) 0.5f0 40.0f0))
+      (ant:field-step! rf)
+      (let ((plain (ant:clear-bearing f 0.5f0 0.5f0 0.0f0 1.0f0
+                                      ant:*sensor-offset*))
+            (marked (ant:clear-bearing f 0.5f0 0.5f0 0.0f0 1.0f0
+                                       ant:*sensor-offset* rf)))
+        (is (< (abs plain) 1.0f-5)
+            "open ground should return the bearing unchanged, got ~,4f" plain)
+        (is (> (abs marked) 0.2f0)
+            "the marked bearing was taken anyway: ~,4f" marked)))))
+
+(test an-exhausted-source-marks-itself
+  "End to end on a live tick loop: an ant that walks to a source and
+finds nothing there says so.  This is the model's first fast brake — a
+trail outliving its source can otherwise only be forgotten at the speed
+of evaporation."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16))
+         (c (ant:add-colony w :nest-x 0.5f0 :nest-y 0.5f0 :stock 1.0f6))
+         (f (ant:add-food w 0.8f0 0.5f0 0.02f0 100.0f0))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w)))
+    (ant:world-seed-population! w c 1)
+    (let ((bi (aref (ant:ants-body a) 0)))
+      ;; standing on the source, which then runs out under it
+      (setf (aref (ant:bodies-x b) bi) 0.8f0
+            (aref (ant:bodies-y b) bi) 0.5f0
+            (aref (ant:ants-state a) 0) ant:+ant-at-food+
+            (ant:food-amount f) 0.0f0)
+      (dotimes (k 40)
+        (setf (aref (ant:ants-energy a) 0) 1.0f0)
+        (ant:world-step! w))
+      (is (plusp (ant:field-total (ant:colony-repel c)))
+          "walked to an empty source and left no verdict"))))

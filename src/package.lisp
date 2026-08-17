@@ -43,6 +43,9 @@
    #:*trail-lost-threshold* #:*trail-follow-threshold* #:*trail-memory-decay*
    #:*uturn-ticks* #:*uturn-cast-gain*
    #:*stall-window* #:*stall-pinned-fraction* #:*stall-detour-fraction*
+   ;; the no-entry field (§3.9, docs/navigation.md Layer 3)
+   #:*repel-tau* #:*repel-deposit* #:*repel-cap* #:*repel-weight*
+   #:*repel-threshold* #:*repel-dead-end* #:repel-tau
    #:*relax-iterations* #:*relax-slop*
    ;; world/geom — polygons and the broad phase (§3.7, §4.2)
    #:polygon #:make-polygon #:polygon-n #:polygon-verts
@@ -70,7 +73,8 @@
    #:food #:food-x #:food-y #:food-r #:food-amount #:food-initial
    #:food-density #:food-density-for
    #:food-quality #:food-renew #:food-empty-p #:food-body
-   #:colony #:colony-id #:colony-name #:colony-field #:colony-stock
+   #:colony #:colony-id #:colony-name #:colony-field #:colony-repel
+   #:colony-stock
    #:colony-population #:colony-capacity #:colony-born #:colony-died
    #:colony-nest-x #:colony-nest-y #:colony-nest-r #:colony-alive-p
    #:colony-forage-urgency #:colony-leave-probability
@@ -109,6 +113,7 @@
    #:bridge-share #:bridge-winner
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
+   #:repel-at #:repel-deposit! #:clear-bearing
    #:ant-handedness #:ant-pace
    #:world-step! #:world-run! #:colony-step! #:colony-feed! #:world-seed-population!
    ;; render/png (antsim/render)

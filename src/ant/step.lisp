@@ -204,6 +204,60 @@ every line that reads a pheromone."
             (incf foreign v))))
     (+ own (* *choice-eavesdrop* foreign))))
 
+(declaim (inline repel-at))
+(defun repel-at (c x y)
+  "No-entry concentration at a point, as this colony has marked it
+(§3.9, docs/navigation.md Layer 3).
+
+The colony's own field only, with no ε term of the kind SENSE-AT carries
+for the trail.  Eavesdropping on a neighbour's *trail* is reading where
+they have been, which is real information about the world; reading their
+no-entry marks would be letting a competitor close your routes for you.
+The two fields are not symmetric in what a stranger's opinion is worth."
+  (declare (type colony c) (type f32 x y) (optimize (speed 3) (safety 0)))
+  (field-at (colony-repel c) x y))
+
+(defun repel-deposit! (w c x y amount)
+  "Mark this ground as not worth walking (§3.9, docs/navigation.md).
+
+Two refusals, and the first is load-bearing.
+
+**Never at the nest door.**  The queue at a busy entrance is emergent and
+correct — §3.11 and *nest-arrival-radius* both record it as such — and
+every ant in it is stalled, jostled and getting nowhere by any measure the
+model has.  A colony that marked the ground there would chemically write
+off its own front door and starve in a ring around it, which is the exact
+failure widening the arrival radius had to fix.  So the arrival radius is
+also the exclusion radius, and it is the right constant for the job
+because it is already sized to contain the crowd.
+
+**Never on a live source.**  The same argument one step out: ants pile up
+at food, and the pile is the point.  Note the asymmetry — an *empty*
+source is not excluded, because a source that has run dry is precisely a
+dead end worth marking, and that falls out of the test rather than
+needing a rule.
+
+Writes through FIELD-DEPOSIT-PACKET!, so it lands in the deposit buffer
+and any two marks commute (§4.2)."
+  (declare (type world w) (type colony c) (type f32 x y amount)
+           (optimize (speed 3) (safety 1)))
+  (when (> amount 0.0f0)
+    (let ((rr *nest-arrival-radius*))
+      (declare (type f32 rr))
+      (let ((dx (- x (colony-nest-x c))) (dy (- y (colony-nest-y c))))
+        (declare (type f32 dx dy))
+        (when (<= (+ (* dx dx) (* dy dy)) (* rr rr))
+          (return-from repel-deposit! (values))))
+      (dolist (f (world-foods w))
+        (unless (food-empty-p f)
+          (let* ((dx (- x (food-x f))) (dy (- y (food-y f)))
+                 (fr (+ (food-current-radius f) rr)))
+            (declare (type f32 dx dy fr))
+            (when (<= (+ (* dx dx) (* dy dy)) (* fr fr))
+              (return-from repel-deposit! (values)))))))
+    (field-deposit-packet! (colony-repel c) x y amount))
+  (values))
+
 (declaim (inline blocked-factor))
 (defun blocked-factor (f x y avoid)
   "1.0 where an antenna is over open ground, (1 - AVOID) where it is over
@@ -262,9 +316,22 @@ this width the two are indistinguishable anyway."
   (+ (- 1.0f0 *speed-spread*)
      (* 2.0f0 *speed-spread* (rnd01 id 0 +stream-pace+ seed))))
 
-(defun clear-bearing (f x y bearing prefer off)
+(defun clear-bearing (f x y bearing prefer off &optional repel)
   "BEARING if an antenna held that way is over open ground, else the
 nearest direction that is.
+
+REPEL, when given, is the colony's no-entry field, and a direction whose
+sample point is marked above *repel-threshold* counts as shut exactly as
+terrain does.  That is the whole of how Layer 3 reaches a laden ant: the
+antennal veto in CHOOSE-TURN cannot, because the homing term runs
+afterwards and overwrites the heading — the same reason this function had
+to exist at all.  A returning ant is precisely the one that needs to
+route around a pocket, so if the mark does not reach here it does not
+reach the ants it is for.
+
+Ground the ant has marked itself counts.  It walked in, wasted a window
+and marked the spot on the way out; refusing to re-enter it is the
+behaviour, not an accident of not distinguishing self from colony.
 
 The home vector points through walls, and until now a returning ant
 followed it through them: it pressed against the surface, slid along it
@@ -289,11 +356,16 @@ square across its way, and no further.  An ant in a pocket needs to walk
 *away* from the nest to get out, which a bearing cannot express however
 wide the scan; that is route memory (§3.4)."
   (declare (type field f) (type f32 x y bearing prefer off)
+           (type (or null field) repel)
            (optimize (speed 3) (safety 1)))
   (flet ((clear-p (ang)
            (declare (type f32 ang))
-           (not (field-blocked-p f (+ x (* off (cos ang)))
-                                 (+ y (* off (sin ang)))))))
+           (let ((sx (+ x (* off (cos ang))))
+                 (sy (+ y (* off (sin ang)))))
+             (declare (type f32 sx sy))
+             (and (not (field-blocked-p f sx sy))
+                  (or (null repel)
+                      (< (field-at repel sx sy) *repel-threshold*))))))
     (if (clear-p bearing)
         bearing
         (let ((steps *homing-scan-steps*))
@@ -344,10 +416,17 @@ switch into and no switching logic to get wrong (§3.5)."
          (k *choice-k*)
          (hl (- heading spread))
          (hr (+ heading spread))
-         (cl (sense-at w colony-id (+ x (* off (cos hl))) (+ y (* off (sin hl)))))
-         (cc (sense-at w colony-id (+ x (* off (cos heading)))
-                       (+ y (* off (sin heading)))))
-         (cr (sense-at w colony-id (+ x (* off (cos hr))) (+ y (* off (sin hr)))))
+         ;; The three antennal sample points, bound once.  Every sense
+         ;; this ant has is taken at these same three places — trail,
+         ;; terrain and no-entry — so computing them once is both cheaper
+         ;; than the three copies this grew and the only way the readings
+         ;; cannot drift apart from one another.
+         (xl (+ x (* off (cos hl)))) (yl (+ y (* off (sin hl))))
+         (xc (+ x (* off (cos heading)))) (yc (+ y (* off (sin heading))))
+         (xr (+ x (* off (cos hr)))) (yr (+ y (* off (sin hr))))
+         (cl (sense-at w colony-id xl yl))
+         (cc (sense-at w colony-id xc yc))
+         (cr (sense-at w colony-id xr yr))
          ;; Feel for terrain with the same three antennal points (§3.2).
          ;;
          ;; An ant that cannot tell a wall is there until it has walked
@@ -369,17 +448,30 @@ switch into and no switching logic to get wrong (§3.5)."
          ;; antennal contact is how a real ant learns a wall is in front
          ;; of it, and thigmotaxis is a documented behaviour rather than a
          ;; convenience.
-         (fld (colony-field (nth colony-id (world-colonies w))))
+         (col (nth colony-id (world-colonies w)))
+         (fld (colony-field col))
          (avoid *obstacle-avoidance*)
-         (bl (blocked-factor fld (+ x (* off (cos hl))) (+ y (* off (sin hl)))
-                             avoid))
-         (bc (blocked-factor fld (+ x (* off (cos heading)))
-                             (+ y (* off (sin heading))) avoid))
-         (br (blocked-factor fld (+ x (* off (cos hr))) (+ y (* off (sin hr)))
-                             avoid))
-         (wl (* bl (choice-weight (+ k cl) n)))
-         (wc (* bc (choice-weight (+ k cc) n)))
-         (wr (* br (choice-weight (+ k cr) n)))
+         (bl (blocked-factor fld xl yl avoid))
+         (bc (blocked-factor fld xc yc avoid))
+         (br (blocked-factor fld xr yr avoid))
+         ;; and the no-entry field, as a divisor (§3.9).
+         ;;
+         ;; 1/(1 + w*R) rather than a term subtracted inside the
+         ;; Deneubourg base.  Subtracting can drive (k + C - R) negative,
+         ;; which makes the exponentiation complex for fractional n and
+         ;; means nothing anyway; a divisor is bounded, always positive,
+         ;; and says the honest thing — a marked direction is less
+         ;; attractive by a factor, never impossible.  At *repel-weight*
+         ;; = 0 every factor is exactly 1 and this is the model without
+         ;; the field at all, which is what makes it measurable.
+         (rw *repel-weight*)
+         (rfd (colony-repel col))
+         (ql (/ 1.0f0 (+ 1.0f0 (* rw (field-at rfd xl yl)))))
+         (qc (/ 1.0f0 (+ 1.0f0 (* rw (field-at rfd xc yc)))))
+         (qr (/ 1.0f0 (+ 1.0f0 (* rw (field-at rfd xr yr)))))
+         (wl (* bl ql (choice-weight (+ k cl) n)))
+         (wc (* bc qc (choice-weight (+ k cc) n)))
+         (wr (* br qr (choice-weight (+ k cr) n)))
          ;; All three walled in — a corner.  Fall back to the unweighted
          ;; choice rather than dividing by zero; the collision pass will
          ;; get the ant out, and refusing to choose at all would freeze it.
@@ -387,7 +479,8 @@ switch into and no switching logic to get wrong (§3.5)."
                     (+ wl wc wr)
                     (progn (setf wl 1.0f0 wc 1.0f0 wr 1.0f0) 3.0f0)))
          (u (* (rnd01 id tick +stream-choice+ (world-seed w)) total)))
-    (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u))
+    (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u
+                      xl yl xc yc xr yr rw ql qc qr))
     ;; Second value: how strongly this ant can smell a trail at all,
     ;; as C/(k+C) of the best sensor — 0 in clean ground, approaching 1
     ;; on a saturated road.  The caller uses it to decide how *hard* to
@@ -583,7 +676,13 @@ switch into and no switching logic to get wrong (§3.5)."
             ((= state +ant-at-food+)
              (let ((f (world-food-at w x y)))
                (cond
-                 ((null f)                    ; source gone or drifted off
+                 ((null f)              ; source gone or drifted off
+                  ;; A dead end, and the published one (§3.9): this ant
+                  ;; walked here and there is nothing here.  Marking it is
+                  ;; the only fast brake the model has on a trail that
+                  ;; outlives its source — evaporation alone keeps
+                  ;; dispatching ants down it for another *trail-tau*.
+                  (repel-deposit! w c x y *repel-dead-end*)
                   (setf (aref (ants-state a) i) +ant-returning+))
                  (t
                   (let* ((rate (* *crop-fill-rate* (food-quality f)))
@@ -706,6 +805,19 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; forget it — otherwise the latch is still armed
                     ;; when the casting ends and the ant U-turns again.
                     (setf (aref (ants-smelled a) i) 0.0f0)
+                    ;; The other published dead end: a trail followed to
+                    ;; its end with nothing at the end of it.  This is
+                    ;; Robinson's bifurcation seen from the inside — the
+                    ;; ant that found out marks the spot, and nestmates
+                    ;; that never went avoid it.
+                    ;;
+                    ;; Dormant at the shipped defaults, because
+                    ;; *trail-lost-threshold* is 0 and U-turns are off
+                    ;; (see its docstring for the measurement).  Written
+                    ;; anyway: the rule belongs with the edge that
+                    ;; detects it, not in a later patch that has to
+                    ;; rediscover where the edge was.
+                    (repel-deposit! w c x y *repel-dead-end*)
                     (setf (aref (ants-cast a) i)
                           (min 255 (max 0 *uturn-ticks*)))
                     (setf heading
@@ -768,7 +880,8 @@ switch into and no switching logic to get wrong (§3.5)."
                                        (clear-bearing (colony-field c) x y
                                                       (atan hvy hvx)
                                                       (ant-handedness id seed)
-                                                      *sensor-offset*)
+                                                      *sensor-offset*
+                                                      (colony-repel c))
                                        (min 1.0f0 (/ urge (+ 1.0f0 urge)))))))
                (setf (aref (ants-heading a) i) heading)
 
@@ -878,6 +991,28 @@ switch into and no switching logic to get wrong (§3.5)."
                            (* (trail-deposit-rate)
                               (aref (ants-load-quality a) i)
                               (/ n (* *walk-speed-laden* *motion-dt*)))))))
+                    ;; and the aversive half of the same trip (§3.9,
+                    ;; docs/navigation.md Layer 3).  Layer 0 measured a
+                    ;; window's worth of travel that went somewhere other
+                    ;; than homeward; the mark is that measurement, so its
+                    ;; strength is the effort actually wasted and there is
+                    ;; no separate parameter saying how loudly to complain.
+                    ;;
+                    ;; Cleared on deposit, so one bad window leaves one
+                    ;; mark.  An ant still stuck simply books another
+                    ;; window and marks again, which is the honest rate:
+                    ;; the ground gets marked in proportion to how long it
+                    ;; goes on costing ants their walking.
+                    ;;
+                    ;; Note what is *not* here: the pinned gap.  It never
+                    ;; deposits, at any strength, anywhere — see
+                    ;; STALL-STEP! and REPEL-DEPOSIT! for why the nest
+                    ;; queue makes that prohibition load-bearing.
+                    (let ((s (aref (ants-stalled a) i)))
+                      (declare (type f32 s))
+                      (when (> s 0.0f0)
+                        (repel-deposit! w c x2 y2 (* *repel-deposit* s))
+                        (setf (aref (ants-stalled a) i) 0.0f0)))
                     ;; home?
                     (let ((ddx (- x2 (colony-nest-x c)))
                           (ddy (- y2 (colony-nest-y c))))
@@ -1252,7 +1387,11 @@ stops producing brood, and decays."
   (incf (world-tick w))
   (when (zerop (mod (world-tick w) (world-pheromone-every w)))
     (dolist (c (world-colonies w))
-      (field-step! (colony-field c) *pheromone-dt*)))
+      (field-step! (colony-field c) *pheromone-dt*)
+      ;; The no-entry field runs on the same clock and its own tau, which
+      ;; the field carries (§3.9).  One clock for all chemistry, so the
+      ;; two can never drift out of step with each other.
+      (field-step! (colony-repel c) *pheromone-dt*)))
   (when (zerop (mod (world-tick w) (world-colony-every w)))
     (dolist (f (world-foods w))
       (when (plusp (food-renew f))
