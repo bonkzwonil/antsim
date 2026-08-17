@@ -459,13 +459,19 @@ navigation systems in parallel and weights them by confidence:
      pocket. That case needs the route memory below, and the honest
      statement is that the model does not have it yet.
    - **The phase that fixes it is designed, in `docs/navigation.md`.**
-     Four layers in dependency order: use the home vector's *length*,
-     which is computed every tick and thrown away; latch a detour and
-     hold it until that length says the ant is making progress again;
-     remember the corner it got round, in nest-centred coordinates; and
-     mark obstructing faces with the no-entry repellent §3.9 already
-     schedules. The same document argues that modelling PI *error*
-     faithfully is not worth doing at this arena scale, and why.
+     Four layers in dependency order. First, read the half of the
+     integrator this model throws away: snapshot the home vector over a
+     window and the gap between how far the ant *walked*, how far it
+     *got*, and how much closer to *home* it got tells it whether it is
+     pinned, detouring, or fine — the two most expensive bugs in this
+     file's history were ants stuck with no way to notice. Then latch a
+     detour and hold it until that measure clears; remember the corner
+     it got round, in nest-centred coordinates; and mark both obstructing
+     faces and dead ends with the no-entry repellent §3.9 already
+     schedules — the dead-end half being the published experiment and the
+     fast negative feedback this model has never had. The same document
+     argues that modelling PI *error* faithfully is not worth doing at
+     this arena scale, and why.
 2. **Trail following.** §3.3. Used when trail concentration exceeds the
    detection threshold.
 3. **Landmark / route memory.** A learned association between a remembered
@@ -2005,11 +2011,15 @@ and middens, U-turns and search spirals. Multiple colonies and the ε
 competition scenario.
 
 The no-entry field in that list is not a loose end. `docs/navigation.md`
-designs it as the colony-wide half of obstacle memory, and puts three
-cheaper layers in front of it that fix §3.4's concavity trap with no new
-chemistry at all. The first of those is a day's work and produces a plot,
-which makes it a good place to *start* M4 rather than something M4 gets
-to eventually.
+designs it against both of its uses — the published one, marking branches
+that led nowhere, and the extrapolated one, marking obstacle faces that
+obstruct traffic — and puts three cheaper layers in front of it that fix
+§3.4's concavity trap with no new chemistry at all. It is also the only
+*fast* negative feedback in the model: today a branch that stops paying
+can only be forgotten at the speed of evaporation, which is the loop
+behind the collapse traced in §3.4. The first layer is a day's work and
+produces a plot, which makes it a good place to *start* M4 rather than
+something M4 gets to eventually.
 
 **M5 — interaction.** Click an ant to inspect its state, drop food, place
 obstacles, poke the nest and watch the alarm field propagate. The window

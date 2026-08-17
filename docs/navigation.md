@@ -184,6 +184,20 @@ Three consequences, all free:
   share a nest and therefore a frame. That is what makes §4.4 possible
   without anyone reading a global anything.
 
+This is bullseye reporting, in the military-aviation sense, and the
+analogy is close enough to be worth keeping in mind while implementing.
+Aircraft call positions as bearing and range from an agreed reference
+point rather than in absolute coordinates, precisely because every
+participant can construct that frame for itself from what it already
+tracks, and because a report in it is intelligible to everyone who shares
+the reference without anyone consulting a common map. An ant's home
+vector is a bullseye call, continuously updated: *nest, bearing 213, range
+0.4*. Everything remembered in this design is stated the same way, which
+is what makes a remembered corner shareable in principle and a repellent
+mark meaningful in practice — and, in the same breath, what makes the
+frame's origin the single point of failure. Two colonies do not share a
+bullseye, which §3.12's competition scenario should find interesting.
+
 With PI accurate (§2.3), the nest frame is the world frame minus a
 constant. The implementation will therefore look, at a glance, as though
 ants are sharing world coordinates. They are not, and the frame must stay
@@ -197,25 +211,68 @@ Each layer is useful alone, each is measurable alone, and each is
 strictly more expensive than the one before. That ordering is the
 schedule.
 
-### 4.1 Layer 0 — use the half of the vector already computed
+### 4.1 Layer 0 — one window, three readings
 
-The ant knows its distance home. Track whether that distance is *going
-down*.
+An inertial system produces two numbers, and this model reads neither.
+**How far the ant has walked** is the odometer's own output — the step
+count, integrated. **Where the ant has got to** is the accumulator, `h =
+(hvx, hvy)`. Neither is interesting alone; the arithmetic between them is
+the whole sensor, and it is three lines long.
 
-One f32 per ant, `hv-best`: the smallest `hv-len` seen since the ant
-turned for home. On each tick, if `hv-len < hv-best`, update it. The
-difference `hv-len - hv-best` is a progress deficit, in metres, and it is
-the only thing an ant needs in order to know it is in trouble — no map,
-no memory, no new sense, and no interaction with anything else in the
-tick.
+Snapshot the home vector every `*stall-window*` ticks. Call the snapshot
+`h₀` and the current value `h`, and accumulate the path length `L`
+covered over the window. Three scalars come out of those two vectors, and
+they are ordered:
 
-By itself this changes no behaviour. It is the sensor the next three
-layers steer on, and it is worth landing on its own so that it can be
-plotted before anything depends on it. The measurement to make first:
-over a run with obstacles, what is the distribution of the deficit for
-ants that get home, and for ants that die returning? If those two
-distributions do not separate, the rest of this document is wrong and
-should be rewritten before it is built.
+    L  ≥  |h − h₀|  ≥  |h₀| − |h|
+    ─      ───────      ─────────
+    how far I walked    how far I actually got    how much closer to home
+
+The two inequalities are just the triangle inequality and they are never
+violated, so **the two gaps are the diagnosis**:
+
+- `L − |h − h₀|` is walking that went nowhere. An ant wedged in a notch,
+  pinned in a crowd, or oscillating against a wall racks this up and
+  nothing else does. It is the *pinned* signal.
+- `|h − h₀| − (|h₀| − |h|)` is travel that went somewhere, but not
+  homeward. An ant working its way along an obstacle face racks this up
+  legitimately; an ant circling inside a pocket racks it up and never
+  cashes it in. It is the *detour* signal.
+- What is left is progress, and an ant crossing open ground toward the
+  nest has almost all of `L` in that bottom term.
+
+The magnitude of the difference and the difference of the magnitudes.
+Same window, same two snapshots, two different scalars — which is why
+"has the vector improved" and "has the ant actually moved" turn out to be
+one mechanism rather than two, and why Layer 0 is a handful of floats
+rather than a subsystem.
+
+Both gaps matter and they are not interchangeable. A pinned ant makes
+almost no net displacement per tick, so a detour-only test takes a very
+long time to fire on it — the ant is not covering ground toward home, but
+it is not covering ground at all, so any measure denominated in metres
+crawls. The pinned test is denominated in *time*, and fires in seconds.
+This is not hypothetical: the two most expensive bugs recorded in the
+codebase are both this failure. `ANT-HANDEDNESS`'s docstring reports an
+ant that oscillated for 20 000 ticks and travelled 12 mm, and
+`CLEAR-BEARING`'s reports 8 mm over the same span. **Neither ant had any
+way to notice.** After Layer 0, both are detectable from inside the
+model, which makes this as much a diagnostic as a behaviour: exposed in
+the HUD, a rising pinned count is how the *next* bug of this family gets
+found in an afternoon instead of a fortnight.
+
+It is also already half-built. `PATH-INTEGRATION-STEP!` computes the
+per-tick net displacement and hands its magnitude to the gait phase; `L`
+is that same magnitude accumulated rather than wrapped, one `incf` on a
+quantity already in a register in a loop that is already running.
+
+By itself this changes no behaviour, and that is deliberate. It is the
+sensor the next three layers steer on, it is worth landing alone so it
+can be plotted before anything depends on it, and the first measurement
+decides whether the rest of this document is worth building: over a run
+with obstacles, do the two gaps separate the ants that get home from the
+ants that die returning? If they do not, nothing downstream works, and
+the finding is cheap.
 
 ### 4.2 Layer 1 — commitment, which is what the scan lacks
 
@@ -224,8 +281,10 @@ memory of where it has been. That is why the pocket is a trap: at the
 mouth of it the direct bearing is clear, so the ant takes it, and it is
 back inside.
 
-Add a latch. When the progress deficit exceeds `*detour-trigger*`, the
-ant enters a **detour** state: it stops steering on the bearing and
+Add a latch. When Layer 0's detour gap exceeds `*detour-trigger*` — when
+the ant has covered that much ground without any of it turning into
+progress toward the nest — it enters a **detour** state: it stops
+steering on the bearing and
 follows the obstacle edge on its own handedness side — which the scan
 already produces, and which `ANT-HANDEDNESS` already fixes per individual
 for reasons that apply here unchanged. It leaves the detour state only
@@ -302,11 +361,66 @@ cheapest new thing in this document, and `grid.lisp`'s own header says
 each further chemical "is a second instance of this same structure rather
 than new machinery".
 
-**What deposits.** An ant in a detour latch — an ant that has *measured*
-that the way home is shut here — lays repellent behind it as it goes.
-Nothing else does. The mark therefore accumulates along the faces of
-obstacles that actually obstruct traffic between a source and the nest,
-and nowhere else: a wall nobody needs to pass never gets marked.
+Two different things get marked, and it is worth being clear that the
+second one is the reason to believe in the first.
+
+**Obstructing faces.** An ant in a detour latch — an ant that has
+*measured* that the way home is shut here — lays repellent behind it as
+it goes. The mark accumulates along the faces of obstacles that actually
+obstruct traffic between a source and the nest, and nowhere else: a wall
+nobody needs to pass never gets marked. This use is an extrapolation. No
+ant has been shown to chemically mark a rock.
+
+**Dead ends.** This one is not an extrapolation; it is the published
+experiment. Robinson et al. trained *Monomorium pharaonis* on a branching
+trail network in which one branch led nowhere, and the ants marked that
+branch with a repellent which nestmates — including ones that had never
+been down it — then avoided. That is a colony writing off a route, in
+chemistry, on evidence, and it is precisely the behaviour this model has
+no way to express.
+
+Three signatures in antsim mean *dead end*, and all three are states the
+ant already has:
+
+- **The pocket.** An ant that latched a detour, walked while losing
+  ground, and got out again has just proved that the region behind it is
+  a trap. The obstructing-face case above marks the wall it slid along;
+  this marks the *volume* it wasted its time in, and they are different
+  claims — one says "not through here", the other says "not in here at
+  all". **The deposit is the detour gap itself**, which is the point at
+  which Layer 0
+  stops being a trigger and becomes a measurement: the ant does not merely
+  know it was stuck, it knows in metres how badly, and that number is the
+  strength of the mark. A shallow kink in a wall barely registers. A deep
+  cul-de-sac that cost an ant a minute of walking gets painted, by that
+  ant, in proportion to what it cost. §4.4 asks below for an
+  evidence-proportional deposit; this is where the evidence comes from,
+  and it needs no parameter of its own.
+- **The trail that leads nowhere.** An outbound ant that follows a trail
+  to its end and finds no food is the Robinson case exactly. The model
+  already detects this: the U-turn rule fires when an ant that *was* on a
+  trail finds it gone, and `*uturn-ticks*` of casting follow. An ant that
+  casts out its full budget and finds nothing has run a branch to its end
+  for nothing, and that is the moment to mark.
+- **The source that has run dry.** A depleted source keeps its trail for
+  as long as `*trail-tau*` takes to erase it, and every ant dispatched
+  down that trail in the meantime is a wasted trip. An ant arriving at a
+  source that has nothing left knows something the field will take half
+  an hour to admit.
+
+**What must never deposit, and this one is load-bearing.** Layer 0's
+*pinned* gap fires on crowding, and the densest crowd in any run is the
+queue at the nest entrance — which `*nest-arrival-radius*`'s docstring
+establishes is correct, emergent, and observed in real nests. An ant
+jammed in that queue satisfies every stuck test in this document
+perfectly, and if it deposits, the colony chemically marks its own front
+door as a place not to go. That is not a tuning problem, it is a colony
+that starves in a ring around its nest, and it is the same failure the
+arrival radius already had to be widened to avoid. So: the pinned signal
+drives *behaviour* — back off, wait, try a different way through — and
+never deposition. Only the detour gap deposits, and deposition is
+suppressed within the arrival radius of the nest and of any known source
+regardless. Crowding is not an obstacle. It clears.
 
 **What reads it.** The same place the trail is read, in `CHOOSE-TURN`,
 with the opposite sign — a repellent term in the Deneubourg weighting.
@@ -314,6 +428,30 @@ The framing that keeps this honest is that the map does not get its own
 controller: **it is an antenna with memory**, a fourth sample alongside
 the three the ant already takes, differing only in that the chemistry
 outlives the ant that laid it.
+
+The read is *not* symmetric in the ant's state, and this is the one place
+where one chemical doing two jobs shows a seam. A wall obstructs both
+directions and should repel everybody. A dead end is a statement about
+where food is not, which is an outbound ant's business — a returning ant
+may perfectly well have to walk through a foodless region to get home,
+and a repellent that fights the homing term there re-creates the
+trail-suppression regression §7 warns about. One field, two gains:
+`*noentry-weight-outbound*` well above `*noentry-weight-returning*`, and
+the second one plausibly zero. Two fields would be more faithful to the
+distinction and cost a second decay pass to express something a
+multiplier already expresses.
+
+**Why this is worth more than the obstacle case.** Recruitment in this
+model is positive feedback with exactly one brake: evaporation, at a time
+constant of tens of minutes. §3.4's collapse trace is 553 ants outbound
+with one of them at the food — a colony pouring foragers down a road that
+stopped paying, because nothing can tell it faster than the field can
+forget. A repellent is a *fast* negative channel on that same loop: a
+branch can be written off in the seconds it takes an ant to walk back out
+of it, rather than in the half hour it takes the trail to fade. §3.4
+already identifies encounter-based recruitment as the fast channel that
+positive feedback is missing. This is the one negative feedback is
+missing, and it is much cheaper to build.
 
 **Why it must decay.** An obstacle is permanent and a mark that decays
 looks like an inefficiency. It is not, for two reasons. Obstacles in this
@@ -323,11 +461,45 @@ corridor that was reopened an hour ago is a colony with a bug. And decay
 is what makes the mark a claim about traffic rather than about geometry:
 a face that stops obstructing anyone stops being marked, and fades.
 
-**The result to look for** is the one visible in the window today and
+For dead ends the argument is stronger still, because a dead end is
+usually a *statement about food*, and food comes back. A branch that led
+nowhere this morning has a fresh aphid colony on it this afternoon, and a
+permanent mark is how a colony starves next to a full larder. The
+repellent's decay constant is therefore not a nuisance parameter: it is
+the rate at which the colony re-tests its own conclusions, and it should
+be *shorter* than the trail's, not longer. That ordering is worth
+asserting in a test, because getting it backwards produces a colony that
+looks fine for ten minutes and then quietly stops foraging.
+
+**How the colony blinds itself, and what stops it.** This is the failure
+mode of the whole layer and it deserves naming rather than a parameter.
+An aversive signal deposited on weak evidence, read as a veto, with a
+long time constant, is a machine for converting one ant's bad afternoon
+into a colony-wide blind spot — and §3.4 already worries about the milder
+version of this in route fidelity, where the answer was that naive ants
+and `*nest-exit-scatter*` keep the colony's eyes open. Three
+constructional answers, all cheap: the deposit is proportional to the
+evidence — the detour gap for a pocket, casting time for a spent branch,
+and never the pinned gap at all — so a
+long fruitless excursion marks hard and a brief one barely marks at all,
+and the ant is measuring its own wasted effort rather than being handed a
+constant; the read is a *weight* in `(k + C)ⁿ`, never a veto, so an
+ant with a strong trail or a strong home vector can overrule it, which is
+§3.4's confidence-weighting doing its job; and the decay above means an
+unvisited mark dies of its own accord. The acceptance row that catches a
+violation is not a new one — it is *trail death* and *colony extinction*
+from §3.8, which a blinded colony fails loudly.
+
+**The results to look for.** The first is visible in the window today and
 wrong: the trail that bends along an obstacle edge, with ants dying on
 it. With Layer 3 the trail should stand off the obstacle by a margin set
-by `*noentry-weight*`, and the standing-off should be visibly *learned* —
-absent in the first minutes of a run and present later.
+by `*noentry-weight-outbound*`, and the standing-off should be visibly
+*learned* — absent in the first minutes of a run and present later. The
+second is a number rather than a picture, and it is the better test:
+deplete a source mid-run and count the trips still dispatched down its
+trail. Without the repellent that count decays on `*trail-tau*`. With it,
+it should fall off in the time it takes a few ants to make the round trip
+and come back with the bad news.
 
 **Where it is weakest.** The repellent is a colony-wide object that no
 individual can attribute, so it can only ever say *not here*; it cannot
@@ -343,17 +515,28 @@ Per ant, in the struct-of-arrays of `ant/state.lisp`:
 
 | field | type | meaning | layer |
 |---|---|---|---|
-| `hv-best` | f32 | smallest `hv-len` since turning for home | 0 |
+| `h0x`, `h0y` | f32 | home vector at the start of the current window | 0 |
+| `walked` | f32 | path length `L` covered within the window | 0 |
+| `window` | u16 | ticks since the snapshot | 0 |
+| `stalled` | f32 | detour gap, carried across windows so a long pocket accumulates | 0 |
 | `detour` | u8 | 0 = none, else latched, side from `ANT-HANDEDNESS` | 1 |
 | `hv-latch` | f32 | `hv-len` at the moment of latching | 1 |
 | `wp-x`, `wp-y` | f32 × K | remembered corners, home-vector frame | 2 |
 | `wp-n` | u8 | how many are valid | 2 |
 | `exit-len` | f32 | length of the food vector | 2 |
 
-That is 3 floats and 2 bytes per ant at Layer 1, plus 2K floats at
+That is 5 floats and 3 bytes per ant at Layer 1, plus 2K floats at
 Layer 2. At K = 4 and 5 000 ants the whole thing is under 200 kB. No
 allocation, no free list changes, no per-ant heap — the existing
 `MAKE-ANTS` pattern extends unchanged.
+
+Layer 3 adds no per-ant state at all, which is the strongest argument for
+it. Every one of the three dead-end signatures is already on the table by
+the time it is needed: the effort wasted in a pocket is Layer 0's detour
+gap, a branch run to its end is the existing `cast` counter reaching zero
+with nothing found, and an empty source is a condition the foraging state
+machine already evaluates in order to send the ant home. The layer is a
+field, three parameters and three deposit calls.
 
 Per colony: one more `field`, at a coarser cell than the trail field.
 The trail runs at 5 mm because the choice function samples across a
@@ -385,6 +568,11 @@ New rows for §3.8, in the same spirit: consequences, not features.
 | **Detours do not corrupt the vector** | forced detour, single ant | on emerging, the home vector still points at the nest within the error radius — the property that distinguishes an integrator from a memorised heading |
 | **The second trip is straighter** | same ant, same obstacle, two trips | path length on trip 2 < trip 1, over a population and several seeds |
 | **The trail stands off the wall** | source behind an obstacle | ant density in the cells adjacent to the obstacle boundary falls, and falls *over the run* rather than from the first minute |
+| **A pinned ant notices it is pinned** | the oscillation `ANT-HANDEDNESS` was written to fix, reproduced deliberately | the pinned gap fires within seconds, where the ant historically thrashed for 20 000 ticks and travelled 12 mm with nothing in the model able to see it |
+| **The nest door is never marked** | any run dense enough to queue at the entrance | repellent concentration within the arrival radius stays at zero — the queue is emergent and correct, and a colony that marks its own doorway starves in a ring |
+| **The unrewarding branch is written off** | Robinson et al., a bifurcation with one branch leading nowhere | traffic down the dead branch falls faster than evaporation alone explains, and ants that have never been down it avoid it — the second half is the whole point, and the control is the same run with deposition off |
+| **A dry source stops costing trips** | deplete a source mid-run | trips dispatched down its trail decay on the round-trip time, not on `*trail-tau*`; the colony's delivery rate recovers sooner |
+| **The colony does not blind itself** | a dead end that later becomes a source | foraging resumes; the mark over it must decay faster than the trail, and the test asserts that ordering directly |
 | **Obstacle memory is not clairvoyance** | move the obstacle mid-run (M5) | the colony re-learns; the repellent over the old position fades and the trail re-routes |
 | **Nothing changes with memory off** | all four layers disabled | bit-identical to the current model on a fixed seed — the regression guard that keeps every published figure valid |
 
@@ -432,6 +620,16 @@ belongs in the same neighbourhood as this work — but §2.3's argument
 means it is a rarity at arena scale rather than the load-bearing failure
 mode it is at 100 m, so it stays deferred, and this document should not
 be read as having built it.
+
+**The aversive layer can subtract more than it adds.** Layer 3 is the
+only thing in this document that makes ants *avoid* ground, and an
+avoidance signal is a much sharper instrument than a recruitment one: too
+much of it and the colony stops finding things, which looks in the window
+exactly like a colony that is doing fine right up until it starves.
+§4.4 gives the three constructional answers — evidence-proportional
+deposit, a weight rather than a veto, and a decay constant shorter than
+the trail's — and the honest addition here is that all three are guesses
+until the fitted numbers exist.
 
 **The layers can fight.** A latched detour steering one way and a
 repellent gradient pushing another can produce an ant that does neither.
@@ -497,8 +695,17 @@ Needs checking before any number is taken from it:
   matter *less* here rather than more.
 - **Repellent decay time constant** — Robinson et al. give a lifetime for
   the no-entry mark; `*noentry-tau*` should be fitted to it rather than
-  guessed, since §4.4's argument turns on the mark being short-lived
-  relative to the run.
+  guessed, since §4.4's argument turns on the mark decaying faster than
+  the trail it argues with.
+- **Whether the reference species has a repellent at all.** Robinson et
+  al. is *Monomorium pharaonis*. Czaczkes and colleagues have a body of
+  work on negative feedback in *Lasius niger* specifically — U-turns,
+  reduced deposition, and, I believe, aversive marking at bifurcations —
+  and that literature is the right one to fit §4.4's parameters from.
+  Read it before any number is taken. If *L. niger* turns out to have no
+  repellent, the dead-end layer becomes a deliberate borrowing from
+  another species rather than a model of this one, which is a defensible
+  thing to do and a dishonest thing to leave unsaid.
 - **Whether ants detour by view memory rather than by anything resembling
   Layer 1.** Almost certainly yes, and Layer 1 is a stand-in chosen for
   cost. Worth restating in the code so nobody mistakes it for a claim
