@@ -337,6 +337,15 @@ most likely to be hunting for the ant they just clicked."
                         (format nil "TRAIL ~D"
                                 (round (if c (field-total (colony-field c)) 0)))
                         :scale s :r 0.55 :g 0.86 :b 1.00))
+      ;; The no-entry field (§3.9), in the violet the shader draws it in
+      ;; so the number and the stain on screen are obviously the same
+      ;; quantity.  It was invisible and unreported until now, which made
+      ;; a field that was doing real work look like one that had never
+      ;; been built.
+      (setf x (hud-text h (+ x 14) 8
+                        (format nil "NOENTRY ~D"
+                                (round (if c (field-total (colony-repel c)) 0)))
+                        :scale s :r 0.88 :g 0.32 :b 0.80))
       (setf x (hud-text h (+ x 14) 8
                         (format nil "~,2FX~:[~; PAUSED~]" *live-speed*
                                 *live-paused*)
@@ -427,11 +436,12 @@ most likely to be hunting for the ant they just clicked."
 (defun live-title (w fps)
   (let ((c (first (world-colonies w))))
     (format nil "antsim — t ~,1f s · ~d ants · stock ~,0f · trail ~,0f · ~
-                 ~,1fx~:[~; (paused)~] · ~,0f fps"
+                 no-entry ~,0f · ~,1fx~:[~; (paused)~] · ~,0f fps"
             (world-seconds w)
             (if c (colony-population c) 0)
             (if c (colony-stock c) 0.0)
             (if c (field-total (colony-field c)) 0.0d0)
+            (if c (field-total (colony-repel c)) 0.0d0)
             *live-speed* *live-paused* fps)))
 
 (defun run-live (w &key (width 1100) (height 800) (title "antsim"))

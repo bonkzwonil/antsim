@@ -43,7 +43,7 @@
    #:*trail-lost-threshold* #:*trail-follow-threshold* #:*trail-memory-decay*
    #:*uturn-ticks* #:*uturn-cast-gain*
    #:*stall-window* #:*stall-pinned-fraction* #:*stall-detour-fraction*
-   #:*detour-ticks* #:*detour-release*
+   #:*detour-ticks* #:*detour-release* #:*detour-abandon*
    ;; the no-entry field (§3.9, docs/navigation.md Layer 3)
    #:*repel-tau* #:*repel-deposit* #:*repel-cap* #:*repel-weight*
    #:*repel-threshold* #:*repel-dead-end* #:repel-tau
@@ -90,7 +90,7 @@
    #:food-current-radius
    #:world #:make-world #:world-width #:world-height #:world-bodies
    #:world-ants #:world-colonies #:world-foods #:world-obstacles
-   #:world-tick #:world-seed #:world-seconds #:world-food-at
+   #:world-tick #:world-seed #:world-seconds #:world-food-at #:world-food-near
    #:add-obstacle #:add-food #:add-colony
    ;; ant/state — the ant table (§3.5)
    #:ants #:make-ants #:ants-n #:ants-live #:ants-capacity #:ant-live-p

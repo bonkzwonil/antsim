@@ -222,6 +222,36 @@ every line that reads a pheromone."
             (incf foreign v))))
     (+ own (* *choice-eavesdrop* foreign))))
 
+(defun food-odour-at (w x y)
+  "How strongly food can be smelled at a point, in pheromone units
+(*food-odour-strength*, *food-odour-reach*).
+
+Computed from the sources rather than kept in a field, and that is a
+decision rather than a shortcut.  A source is not a chemical the ants
+deposit — it is an object with a position and a shrinking radius, and it
+has no evaporation, no deposit buffer and nothing to accumulate.  Putting
+it in a FIELD would mean rasterising a disc that changes size every tick
+and would buy nothing: there are a handful of sources and three sample
+points per ant, where a field costs a full grid sweep on the pheromone
+clock.
+
+Linear from full at the pile's edge to nothing at the reach, which is
+about as much shape as a number nobody has measured deserves."
+  (declare (type world w) (type f32 x y) (optimize (speed 3) (safety 1)))
+  (let ((reach *food-odour-reach*)
+        (s 0.0f0))
+    (declare (type f32 reach s))
+    (when (<= reach 0.0f0) (return-from food-odour-at 0.0f0))
+    (dolist (f (world-foods w) s)
+      (unless (food-empty-p f)
+        (let* ((dx (- x (food-x f))) (dy (- y (food-y f)))
+               (d (sqrt (+ (* dx dx) (* dy dy))))
+               (edge (food-current-radius f)))
+          (declare (type f32 dx dy d edge))
+          (when (< d (+ edge reach))
+            (incf s (* *food-odour-strength*
+                       (- 1.0f0 (/ (max 0.0f0 (- d edge)) reach))))))))))
+
 (declaim (inline repel-at))
 (defun repel-at (c x y)
   "No-entry concentration at a point, as this colony has marked it
@@ -554,9 +584,17 @@ switch into and no switching logic to get wrong (§3.5)."
          (xl (+ x lx (* off (cos hl)))) (yl (+ y ly (* off (sin hl))))
          (xc (+ x lx (* off (cos heading)))) (yc (+ y ly (* off (sin heading))))
          (xr (+ x lx (* off (cos hr)))) (yr (+ y ly (* off (sin hr))))
-         (cl (sense-at w colony-id xl yl))
-         (cc (sense-at w colony-id xc yc))
-         (cr (sense-at w colony-id xr yr))
+         ;; Trail, plus the smell of any food within a few body lengths.
+         ;;
+         ;; Added to the concentration rather than steered on separately,
+         ;; so it goes through the same (k + C)^n weight the trail does
+         ;; and inherits the nonlinearity §3.8 is a test of.  An ant a
+         ;; centimetre from a sugar drop then turns toward it as sharply
+         ;; as it would toward a strong road, which is what it should do
+         ;; and what walking blind past it was not.
+         (cl (+ (sense-at w colony-id xl yl) (food-odour-at w xl yl)))
+         (cc (+ (sense-at w colony-id xc yc) (food-odour-at w xc yc)))
+         (cr (+ (sense-at w colony-id xr yr) (food-odour-at w xr yr)))
          ;; Feel for terrain with the same three antennal points (§3.2).
          ;;
          ;; An ant that cannot tell a wall is there until it has walked
@@ -804,17 +842,63 @@ switch into and no switching logic to get wrong (§3.5)."
 
             ;; --- AT-FOOD -------------------------------------------
             ((= state +ant-at-food+)
-             (let ((f (world-food-at w x y)))
+             ;; WORLD-FOOD-NEAR, not WORLD-FOOD-AT, and the difference is
+             ;; the whole of this branch's correctness.
+             ;;
+             ;; "Am I standing on it" is the wrong question for an ant
+             ;; that is *already eating*.  A source is a blocking body
+             ;; with a queue round it, a feeding ant does not hold its own
+             ;; position, and the edge itself retreats as the pile is
+             ;; eaten (FOOD-CURRENT-RADIUS) — so the ant is shoved off
+             ;; constantly and has not thereby finished its meal.  Asking
+             ;; the strict question sent it home with whatever it had:
+             ;; measured, **48% of all departures from food** were ants
+             ;; that had been pushed off rather than filled up, mean load
+             ;; 0.63 instead of 1.0.
+             ;;
+             ;; Feeding from the wider radius rather than only stepping
+             ;; back toward it also matters, and getting that wrong is how
+             ;; this was first written: an ant that walks back but cannot
+             ;; eat until it is exactly on the pile hovers at the edge
+             ;; being pushed out as fast as it steps in, filling nothing,
+             ;; for ever.  That is an ant circling a source it never
+             ;; leaves, which is precisely the symptom.
+             ;; The slack is one ant radius, not the antennal offset.  It
+             ;; exists to survive being *jostled* off a pile — a couple of
+             ;; millimetres — and anything wider is a quiet enlargement of
+             ;; every food source in the model: more ants feed at once,
+             ;; each trip takes longer, and on the §3.8 bridges that is
+             ;; enough to slow the recruitment feedback below the point
+             ;; where a colony commits to an arm at all.  Measured: at the
+             ;; antennal offset a binary-bridge replicate finished at
+             ;; 0.507, which is no choice having been made.
+             (let ((f (world-food-near w x y *ant-radius*)))
                (cond
-                 ((null f)              ; source gone or drifted off
-                  ;; A dead end, and the published one (§3.9): this ant
-                  ;; walked here and there is nothing here.  Marking it is
-                  ;; the only fast brake the model has on a trail that
+                 ((null f)
+                  ;;
+                  ;; Nothing within reach at all, so the meal really is
+                  ;; over.  A dead end, and the published one (§3.9): this
+                  ;; ant walked here and there is nothing here.  Marking it
+                  ;; is the only fast brake the model has on a trail that
                   ;; outlives its source — evaporation alone keeps
                   ;; dispatching ants down it for another *trail-tau*.
                   (repel-deposit! w c x y *repel-dead-end*)
                   (setf (aref (ants-state a) i) +ant-returning+))
                  (t
+                  ;; Shoved off the pile: walk back on, exactly as a
+                  ;; resting ant walks itself into the nest (see
+                  ;; +ANT-IN-NEST+ above) and for the same reason.
+                  ;; Arrival is a threshold for a *transaction*, never a
+                  ;; place the ant stops caring where it is.
+                  (unless (world-food-at w x y)
+                    (let* ((fdx (- (food-x f) x)) (fdy (- (food-y f) y))
+                           (fd (sqrt (+ (* fdx fdx) (* fdy fdy)))))
+                      (declare (type f32 fdx fdy fd))
+                      (when (> fd 1.0f-6)
+                        (let ((step (min (* 0.5f0 *walk-speed* dt) fd)))
+                          (declare (type f32 step))
+                          (setf (aref bxs bi) (+ x (* (/ fdx fd) step))
+                                (aref bys bi) (+ y (* (/ fdy fd) step)))))))
                   (let* ((rate (* *crop-fill-rate* (food-quality f)))
                          (take (min rate
                                     (- 1.0f0 (aref (ants-crop a) i))
@@ -1018,11 +1102,30 @@ switch into and no switching logic to get wrong (§3.5)."
                  ;; the ant has genuinely closed on the nest — ground
                  ;; made, not a bearing that merely looks open, which is
                  ;; the distinction the whole latch exists to draw.
+                 ;; Two ways out, and the second is what keeps a
+                 ;; commitment from becoming a wandering.
+                 ;;
+                 ;; *Succeeded*: the ant has closed on the nest, so the
+                 ;; detour worked and homing resumes at once.
+                 ;;
+                 ;; *Failed*: the range home has grown instead.  Walking
+                 ;; round an obstacle holds the range roughly constant —
+                 ;; that is what going round something looks like — so a
+                 ;; range that is growing means this is not a detour any
+                 ;; more, it is an ant leaving.  Without this the ant
+                 ;; spends the whole window drifting, laying trail as it
+                 ;; goes (deposition does not care that it is lost), and
+                 ;; what it paints is a road to wherever it ended up.
+                 ;;
+                 ;; The two thresholds are deliberately *not* symmetric —
+                 ;; see *detour-abandon* for why a mirrored margin
+                 ;; abandons the manoeuvre it exists to protect.
                  (when committed
-                   (let ((d (aref (ants-detour a) i)))
-                     (declare (type (unsigned-byte 16) d))
-                     (if (< hv-len (* *detour-release*
-                                      (aref (ants-hv-latch a) i)))
+                   (let ((d (aref (ants-detour a) i))
+                         (latched (aref (ants-hv-latch a) i)))
+                     (declare (type (unsigned-byte 16) d) (type f32 latched))
+                     (if (or (< hv-len (* *detour-release* latched))
+                             (> hv-len (* *detour-abandon* latched)))
                          (setf (aref (ants-detour a) i) 0)
                          (setf (aref (ants-detour a) i) (1- d)))))
                  (when (and (> hv-len 1.0f-4) (> urge 0.0f0))
@@ -1131,7 +1234,31 @@ switch into and no switching logic to get wrong (§3.5)."
                                           (* (- y2 y) (- y2 y))))))
                       (declare (type f32 moved))
                       (incf (aref (ants-trailed a) i) moved)
+                      ;; **A lost ant does not recruit.**
+                      ;;
+                      ;; An ant committed to a detour has just declared
+                      ;; that the ground it is on did not get it home, and
+                      ;; trail pheromone means the opposite of that — it
+                      ;; says 'this way'.  Laying it while detouring
+                      ;; rebuilt, through a new route, the exact runaway
+                      ;; *obstacle-avoidance* was written to kill: the ant
+                      ;; edge-follows round an obstacle, marks the edge as
+                      ;; it goes, the mark recruits nestmates onto the same
+                      ;; edge, they get stuck too and mark it harder.  What
+                      ;; that produces is a saturated blob at an obstacle
+                      ;; corner with a ball of laden ants sitting on it,
+                      ;; none of them going home.  Seen from the window;
+                      ;; no aggregate showed it, because the food was
+                      ;; still arriving from the ants that had not been
+                      ;; caught yet.
+                      ;;
+                      ;; Suppressed rather than reduced.  A detour is
+                      ;; brief by construction (*detour-ticks*), and the
+                      ;; ant resumes marking the moment it is homing
+                      ;; again — so what is lost is a few centimetres of
+                      ;; road that was misleading anyway.
                       (when (and (> (aref (ants-crop a) i) 0.0f0)
+                                 (zerop (aref (ants-detour a) i))
                                  (>= (aref (ants-load-quality a) i)
                                      *trail-quality-threshold*)
                                  (>= (aref (ants-trailed a) i)
@@ -1330,6 +1457,33 @@ homing term from simply undoing it on the next tick."
             (cond
               ((not (or (= state +ant-outbound+) (= state +ant-returning+)))
                (stall-reset! a i))
+              ;; **Committed to a detour: measure nothing.**
+              ;;
+              ;; This is not an optimisation, it is the fix for a
+              ;; positive feedback that made Layer 1 catastrophic.  A
+              ;; latched ant has its homing urge switched off, so of
+              ;; course it makes no homeward progress — and the detour
+              ;; test looks for exactly that, so at the next window close
+              ;; it re-armed the latch on evidence the latch itself had
+              ;; manufactured.  The ant then never homed again: it
+              ;; random-walked until it reached a corner and piled up
+              ;; there with everything else that had done the same, while
+              ;; its colony's larder emptied and full sources sat
+              ;; untouched.  Reported from the window, where it is
+              ;; unmistakable, and invisible in every aggregate that
+              ;; measures delivery rather than who is delivering.
+              ;;
+              ;; The window measures 'I am trying to go home and
+              ;; failing'.  A committed ant is not trying, so the reading
+              ;; is meaningless rather than merely inconvenient — and the
+              ;; window is restarted so that measurement resumes cleanly
+              ;; once the commitment ends.
+              ((plusp (aref (the u16v (ants-detour a)) i))
+               (let ((s (aref (the f32v (ants-stalled a)) i)))
+                 (stall-reset! a i)
+                 ;; keep any mark it has not yet laid: the ground really
+                 ;; was wasted, and Layer 3 has not read it yet
+                 (setf (aref (the f32v (ants-stalled a)) i) s)))
               (t
                (let ((k (1+ (aref (the u16v (ants-window a)) i))))
                  (declare (type fixnum k))
@@ -1513,13 +1667,23 @@ as BODIES-RESOLVE! does."
           (seed (world-seed w))
           (cone *encounter-cone*) (yrate *yield-rate*)
           (stranger *stranger-avoidance*) (overtake *yield-overtake*)
-          (trate *trophallaxis-rate*) (tthr *trophallaxis-threshold*)
+          (trate *trophallaxis-rate*)
+          ;; The hunger bar is the colony's departure threshold, not a
+          ;; flat fraction of a tank — see *trophallaxis-threshold*.  One
+          ;; per colony, read once, because it is a colony-wide quantity
+          ;; and an ant may only ever feed a nestmate.
+          (thresholds (map 'vector
+                           (lambda (col)
+                             (* *trophallaxis-threshold*
+                                (colony-energy-threshold col)))
+                           (coerce (world-colonies w) 'vector)))
           (gain *encounter-confidence*)
           (r2 (* range range)))
       (declare (type f32v bxs bys heads crops energies dturn dcrop denergy
                           confs)
                (type u8v kinds states cols) (type u32v obm bodyv)
-               (type f32 cone yrate stranger overtake trate tthr gain r2))
+               (type f32 cone yrate stranger overtake trate gain r2)
+               (type simple-vector thresholds))
       ;; --- 1. clear the buffers and age the evidence -------------------
       (dotimes (i n)
         (setf (aref dturn i) 0.0f0
@@ -1550,8 +1714,12 @@ as BODIES-RESOLVE! does."
                  ;; empty it is — one partner per donor, so a donor can
                  ;; never give away more than it has however many hungry
                  ;; ants are pressed around it
-                 (mouth -1) (mouth-e 2.0f0))
-            (declare (type f32 xi yi hi cropi role myspeed turn mouth-e)
+                 (mouth -1) (mouth-e 2.0f0)
+                 ;; too spent to set out again — the same bar the
+                 ;; renderer draws as spent, so the rule is checkable
+                 ;; by eye
+                 (tthr (the f32 (aref thresholds coli))))
+            (declare (type f32 xi yi hi cropi role myspeed turn mouth-e tthr)
                      (type fixnum bi mouth))
             (do-shash-neighbours (jb hash xi yi range)
               (let ((jbb (the fixnum jb)))

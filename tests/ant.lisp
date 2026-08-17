@@ -239,29 +239,33 @@ test the scan" without)
       (is (< with 6000) "took ~d ticks, which is loitering, not walking"
           with))))
 
-(test a-committed-ant-rounds-a-wall-without-the-scan
-  "Layer 1 on its own, against the same wall, with the antennal scan
-switched off entirely (docs/navigation.md §4.2).
-
-This is the stronger claim of the two.  The scan chooses a walkable
-bearing from where the ant stands and re-chooses every tick, so it cannot
-express 'walk away from home for a while' — which is what a concavity
-requires, and why *homing-scan-steps* says in its own docstring that a
-pocket is still a trap however wide the scan.  A commitment window can
-express it, and needs no bearing at all: with the urge off the ant falls
-back on the choice function and the antennal wall veto, and follows the
-edge to its end.
-
-Measured on the word scenario before this existed: 57 ants going
-nowhere, 38 of them returning, and every corpse in the run against
-terrain."
-  (let ((latched (%walled-homing-run 0 :detour 400))
-        (neither (%walled-homing-run 0 :detour 0)))
-    (is-true latched
-             "the latch alone never got round the wall in 20000 ticks")
-    (is-false neither
-              "arrived at tick ~a with both mechanisms off, so this test
-does not test the latch" neither)))
+;;; **What Layer 1 does not do, recorded because a test once claimed it
+;;; did.**
+;;;
+;;; There was a test here asserting that the detour latch alone gets a
+;;; laden ant round a wall with the antennal scan switched off.  It
+;;; passed, and it was asserting a bug.
+;;;
+;;; The latch suppresses the homing urge, and the first version re-armed
+;;; itself every window — because a latched ant makes no homeward
+;;; progress, which is exactly the evidence the detour test looks for.  So
+;;; homing was off *permanently*, the ant fell back on the correlated
+;;; random walk, and a random walk does eventually find its way round a
+;;; wall in 20 000 ticks.  What the test measured was an ant that had
+;;; stopped trying to go home at all.
+;;;
+;;; The same runaway in a colony is ants drifting to corners in furballs,
+;;; laying trail as they went, with full sources untouched and the larder
+;;; emptying — all of which was reported from the window and none of which
+;;; showed in delivery aggregates, because the ants that had not yet been
+;;; caught were still feeding the nest.
+;;;
+;;; With the feedback removed the latch is a much smaller thing: it buys
+;;; one bounded window of not-homing, which is enough to break the
+;;; step-out-and-turn-back oscillation but not enough to navigate an
+;;; obstacle.  Doing that properly is Layer 2 — remembered corners — which
+;;; is not built.  A-LADEN-ANT-GETS-ROUND-A-WALL keeps the latch off for
+;;; the same reason it always did: it is a test of the antennal scan.
 
 (defparameter +uturn-run-ticks+ 4000)
 
@@ -1591,9 +1595,15 @@ table happens to be in, which is the determinism bug that survives every
 test until the day something is threaded."
   (let* ((w (%meet-world))
          (a (ant:world-ants w))
-         ;; one gift lands it above *trophallaxis-threshold*
-         (start (- ant:*trophallaxis-threshold*
-                   (* 0.4f0 ant:*trophallaxis-rate* ant:*crop-to-energy*))))
+         ;; The bar is the colony's departure threshold, not a flat
+         ;; fraction of a tank (see *trophallaxis-threshold*), so the
+         ;; fixture has to ask the colony what it is.
+         (bar (* ant:*trophallaxis-threshold*
+                 (ant:colony-energy-threshold
+                  (first (ant:world-colonies w)))))
+         ;; one gift lands it just above that bar
+         (start (- bar (* 0.4f0 ant:*trophallaxis-rate*
+                          ant:*crop-to-energy*))))
     (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+ :energy start)
     (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
     (%place! w 2 0.494f0 0.500f0 0.0f0 ant:+ant-returning+ :crop 1.0f0)

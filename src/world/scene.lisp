@@ -312,6 +312,27 @@ has."
     (setf (world-colonies w) (append (world-colonies w) (list c)))
     c))
 
+(defun world-food-near (w x y slack)
+  "The nearest source whose disc comes within SLACK of (X, Y), or NIL.
+
+WORLD-FOOD-AT asks whether an ant is *on* a source.  This asks whether it
+is near enough to get back onto one, which is a different question and
+the one a feeding ant needs: the pile is a blocking body surrounded by a
+crowd, so an ant that is part of that crowd is shoved off the edge
+constantly and has not thereby finished its meal."
+  (declare (type world w) (type f32 x y slack))
+  (let ((best nil) (bestd 0.0f0))
+    (declare (type f32 bestd))
+    (dolist (f (world-foods w) best)
+      (unless (food-empty-p f)
+        (let* ((dx (- x (food-x f))) (dy (- y (food-y f)))
+               (d2 (+ (* dx dx) (* dy dy)))
+               (rr (+ (food-current-radius f) *ant-radius* slack)))
+          (declare (type f32 dx dy d2 rr))
+          (when (and (<= d2 (* rr rr))
+                     (or (null best) (< d2 bestd)))
+            (setf best f bestd d2)))))))
+
 (defun world-food-at (w x y)
   "The food source whose disc contains (X, Y), or NIL.  Linear over the
 source list, which is correct while a scenario has a handful of them; a
