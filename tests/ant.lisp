@@ -1364,3 +1364,78 @@ rule here would then read the state of whatever ant next took that slot."
         "gave way to a corpse")
     (is (= 0.2f0 (aref (ant:ants-energy a) 0))
         "a corpse handed over a meal")))
+
+;;; --------------------------- what the inspector can say about an ant
+;;;
+;;; A trophallaxis is the one thing an ant does that involves another
+;;; *named individual* rather than a field or itself.  The model produced
+;;; those events and recorded nothing about them, so nothing could be
+;;; asked afterwards — including by a person watching the window.
+
+(test a-shared-meal-is-recorded-on-both-sides
+  "Who fed whom, and which way round.  The giving half is the ant's own
+slot; the receiving half has to come back through a buffer, because the
+donor is writing into somebody else's slot."
+  (let* ((w (%meet-world))
+         (a (ant:world-ants w)))
+    ;; ant 1 is laden and returning, ant 0 is spent and outbound
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+ :energy 0.10f0)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (%encounter! w)
+    ;; the donor knows who it fed
+    (is (= 1 (aref (ant:ants-partner-gave a) 1))
+        "the donor did not record giving")
+    (is (= (aref (ant:ants-id a) 0) (aref (ant:ants-partner a) 1))
+        "the donor recorded the wrong partner")
+    ;; and the recipient knows who fed it
+    (is (= 2 (aref (ant:ants-partner-gave a) 0))
+        "the recipient did not record being fed")
+    (is (= (aref (ant:ants-id a) 1) (aref (ant:ants-partner a) 0))
+        "the recipient recorded the wrong partner")
+    ;; both are held for a readable moment rather than one 50 ms tick
+    (is (plusp (aref (ant:ants-partner-ttl a) 0)))
+    (is (plusp (aref (ant:ants-partner-ttl a) 1)))
+    ;; and it fades once they part — while they are still in contact the
+    ;; meal is still happening, and the record is refreshed every tick
+    (%place! w 0 0.900f0 0.900f0 0.0f0 ant:+ant-outbound+ :energy 0.10f0)
+    (dotimes (k (1+ ant:*partner-memory*)) (%encounter! w))
+    (is (zerop (aref (ant:ants-partner-ttl a) 1))
+        "the record never expired")))
+
+(test the-receiving-record-does-not-depend-on-table-order
+  "Two donors, one recipient, one tick.  The donor writes into its
+recipient's slot — the only place the encounter pass does that — so a
+plain assignment would record whichever ant the sweep happened to reach
+last, and the answer would change if the loop were ever split across
+threads (§4.4, §4.5).
+
+MIN over donor ids is commutative and associative, so there is exactly
+one answer and it is the lower id.  Asserting the value *is* asserting
+the property."
+  (let* ((w (%meet-world))
+         (a (ant:world-ants w)))
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+ :energy 0.10f0)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (%place! w 2 0.494f0 0.500f0 0.0f0 ant:+ant-returning+ :crop 1.0f0)
+    (%encounter! w)
+    (is (= (min (aref (ant:ants-id a) 1) (aref (ant:ants-id a) 2))
+           (aref (ant:ants-partner a) 0))
+        "recorded ~d, which is not the lower of the two donors"
+        (aref (ant:ants-partner a) 0))))
+
+(test meeting-nestmates-is-counted
+  "Encounter rate is the quantity much of the task-allocation literature
+turns on, and the model was producing encounters and counting none of
+them.  A stranger does not count: it is not a nestmate contact."
+  (let* ((w (%meet-world :colonies 2 :n 4))
+         (a (ant:world-ants w)))
+    (%place! w 0 0.500f0 0.500f0 0.0f0 ant:+ant-outbound+)
+    (%place! w 1 0.506f0 0.500f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    ;; ant 4 belongs to the second colony
+    (%place! w 2 0.700f0 0.700f0 0.0f0 ant:+ant-outbound+)
+    (%place! w 4 0.706f0 0.700f0 3.1415927f0 ant:+ant-returning+ :crop 1.0f0)
+    (%encounter! w)
+    (is (plusp (aref (ant:ants-met a) 0))
+        "a nestmate contact went uncounted")
+    (is (zerop (aref (ant:ants-met a) 2))
+        "a stranger was counted as a nestmate contact")))

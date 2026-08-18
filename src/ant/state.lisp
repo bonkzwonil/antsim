@@ -152,6 +152,35 @@
   ;; and every lookup is checked against the ant's own BODY entry rather
   ;; than trusted, so a stale slot can only ever be ignored.
   (of-body nil :type (or null u32v))
+  ;; How many nestmates this ant has met, for its whole life.
+  ;;
+  ;; Not display state: encounter *rate* is the quantity a large part of
+  ;; the literature on task allocation is about, and until now the model
+  ;; produced encounters and counted none of them.  One counter per ant is
+  ;; the cheapest possible way to have the number at all.
+  (met nil :type (or null u32v))
+  ;; Who this ant last shared food with, and which way it went — id in
+  ;; PARTNER, 1 = gave / 2 = received in PARTNER-GAVE, and a countdown in
+  ;; PARTNER-TTL so the inspector can hold the event on screen for a
+  ;; readable moment instead of flashing it for one 50 ms tick.
+  ;;
+  ;; This is display state and is admitted as such, like ANTS-GAIT: no
+  ;; rule reads it.  It is here because a trophallaxis is the one thing
+  ;; an ant does that involves *another named individual*, and a model
+  ;; that cannot say which one has lost the only part of the event a
+  ;; person can follow.
+  (partner nil :type (or null u32v))
+  (partner-ttl nil :type (or null u16v))
+  (partner-gave nil :type (or null u8v))
+  ;; Per-tick buffer for the receiving half, applied after the sweep.
+  ;;
+  ;; A donor writes to its *recipient's* slot, which is the one place the
+  ;; encounter pass does that, so the write has to be commutative or the
+  ;; result depends on table order — two ants feeding the same nestmate on
+  ;; the same tick would otherwise record whichever the loop reached last.
+  ;; MIN over donor ids is commutative and associative, so the answer is
+  ;; the same however the sweep is split (§4.4, §4.5).
+  (fed-by nil :type (or null u32v))
   (free nil :type (or null fixv))
   (nfree 0 :type fixnum))
 
@@ -169,6 +198,10 @@ size them alike."
               :dturn (mkf32 capacity) :dcrop (mkf32 capacity)
               :denergy (mkf32 capacity)
               :of-body (mku32 body-capacity +no-ant+)
+              :met (mku32 capacity)
+              :partner (mku32 capacity +no-ant+)
+              :partner-ttl (mku16 capacity) :partner-gave (mku8 capacity)
+              :fed-by (mku32 capacity +no-ant+)
               :id (mku32 capacity) :body (mku32 capacity)
               :colony (mku8 capacity) :state (mku8 capacity +ant-dead+)
               :heading (mkf32 capacity) :crop (mkf32 capacity)

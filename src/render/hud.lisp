@@ -250,6 +250,28 @@ anything bounded, which energy and crop both are."
   (hud-quad h x y (* w (max 0.0f0 (min 1.0f0 (float frac 1.0f0)))) gh
             r g b 0.95))
 
+(defun hud-bar-tick (h x y w gh frac r g b)
+  "A threshold marked *on* a bar, as a thin upright line at FRAC of its
+width.
+
+A bar says how full something is; it cannot say whether that is enough,
+because the line it has to clear is usually somewhere else on screen and
+often moving.  Energy is the case that matters: an ant is drawn as spent
+when it falls below a threshold that itself falls as the colony gets
+hungry, so the same bar means different things at different moments.
+Reading the level without the line is exactly how a nest full of
+exhausted ants was once mistaken for a nest full of ants declining to
+leave (§3.5).
+
+Drawn over the fill rather than under it, so a threshold inside the
+filled part is still visible."
+  (declare (type hud h))
+  (let ((fx (+ x (* w (max 0.0f0 (min 1.0f0 (float frac 1.0f0)))))))
+    ;; one pixel of dark either side, so the mark reads against both the
+    ;; filled and the empty half of the bar
+    (hud-quad h (- fx 2.0) (- y 1.0) 4.0 (+ gh 2.0) 0.02 0.02 0.03 0.85)
+    (hud-quad h (- fx 1.0) (- y 1.0) 2.0 (+ gh 2.0) r g b 1.0)))
+
 (defun hud-draw (h vw vh)
   "Flush the queued quads.  Screen space, no camera, blended over the
 scene."

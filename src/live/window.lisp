@@ -361,7 +361,7 @@ most likely to be hunting for the ant they just clicked."
       (when (and i (ant-live-p a i)
                  (= (aref (ants-id a) i) *live-selected-id*))
         (let* ((px 10.0f0) (py 38.0f0)
-               (pw 210.0f0) (ph 142.0f0)
+               (pw 232.0f0) (ph 194.0f0)
                (st (aref (ants-state a) i))
                (tx (+ px 10.0f0))
                (ty (+ py 10.0f0)))
@@ -382,26 +382,105 @@ most likely to be hunting for the ant they just clicked."
               (hud-text h (+ tx 148) (+ ty line)
                         (format nil "~,1Fs" (* waited *motion-dt*))
                         :scale s :r 0.95 :g 0.25 :b 0.22)))
-          ;; energy and crop as bars: both are bounded, and a bar reads
-          ;; faster than a number for anything bounded
-          (hud-text h tx (+ ty (* 2 line)) "ENERGY" :scale s
-                    :r 0.60 :g 0.66 :b 0.74)
-          (hud-bar h (+ tx 62) (+ ty (* 2 line)) 118 8
-                   (aref (ants-energy a) i) 0.95 0.55 0.35)
+          ;; Energy, crop and confidence as bars: all three are bounded,
+          ;; and a bar reads faster than a number for anything bounded.
+          ;;
+          ;; **Energy and crop are not two views of one quantity**, and
+          ;; the panel puts them next to each other because that is the
+          ;; single most misreadable thing about an ant.  Energy is the
+          ;; ant's own fuel; the crop is the *social stomach*, food it is
+          ;; carrying for the colony and cannot spend on itself.  An ant
+          ;; can starve with a full crop, which is why §3.5 keeps them as
+          ;; separate fields, and a reader who has not been told that will
+          ;; assume a full ant is a fed one.
+          (let* ((cc (aref (coerce (world-colonies w) 'vector)
+                           (aref (ants-colony a) i)))
+                 (gate (colony-energy-threshold cc))
+                 (resolve (aref (ants-resolve a) i))
+                 (fed-line (* *trophallaxis-threshold* gate)))
+            (hud-text h tx (+ ty (* 2 line)) "ENERGY" :scale s
+                      :r 0.60 :g 0.66 :b 0.74)
+            (hud-bar h (+ tx 62) (+ ty (* 2 line)) 118 8
+                     (aref (ants-energy a) i) 0.95 0.55 0.35)
+            ;; and the three lines that energy is judged against, marked
+            ;; on the bar itself (HUD-BAR-TICK).  Hunger is not a stored
+            ;; quantity in this model — it is the level read against a
+            ;; threshold that moves with the colony — so without these the
+            ;; bar cannot answer the only question anyone asks of it.
+            ;;
+            ;;   white   can this ant set out at all
+            ;;   amber   where it will give up and turn for home, which is
+            ;;           carried per ant and so differs between two ants
+            ;;           standing side by side (ANTS-RESOLVE)
+            ;;   green   below this a nestmate will feed it in the field
+            ;;
+            ;; At the shipped defaults the green line sits exactly on the
+            ;; white one, because *trophallaxis-threshold* is 1.0 of the
+            ;; departure bar.  That is worth seeing rather than hiding:
+            ;; the two coincide by decision, not by accident.
+            (hud-bar-tick h (+ tx 62) (+ ty (* 2 line)) 118 8
+                          fed-line 0.55 0.85 0.55)
+            (hud-bar-tick h (+ tx 62) (+ ty (* 2 line)) 118 8
+                          resolve 0.95 0.76 0.35)
+            (hud-bar-tick h (+ tx 62) (+ ty (* 2 line)) 118 8
+                          gate 1.0 1.0 1.0))
           (hud-text h tx (+ ty (* 3 line)) "CROP" :scale s
                     :r 0.60 :g 0.66 :b 0.74)
           (hud-bar h (+ tx 62) (+ ty (* 3 line)) 118 8
                    (aref (ants-crop a) i) 0.55 0.80 0.95)
-          (hud-text h tx (+ ty (* 4 line))
-                    (format nil "AGE ~D" (aref (ants-age a) i))
+          ;; What nestmates have told this ant lately (M3).  Not a
+          ;; direction and never one: a contact says that ants are coming
+          ;; back loaded, which is evidence about *when* rather than
+          ;; *where*, and all it buys is a longer willingness to keep
+          ;; going (*encounter-resolve-gain*).
+          (hud-text h tx (+ ty (* 4 line)) "NEWS" :scale s
+                    :r 0.60 :g 0.66 :b 0.74)
+          (hud-bar h (+ tx 62) (+ ty (* 4 line)) 118 8
+                   (aref (ants-confidence a) i) 0.70 0.55 0.95)
+          ;; Age in seconds, not ticks.  Everything else on this panel is
+          ;; in seconds and a reader should not have to divide by 20 to
+          ;; compare two rows of it.
+          (hud-text h tx (+ ty (* 5 line))
+                    (format nil "AGE ~,0FS  MET ~D"
+                            (* (aref (ants-age a) i) *motion-dt*)
+                            (aref (ants-met a) i))
                     :scale s :r 0.60 :g 0.66 :b 0.74)
           ;; the home vector, as its length -- the direction is better
           ;; seen on the map than read as two numbers
           (let ((hx (aref (ants-hvx a) i)) (hy (aref (ants-hvy a) i)))
-            (hud-text h tx (+ ty (* 5 line))
+            (hud-text h tx (+ ty (* 6 line))
                       (format nil "HOME ~,1FCM"
                               (* 100.0 (sqrt (+ (* hx hx) (* hy hy)))))
                       :scale s :r 0.60 :g 0.66 :b 0.74))
+          ;; The lifelong traits, which cost no storage at all: pace and
+          ;; handedness are pure functions of the ant's id (ANT-PACE,
+          ;; ANT-HANDEDNESS), so an individual can be characterised
+          ;; without the table carrying a byte for it.  Worth showing
+          ;; because they are the answer to 'why is this one behaving
+          ;; differently from the one beside it'.
+          (let ((id (aref (ants-id a) i))
+                (seed (world-seed w)))
+            (hud-text h tx (+ ty (* 7 line))
+                      (format nil "PACE ~,2FX  HAND ~:[L~;R~]"
+                              (ant-pace id seed)
+                              (plusp (ant-handedness id seed)))
+                      :scale s :r 0.60 :g 0.66 :b 0.74))
+          ;; The last meal shared with a named nestmate (M3).
+          ;;
+          ;; Trophallaxis is the one thing an ant does that involves
+          ;; another *individual* rather than a field or itself, and it
+          ;; lasts a tick at a time — so it is held for *partner-memory*
+          ;; and then goes quiet, rather than flashing for 50 ms.
+          (let ((ttl (aref (ants-partner-ttl a) i)))
+            (when (plusp ttl)
+              (let ((gave (= 1 (aref (ants-partner-gave a) i))))
+                (hud-text h tx (+ ty (* 8 line))
+                          (format nil "~:[FED BY~;FED~] #~D"
+                                  gave (aref (ants-partner a) i))
+                          :scale s
+                          :r (if gave 0.55 0.95)
+                          :g (if gave 0.80 0.76)
+                          :b (if gave 0.95 0.35)))))
           ;; Can this ant set out at all?
           ;;
           ;; The energy bar alone does not answer that, because the bar
@@ -415,7 +494,7 @@ most likely to be hunting for the ant they just clicked."
                            (aref (ants-colony a) i)))
                  (gate (colony-energy-threshold cc))
                  (ablep (> (aref (ants-energy a) i) gate)))
-            (hud-text h tx (+ ty (* 6 line))
+            (hud-text h tx (+ ty (* 9 line))
                       (format nil "~:[SPENT~;READY~] NEEDS ~,2F"
                               ablep gate)
                       :scale s

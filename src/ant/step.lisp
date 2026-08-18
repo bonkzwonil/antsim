@@ -160,6 +160,10 @@ initial condition rather than merely a convenient one."
                  (aref (ants-dturn a) i) 0.0f0
                  (aref (ants-dcrop a) i) 0.0f0
                  (aref (ants-denergy a) i) 0.0f0
+                 (aref (ants-met a) i) 0
+                 (aref (ants-partner a) i) +no-ant+
+                 (aref (ants-partner-ttl a) i) 0
+                 (aref (ants-partner-gave a) i) 0
                  ;; and the broad phase can now find the ant from the body
                  (aref (ants-of-body a) bi) i)
            (incf (colony-next-id c))
@@ -1120,6 +1124,9 @@ as BODIES-RESOLVE! does."
           (energies (ants-energy a))
           (dturn (ants-dturn a)) (dcrop (ants-dcrop a))
           (denergy (ants-denergy a)) (confs (ants-confidence a))
+          (met (ants-met a)) (partner (ants-partner a))
+          (pttl (ants-partner-ttl a)) (pgave (ants-partner-gave a))
+          (fed-by (ants-fed-by a))
           (seed (world-seed w))
           (cone *encounter-cone*) (yrate *yield-rate*)
           (stranger *stranger-avoidance*) (overtake *yield-overtake*)
@@ -1137,16 +1144,21 @@ as BODIES-RESOLVE! does."
           (r2 (* range range)))
       (declare (type f32v bxs bys heads crops energies dturn dcrop denergy
                           confs)
-               (type u8v kinds states cols) (type u32v obm bodyv)
+               (type u8v kinds states cols pgave)
+               (type u32v obm bodyv met partner fed-by) (type u16v pttl)
                (type f32 cone yrate stranger overtake trate gain r2)
                (type simple-vector thresholds))
       ;; --- 1. clear the buffers and age the evidence -------------------
       (dotimes (i n)
         (setf (aref dturn i) 0.0f0
               (aref dcrop i) 0.0f0
-              (aref denergy i) 0.0f0)
+              (aref denergy i) 0.0f0
+              (aref fed-by i) +no-ant+)
         (when (ant-live-p a i)
-          (setf (aref confs i) (* decay (aref confs i)))))
+          (setf (aref confs i) (* decay (aref confs i)))
+          ;; the inspector's memory of the last meal, running down
+          (when (plusp (aref pttl i))
+            (decf (aref pttl i)))))
       ;; --- 2. the sweep ------------------------------------------------
       (dotimes (i n)
         (when (and (ant-live-p a i) (ant-afield-p (aref states i)))
@@ -1291,6 +1303,15 @@ as BODIES-RESOLVE! does."
                                         (declare (type f32 side))
                                         (incf turn
                                               (* side yrate near weight))))))
+                                ;; --- 2a2. it happened at all ----------
+                                ;;
+                                ;; Encounter rate, which the model has
+                                ;; been producing and discarding.  Own
+                                ;; slot, so it stays order-independent.
+                                (when same
+                                  (let ((c0 (aref met i)))
+                                    (when (< c0 4294967295)
+                                      (setf (aref met i) (1+ c0)))))
                                 ;; --- 2b. news from a nestmate ---------
                                 ;;
                                 ;; Loaded, coming the other way, and mine.
@@ -1319,7 +1340,16 @@ as BODIES-RESOLVE! does."
                 (decf (aref dcrop i) give)
                 ;; Accumulated into, not assigned: several donors may feed
                 ;; one ant in the same tick and addition commutes.
-                (incf (aref denergy mouth) (* give *crop-to-energy*)))))))
+                (incf (aref denergy mouth) (* give *crop-to-energy*))
+                ;; the giving half is this ant's own slot, so it is
+                ;; recorded directly
+                (setf (aref partner i) (aref (ants-id a) mouth)
+                      (aref pgave i) 1
+                      (aref pttl i) (min 65535 (max 0 *partner-memory*)))
+                ;; and the receiving half goes through the commutative
+                ;; buffer — see ANTS-FED-BY for why MIN and not assignment
+                (setf (aref fed-by mouth)
+                      (min (aref fed-by mouth) (aref (ants-id a) i))))))))
       ;; --- 3. apply ----------------------------------------------------
       (dotimes (i n)
         (when (ant-live-p a i)
@@ -1329,7 +1359,14 @@ as BODIES-RESOLVE! does."
             (setf (aref crops i) (max 0.0f0 (+ (aref crops i) (aref dcrop i)))))
           (unless (zerop (aref denergy i))
             (setf (aref energies i)
-                  (min 1.0f0 (+ (aref energies i) (aref denergy i)))))))))
+                  (min 1.0f0 (+ (aref energies i) (aref denergy i)))))
+          ;; Being fed outranks having fed, for the readout only: an ant
+          ;; that did both this tick is more interestingly the one that
+          ;; was in trouble.
+          (unless (= (aref fed-by i) +no-ant+)
+            (setf (aref partner i) (aref fed-by i)
+                  (aref pgave i) 2
+                  (aref pttl i) (min 65535 (max 0 *partner-memory*))))))))
   (values))
 
 (defun colony-feed! (w)

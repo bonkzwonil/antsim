@@ -96,6 +96,8 @@
    ;; when two ants meet (M3)
    #:ants-confidence #:ants-dturn #:ants-dcrop #:ants-denergy
    #:ants-of-body #:+no-ant+ #:ant-afield-p #:ant-encounter-step!
+   #:ants-met #:ants-partner #:ants-partner-ttl #:ants-partner-gave
+   #:ants-fed-by #:*partner-memory*
    #:path-integration-step!
    #:spawn-ant #:kill-ant
    #:+ant-in-nest+ #:+ant-outbound+ #:+ant-at-food+ #:+ant-returning+
@@ -149,7 +151,7 @@
    #:ant-display-state #:ant-display-flick #:render-world-png
    ;; render/hud — screen-space overlay (§5.1)
    #:hud #:make-hud #:destroy-hud #:hud-reset #:hud-quad #:hud-text
-   #:hud-bar #:hud-draw #:build-font #:*font-3x5*
+   #:hud-bar #:hud-bar-tick #:hud-draw #:build-font #:*font-3x5*
    ;; render/gallery — the README images (§7, M2)
    #:render-gallery #:gallery-world #:gallery-shot #:gallery-traffic-x
    #:*gallery-directory*

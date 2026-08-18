@@ -1126,6 +1126,16 @@ measured apart from the physical half.
 This is the *only* thing confidence does, deliberately.  One quantity,
 one consequence, one measurement.")
 
+(defparameter *partner-memory* 40
+  "How long the inspector remembers who an ant last shared food with, in
+motion ticks.  [display] 40 is two seconds.
+
+Display only — no rule reads it.  It exists because a trophallaxis lasts
+one tick at a time and the panel is read by a person: an event that
+appears for 50 ms at 20 Hz, and for rather less than that when the window
+is running at 8x, is an event nobody can follow.  Holding it for a couple
+of seconds is the difference between a readout and a flicker.")
+
 (defparameter *trophallaxis-rate* 0.004f0
   "Crop transferred from one ant to another per motion tick of contact.
 [cal] A full crop takes about 250 ticks — twelve seconds — to hand over
@@ -1265,4 +1275,5 @@ relaxation from chasing floating-point noise forever.")
 (declaim (type fixnum *max-age-ticks* *relax-iterations* *homing-scan-steps*
                *nest-meals-per-tick*
                *uturn-ticks* *brood-development-minutes*
-               *forager-maturity-ticks* *age-shade-ticks*))
+               *forager-maturity-ticks* *age-shade-ticks*
+               *partner-memory*))
