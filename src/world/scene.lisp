@@ -185,12 +185,18 @@ shut is not."
                   (max 1.0f-6 *forage-ration*))
                0.0f0 1.0f0))))
 
-(defun colony-leave-probability (c)
-  "Chance per tick that a rested ant sets out, raised as the larder empties."
+(defun colony-leave-probability (c &optional urgency)
+  "Chance per tick that a rested ant sets out, raised as the larder empties.
+
+URGENCY defaults to the colony's own.  An individual ant passes its
+*engagement* instead (ANT-ENGAGEMENT) — the same colony-wide stimulus
+seen through that ant's own response threshold — so ants differ in when
+they take the job up without the colony ever knowing which ones did."
   (declare (type colony c))
-  (* *leave-probability*
-     (+ 1.0f0 (* (colony-forage-urgency c)
-                 (- *forage-urgency-gain* 1.0f0)))))
+  (let ((u (or urgency (colony-forage-urgency c))))
+    (declare (type f32 u))
+    (* *leave-probability*
+       (+ 1.0f0 (* u (- *forage-urgency-gain* 1.0f0))))))
 
 (defun colony-energy-threshold (c)
   "The energy an ant needs to set out.

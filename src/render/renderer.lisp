@@ -181,6 +181,20 @@ field grid."
                             :red :float buf)))
   (values))
 
+(defun tribe-number (w colony-id)
+  "What the shaders should colour this ant's head with: 0 for \"do not\",
+otherwise the colony's number counting from one.
+
+**A world with one colony sends 0 for every ant**, so the single-colony
+picture is byte-for-byte the one M2 shipped and no reference frame in the
+gallery moves.  The decision belongs here, in the only place that knows
+how many colonies there are; the shader is told an answer, not a
+question."
+  (declare (type world w) (type fixnum colony-id))
+  (if (< (length (world-colonies w)) 2)
+      0
+      (1+ colony-id)))
+
 (defun ant-display-state (a i c)
   "What this ant is saying, as the single float both ant shaders read
 (§5.1, §5.3).  Zero is reserved for a corpse.
@@ -261,7 +275,12 @@ there stays exactly one place that knows what a food source looks like."
                  (ci (aref (ants-colony a) i))
                  (c (when (< ci (length colonies)) (aref colonies ci))))
             (when (< bi (length state-of))
-              (setf (aref state-of bi) (ant-display-state a i c)))))))
+              ;; state in the fraction, tribe in the hundreds -- see the
+              ;; note in the disc fragment shader.  The kind is added
+              ;; below, in the ones.
+              (setf (aref state-of bi)
+                    (+ (ant-display-state a i c)
+                       (* 100.0f0 (float (tribe-number w ci) 1.0f0)))))))))
     (dotimes (i n)
       (let ((k (aref kinds i)))
         (unless (or (= k +body-free+)
@@ -348,7 +367,10 @@ a colony rewrites no geometry and issues no GL call in the loop."
                   (aref (ants-heading a) i)
                   (aref (ants-gait a) i)
                   (aref rs bi)
-                  (ant-display-state a i c)
+                  ;; tribe in the integer part (the detailed instance
+                  ;; carries no kind, so there is room in the ones)
+                  (+ (ant-display-state a i c)
+                     (float (tribe-number w ci) 1.0f0))
                   (min 1.0f0 (aref (ants-crop a) i))
                   (ant-display-flick a i)))))
       ;; Corpses.  They are bodies and not ants — the ant slot was freed

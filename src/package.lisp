@@ -39,6 +39,7 @@
    #:*brood-reserve-ration* #:*brood-investment*
    #:*queen-lay-rate* #:*brood-development-minutes*
    #:*forager-maturity-ticks* #:*age-shade-ticks*
+   #:*response-threshold-lo* #:*response-threshold-hi* #:*response-steepness*
    #:colony-brood-pipe #:colony-brood-head
    #:*trail-lost-threshold* #:*trail-follow-threshold* #:*trail-memory-decay*
    #:*uturn-ticks* #:*uturn-cast-gain*
@@ -123,10 +124,12 @@
    #:competition #:make-competition-world
    #:competition-world #:competition-near #:competition-far
    #:competition-food #:competition-run! #:competition-share
-   #:colony-trail-fidelity
+   #:colony-trail-fidelity #:colony-route-fidelity #:make-crossing-world
+   #:cull-foragers! #:count-foragers
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
    #:ant-handedness #:ant-pace #:ant-trail-offset
+   #:ant-response-threshold #:ant-engagement
    #:*trail-lane-offset*
    #:world-step! #:world-run! #:colony-step! #:colony-feed! #:world-seed-population!
    ;; render/png (antsim/render)

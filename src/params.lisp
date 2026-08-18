@@ -687,6 +687,41 @@ pressure at the same instant.  The three together give the population an
 age structure, which is the thing this model has never had: born, then
 developing, then in the nest, then out.")
 
+(defparameter *response-threshold-lo* 0.0f0
+  "Low end of the range individual foraging response thresholds are drawn
+from; see ANT-RESPONSE-THRESHOLD.  Both ends at 0.0 turns the mechanism
+off exactly — the engagement term reverts to the colony's urgency, which
+is what every measurement before M4 was taken with.
+
+**The fixed-threshold model** (Bonabeau, Theraulaz & Deneubourg 1996;
+Robinson 1992 for the biology).  Every worker carries its own bar for
+every task, and engages when the stimulus it perceives clears that bar.
+Division of labour is then not assigned by anyone: a colony whose larder
+empties raises one stimulus, and the ants with the lowest bars respond
+first.  Take those ants away and the stimulus keeps rising until ants
+with higher bars respond — which is the whole of the task-reallocation
+row in §3.8, and the reason that row says *without any global
+controller*.
+
+The spread is the mechanism.  With every ant on the same threshold a
+colony has one switch and flips it all at once; with a spread it has a
+graded reserve, and that reserve is what makes the response continuous
+rather than an oscillation between everybody out and everybody home.")
+
+(defparameter *response-threshold-hi* 0.0f0
+  "High end of the range; see *RESPONSE-THRESHOLD-LO*.")
+
+(defparameter *response-steepness* 2.0f0
+  "The exponent n in Bonabeau's response function
+
+    R(S) = S^n / (S^n + θ^n)
+
+Two, and for the same reason *CHOICE-N* is two: the nonlinearity is what
+makes the response a threshold rather than a slope.  At n = 1 an ant with
+a high bar is merely *less* likely to engage at every stimulus, which is
+a scaling of the rate and not a reserve; the reserve is the part that has
+to hold ants back until the colony needs them.")
+
 (defparameter *age-shade-ticks* 36000
   "The age at which an ant is drawn as fully mature, in motion ticks
 (§5.1).  Display only — nothing in the model reads it.  30 simulated

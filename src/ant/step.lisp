@@ -49,6 +49,14 @@ individual, and a value re-rolled every tick would be noise on the step
 rather than a trait.  The model already has noise on the step, in the
 heading, where it belongs.")
 
+(defconstant +stream-threshold+ 10
+  "This ant's bar for taking up foraging — see ANT-RESPONSE-THRESHOLD.
+
+On the id alone with no tick, like every other lifelong trait here.  A
+threshold re-rolled each tick is not a threshold: the individual would
+have no consistent readiness at all, and the reserve pool the mechanism
+exists to create would be a different set of ants every second.")
+
 (defconstant +stream-pace+ 8
   "How fast this ant walks relative to its colony — see ANT-PACE.
 
@@ -273,6 +281,50 @@ this width the two are indistinguishable anyway."
   (declare (type (unsigned-byte 32) id seed) (optimize (speed 3) (safety 0)))
   (+ (- 1.0f0 *speed-spread*)
      (* 2.0f0 *speed-spread* (rnd01 id 0 +stream-pace+ seed))))
+
+(declaim (inline ant-response-threshold))
+(defun ant-response-threshold (id seed)
+  "This ant's own bar for taking up foraging, fixed for life.
+
+Uniform over [*RESPONSE-THRESHOLD-LO*, *RESPONSE-THRESHOLD-HI*], on the
+stream and the id alone, so it costs no per-ant storage — the same trick
+ANT-PACE and ANT-TRAIL-OFFSET use.
+
+A *distribution* of thresholds rather than one shared bar, because the
+distribution is the mechanism (see *RESPONSE-THRESHOLD-LO*).  Uniform
+because the literature gives the fixed-threshold model a spread and not a
+shape, and inventing a shape here would be inventing data."
+  (declare (type (unsigned-byte 32) id seed) (optimize (speed 3) (safety 0)))
+  (let ((lo *response-threshold-lo*) (hi *response-threshold-hi*))
+    (declare (type f32 lo hi))
+    (+ lo (* (- hi lo) (rnd01 id 0 +stream-threshold+ seed)))))
+
+(declaim (inline ant-engagement))
+(defun ant-engagement (id seed urgency)
+  "How strongly *this* ant feels the colony's foraging urgency, 0 to 1.
+
+    R(S) = S^n / (S^n + θ^n)
+
+Bonabeau's response function, with θ this ant's own threshold.  The
+colony broadcasts one stimulus and each ant answers it differently, which
+is the entire content of the fixed-threshold model — there is no task
+allocator, and nothing anywhere reads how many foragers there currently
+are.
+
+**With both ends of the range at zero this returns URGENCY unchanged**,
+so the mechanism is genuinely off rather than merely quiet, and every
+pre-M4 measurement can be reproduced exactly."
+  (declare (type (unsigned-byte 32) id seed) (type f32 urgency)
+           (optimize (speed 3) (safety 0)))
+  (if (and (= *response-threshold-lo* 0.0f0)
+           (= *response-threshold-hi* 0.0f0))
+      urgency
+      (let* ((th (ant-response-threshold id seed))
+             (n *response-steepness*)
+             (sn (expt (max 0.0f0 urgency) n))
+             (tn (expt (max 1.0f-6 th) n)))
+        (declare (type f32 th n sn tn))
+        (/ sn (+ sn tn)))))
 
 (declaim (inline ant-trail-offset))
 (defun ant-trail-offset (id seed)
@@ -578,10 +630,16 @@ switch into and no switching logic to get wrong (§3.5)."
              ;; takes up (§3.5).  This is also the buffer the brood rules
              ;; cannot provide on their own: emerging is not the same
              ;; event as joining the foraging pool.
+             ;; The urgency this ant answers is its own (M4).  The
+             ;; colony still computes exactly one stimulus; what differs
+             ;; between ants is the bar they hold it against, so nothing
+             ;; here counts foragers or allocates anybody to anything.
              (when (and (>= (aref (ants-age a) i) *forager-maturity-ticks*)
                         (> (aref (ants-energy a) i) (colony-energy-threshold c))
                         (< (rnd01 id tick +stream-leave+ seed)
-                           (colony-leave-probability c)))
+                           (colony-leave-probability
+                            c (ant-engagement
+                               id seed (colony-forage-urgency c)))))
                ;; How deep this trip will dig, learnt here and carried.
                ;; An ant in the field cannot read the larder (§3.5).
                (setf (aref (ants-resolve a) i) (colony-giveup-threshold c))

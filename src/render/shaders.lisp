@@ -189,16 +189,68 @@ void main() {
 }
 ")
 
-(defparameter *body-fragment-glsl* "#version 450 core
+(defparameter *tribe-glsl* "// Which tribe an ant belongs to, as a hue.
+//
+// **Tribe and behaviour are two signals and they need two places to
+// live.**  Tinting the whole ant by its colony was tried first and it
+// does not work: the state colours *are* the picture -- laden orange,
+// spent red, at-food pale -- and a tint over all of them trades one
+// reading for the other.  So the ant is divided the way the animal
+// already is.  The gaster is the biggest single mass and it keeps
+// behaviour; the head and mesosoma carry the tribe.  Front half who,
+// back half what.
+//
+// Zero means no tribe colouring at all, and a world with one colony
+// sends zero for every ant -- so every single-colony scenario renders
+// exactly as it did before two of them were possible, and the
+// gallery's reference frames stay valid.  Tribes are numbered from 1.
+vec3 tribe_hue(float k) {
+    int i = int(k + 0.5) - 1;
+    if (i == 0) return vec3(0.40, 0.92, 0.58);   // green
+    if (i == 1) return vec3(0.82, 0.58, 1.00);   // violet
+    if (i == 2) return vec3(1.00, 0.72, 0.30);   // amber
+    if (i == 3) return vec3(0.34, 0.80, 1.00);   // cyan
+    if (i == 4) return vec3(1.00, 0.52, 0.62);   // rose
+    return vec3(0.82, 0.82, 0.86);
+}
+
+// The tribe hue, carrying BASE's brightness.  Value is doing work of its
+// own here -- a spent ant is dark whatever tribe it is in -- so the crest
+// borrows the hue and leaves the luminance where it was.
+vec3 tribe_crest(vec3 base, float tribe) {
+    if (tribe < 0.5) return base;
+    const vec3 W = vec3(0.299, 0.587, 0.114);
+    vec3 h = tribe_hue(tribe);
+    float lum = dot(base, W);
+    return h * (lum / max(dot(h, W), 1e-3));
+}
+"
+  "Tribe colouring, shared verbatim by the disc shader and the
+articulated one.
+
+One text spliced into two programs rather than two copies kept by
+hand, for the reason BUILD-ANT-VERTEX-GLSL exists at all: an ant must
+not change colour when it crosses an LOD boundary, and two copies of a
+palette are exactly how it would come to.")
+
+(defparameter *body-fragment-glsl*
+  (concatenate 'string "#version 450 core
 in vec2 v_local;
 flat in float v_kind;
 flat in float v_radius_px;
 out vec4 frag;
 
+" *tribe-glsl* "
 // kinds, matching world/bodies.lisp
 // 0 ant  1 corpse  2 food  3 nest  4 nest arrival halo (drawing only)
 // ants additionally carry state in the fractional part: .1 outbound,
 // .2 at food, .3 returning laden, .4 spent, .5-.9 age ramp
+//
+// and, since M4, an ant's colony in the hundreds: kind + state + 100*colony.
+// The same trick the fractional part already is, one decade further up --
+// kind runs to 6 and state to 0.9, so the hundreds are free, and a float32
+// carries 1000.9 with room to spare.  It keeps the instance at one vec4,
+// which is what makes drawing a colony cost no GL call in the loop.
 
 vec3 kind_color(float k) {
     int base = int(floor(k + 0.01));
@@ -241,7 +293,14 @@ vec3 kind_color(float k) {
 void main() {
     float d = length(v_local);
     if (d > 1.0) discard;
-    vec3 c = kind_color(v_kind);
+    float tribe = floor(v_kind / 100.0);
+    float ks = v_kind - tribe * 100.0;
+    vec3 c = kind_color(ks);
+    // At this zoom an ant is a few pixels across and there is no room to
+    // divide it head from gaster, so the split becomes radial: a
+    // behaviour-coloured core inside a tribe-coloured rim.  Same
+    // principle, and the rim survives down to one pixel.
+    if (ks < 0.999 && tribe > 0.5 && d > 0.55) c = tribe_crest(c, tribe);
 
     // The nest's arrival radius, drawn as a ring.  It is much larger than
     // the nest disc — an arriving cohort has to fit *around* the entrance,
@@ -252,13 +311,13 @@ void main() {
     // Stock gauges: a filled disc whose *area* is the quantity left, so
     // a source visibly empties instead of staying a full green circle
     // until the instant it is gone (§5.1).
-    if (v_kind > 4.5) {
+    if (ks > 4.5) {
         float aa2 = clamp(1.0 / max(v_radius_px, 1.0), 0.02, 0.9);
         frag = vec4(c, smoothstep(1.0, 1.0 - aa2, d));
         return;
     }
 
-    if (v_kind > 3.5) {
+    if (ks > 3.5) {
         float ring = smoothstep(0.86, 0.99, d) * (1.0 - smoothstep(0.99, 1.0, d));
         if (ring < 0.02) discard;
         frag = vec4(c, ring * 0.5);
@@ -272,7 +331,7 @@ void main() {
     c *= mix(0.72, 1.0, smoothstep(1.0, 0.55, d));
     frag = vec4(c, edge);
 }
-")
+"))
 
 ;;; --------------------------------------------------------------------
 ;;; The ant — an articulated vector body (§5.2)
@@ -390,6 +449,7 @@ float hash01(uint i) {
     return float(y & 0xFFFFu) / 65536.0;
 }
 
+" *tribe-glsl* "
 // The §5.3 palette, and deliberately the same ramp the disc shader uses:
 // an ant must not change colour when it crosses an LOD boundary.
 vec3 ant_color(float s) {
@@ -410,7 +470,12 @@ void main() {
     float head   = A.p.z;
     float phase  = A.p.w;
     float radius = A.q.x;
-    float state  = A.q.y;
+    // tribe in the integer part, state in the fraction -- the same
+    // packing the disc path uses, one decade lower because this slot
+    // carries no kind.  Tribes count from 1, and 0 means leave the
+    // ant in its ordinary colours.
+    float tribe = floor(A.q.y);
+    float state = A.q.y - tribe;
     float load   = A.q.z;
     float flick  = A.q.w;
 
@@ -418,6 +483,7 @@ void main() {
     bool dead = (state < 0.05);
     int part = int(a_part + 0.5);
     vec3 base = ant_color(state);
+    vec3 crest = tribe_crest(base, tribe);
 
     // The narrowest a limb may be drawn, in radii.  Below about a pixel
     // and a quarter a leg stops being a line and becomes a dashed hint of
@@ -573,12 +639,16 @@ void main() {
         }
     }
 
+    // Behaviour on the gaster and the petiole behind the waist; the tribe
+    // on the mesosoma and the head in front of it.  The legs and antennae
+    // stay with the gaster's colour, because they read as outline rather
+    // than as mass and splitting them would only fray the silhouette.
     vec3 col;
-    if      (part == 0) col = base * 0.94;
-    else if (part == 1) col = base * 0.66;              // petiole, in shadow
-    else if (part == 2) col = base * 1.00;
-    else if (part == 3) col = base * 0.97;
-    else if (part == 4) col = base * 0.52;              // mandibles
+    if      (part == 0) col = base  * 0.94;             // gaster: behaviour
+    else if (part == 1) col = base  * 0.66;             // petiole, in shadow
+    else if (part == 2) col = crest * 1.00;             // mesosoma: tribe
+    else if (part == 3) col = crest * 0.97;             // head: tribe
+    else if (part == 4) col = crest * 0.52;             // mandibles
     else if (part == 5) col = vec3(0.42, 0.80, 0.34);   // cargo, food green
     else if (part == 6) col = vec3(0.55, 0.86, 1.00);   // the mark, trail blue
     else                col = base * 0.58;              // legs and antennae

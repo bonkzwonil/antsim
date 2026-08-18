@@ -229,3 +229,139 @@ NIL for a field with nothing in it."
              (top (max 1 (round (* (float fraction 1.0f0) (length sorted))))))
         (when (plusp total)
           (/ (reduce #'+ sorted :end top) total))))))
+
+(defun make-crossing-world (&key (width 0.70f0) (height 0.70f0)
+                                 (inset 0.10f0)
+                                 (amount 500000.0f0)
+                                 (radius 0.030f0)
+                                 (start 250) (capacity 4000)
+                                 (stock 400.0f0)
+                                 (seed +default-seed+))
+  "Two colonies whose routes cross, each with a source of its own.
+
+MAKE-COMPETITION-WORLD is the apparatus for the *food* half of §3.12 and
+it is the wrong one for the ε half — measured, fidelity there is flat in
+ε from 0.0 to 1.0, and the reason is geometry rather than model: the two
+nests sit either side of one pile, so each colony's field lies almost
+entirely where the other's does not and there is nothing for ε to
+confuse.
+
+Here the nests are at two opposite corners and each colony's source is at
+the corner diagonally across from its own nest, so the routes form an X
+and the fields overlap along their whole length at an angle.  **There is
+nothing to compete for** — each colony has its own pile — so anything ε
+does to the trails is ε acting on the trails, and not two colonies
+fighting over lunch.
+
+Returns a COMPETITION whose FOOD slot holds the near colony's source; the
+far colony's is the other one in WORLD-FOODS."
+  (let* ((w (make-world :width width :height height
+                        :capacity capacity :seed seed))
+         (lo (float inset 1.0f0))
+         (hx (- (float width 1.0f0) lo)) (hy (- (float height 1.0f0) lo))
+         (a (add-colony w :name "sw" :nest-x lo :nest-y lo :nest-r 0.02f0
+                          :capacity capacity :stock stock))
+         (b (add-colony w :name "se" :nest-x hx :nest-y lo :nest-r 0.02f0
+                          :capacity capacity :stock stock))
+         ;; sw's food is at the north-east; se's at the north-west
+         (fa (add-food w hx hy radius amount :quality 1.0f0)))
+    (add-food w lo hy radius amount :quality 1.0f0)
+    (world-seed-population! w a start)
+    (world-seed-population! w b start)
+    (%make-competition :world w :near a :far b :food fa)))
+
+(defun cull-foragers! (w c fraction)
+  "Kill FRACTION of COLONY C's ants that are currently out of the nest.
+
+The §3.8 task-reallocation row in the form the literature runs it: remove
+the foragers and see whether the colony makes more.  A forager here is an
+ant not presently in the nest, which is the operational definition an
+experimenter has as well.
+
+Selected by a stride through the table rather than at random, so the row
+measures the colony's response and not a draw — and so a failure is
+reproducible.  Returns how many were killed."
+  (declare (type world w) (type colony c) (type f32 fraction))
+  (let* ((a (world-ants w))
+         (cid (colony-id c))
+         (victims '())
+         (k 0))
+    (declare (type fixnum k))
+    (dotimes (i (ants-n a))
+      (when (and (ant-live-p a i)
+                 (= (aref (ants-colony a) i) cid)
+                 (/= (aref (ants-state a) i) +ant-in-nest+))
+        (push i victims)))
+    (let* ((v (nreverse victims))
+           (n (length v))
+           (want (round (* fraction n))))
+      (when (plusp want)
+        ;; every (n/want)th one, so the sample is spread over the table
+        ;; rather than taken off one end of it
+        (let ((stride (max 1 (floor n want))))
+          (loop for i in v
+                for j from 0
+                while (< k want)
+                when (zerop (mod j stride))
+                  do (kill-ant w c i) (incf k)))))
+    k))
+
+(defun count-foragers (w c)
+  "How many of C's ants are out of the nest right now."
+  (declare (type world w) (type colony c))
+  (let ((a (world-ants w)) (cid (colony-id c)) (k 0))
+    (declare (type fixnum k))
+    (dotimes (i (ants-n a) k)
+      (when (and (ant-live-p a i)
+                 (= (aref (ants-colony a) i) cid)
+                 (/= (aref (ants-state a) i) +ant-in-nest+))
+        (incf k)))))
+
+(defun colony-route-fidelity (c fx fy &key (half-width 0.045f0))
+  "The share of C's pheromone lying within HALF-WIDTH of the straight line
+from its nest to (FX, FY).
+
+**COLONY-TRAIL-FIDELITY measures the wrong thing for ε and this measures
+the right one.**  Concentration says how *thin* a colony's structure is;
+it does not say whether that structure goes anywhere useful.  Measured on
+crossing routes, raising ε from 0 to 1 pushed concentration *up*, 0.496
+to 0.601, while both colonies' harvest fell — which is exactly what a
+merged trail network looks like.  Two colonies reading each other's marks
+converge on one shared set of roads, and a shared set of roads is thinner
+than two separate ones and leads half of each colony to the other's food.
+
+So fidelity, for §3.12's purposes, is *correctness*: how much of what a
+colony has laid down lies on the way to its own source.  A corridor
+rather than an exact line, because a real trail has width — HALF-WIDTH
+defaults to about three packet radii.
+
+NIL for a field with nothing in it."
+  (declare (type colony c) (type f32 fx fy half-width))
+  (let* ((f (colony-field c))
+         (v (field-c f))
+         (cw (field-w f)) (ch (field-h f))
+         (cell (field-cell f))
+         (ox (field-origin-x f)) (oy (field-origin-y f))
+         (ax (colony-nest-x c)) (ay (colony-nest-y c))
+         (dx (- fx ax)) (dy (- fy ay))
+         (len2 (+ (* dx dx) (* dy dy)))
+         (total 0.0d0) (on 0.0d0))
+    (declare (type f32 dx dy len2) (type double-float total on))
+    (when (<= len2 1.0f-12) (return-from colony-route-fidelity nil))
+    (dotimes (j ch)
+      (dotimes (i cw)
+        (let ((amt (aref (the f32v v) (+ i (* j cw)))))
+          (when (> amt 0.0f0)
+            (let* ((x (+ ox (* (+ i 0.5f0) cell)))
+                   (y (+ oy (* (+ j 0.5f0) cell)))
+                   ;; distance from the cell centre to the segment
+                   (tt (max 0.0f0
+                            (min 1.0f0
+                                 (/ (+ (* (- x ax) dx) (* (- y ay) dy)) len2))))
+                   (px (+ ax (* tt dx))) (py (+ ay (* tt dy)))
+                   (ex (- x px)) (ey (- y py)))
+              (declare (type f32 x y tt px py ex ey))
+              (incf total (float amt 1.0d0))
+              (when (<= (+ (* ex ex) (* ey ey)) (* half-width half-width))
+                (incf on (float amt 1.0d0))))))))
+    (when (plusp total) (/ on total))))

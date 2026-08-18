@@ -32,6 +32,18 @@ the first thing a new watcher sees is several minutes of ants wandering
 in silence.  The clock is still exact at any multiplier; only the
 starting point moved.")
 
+(defvar *live-colony* 0
+  "Which colony the HUD reports and whose trail field is drawn.
+
+One field is on screen at a time, and that is a decision rather than a
+limitation: two pheromone fields composited together would show a
+*mixture* nobody in the world can smell.  Each colony reads its own field
+and only eavesdrops on the others through ε (§3.12), so the honest
+picture is one colony's world at a time, switched with a key.
+
+The ants themselves are always all drawn, and always in their own tribe's
+colours — who is on screen is not the question, whose *chemistry* is.")
+
 (defvar *live-keyhelp* t
   "Whether the key legend is drawn.  On by default: the controls are not
 guessable, and a window that does not say what it responds to is a window
@@ -132,6 +144,16 @@ otherwise silently swap the readout for a different individual.")
        (setf *ant-collision* (not *ant-collision*))
        (format t "~&ant-ant contact ~:[OFF — ants pass through each other~;on~]~%"
                *ant-collision*))
+      ;; Step the focus to the next colony.  Does nothing visible in a
+      ;; one-colony world, which is most of them, and is the whole of the
+      ;; interface for a world with several.
+      ((#\t #\T)
+       (let ((n (length (world-colonies *live-world*))))
+         (when (plusp n)
+           (setf *live-colony* (mod (1+ *live-colony*) n))
+           (let ((c (nth *live-colony* (world-colonies *live-world*))))
+             (format t "~&watching colony ~d of ~d: ~a~%"
+                     (1+ *live-colony*) n (colony-name c))))))
       (t nil))))
 
 (glfw:def-key-callback live-key (window key scancode action mods)
@@ -265,6 +287,7 @@ declining to (§3.5).  So the panel names the second one."
     ("H"     "HIDE")
     ("N"     "NEST")
     ("C"     "CONTACT")
+    ("T"     "TRIBE")
     ("Q"     "QUIT"))
   "The key legend, in the order it is drawn.  Kept as data rather than a
 run of HUD-TEXT calls so the panel can size itself to its contents — the
@@ -330,7 +353,8 @@ most likely to be hunting for the ant they just clicked."
   "Counters along the top, and the selected ant's state readout (§5.1)."
   (declare (type hud h) (type world w))
   (hud-reset h)
-  (let* ((c (first (world-colonies w)))
+  (let* ((cs (world-colonies w))
+         (c (nth (min *live-colony* (max 0 (1- (length cs)))) cs))
          (s 2.0f0)
          (line 14.0f0))
     ;; --- counters -----------------------------------------------------
@@ -338,6 +362,12 @@ most likely to be hunting for the ant they just clicked."
     (let ((x 10.0f0))
       (setf x (hud-text h x 8 (format nil "T ~,1FS" (world-seconds w))
                         :scale s :r 0.66 :g 0.72 :b 0.80))
+      (when (cdr cs)
+        ;; Only when there is more than one; a single-colony HUD has
+        ;; nothing to disambiguate and the row would be noise.
+        (setf x (hud-text h (+ x 14) 8
+                          (format nil "~:@(~a~)" (if c (colony-name c) "-"))
+                          :scale s :r 0.55 :g 0.90 :b 0.68)))
       (setf x (hud-text h (+ x 14) 8
                         (format nil "ANTS ~D" (if c (colony-population c) 0))
                         :scale s))
@@ -516,7 +546,8 @@ most likely to be hunting for the ant they just clicked."
   (hud-draw h vw vh))
 
 (defun live-title (w fps)
-  (let ((c (first (world-colonies w))))
+  (let ((c (nth (min *live-colony* (max 0 (1- (length (world-colonies w)))))
+                (world-colonies w))))
     (format nil "antsim — t ~,1f s · ~d ants · stock ~,0f · trail ~,0f · ~
                  ~,1fx~:[~; (paused)~] · ~,0f fps"
             (world-seconds w)
@@ -577,6 +608,7 @@ Returns the world, so a session can keep poking at it afterwards."
             *live-renderer* r
             *live-hud* (make-hud)
             *live-selected* nil
+            *live-colony* 0
             *live-view* (view-fit w :vw width :vh height)
             *live-paused* nil)
       (unwind-protect
@@ -609,7 +641,7 @@ Returns the world, so a session can keep poking at it afterwards."
                           (gl:viewport 0 0 fw fh))
                         (gl:clear-color 0.02 0.022 0.025 1.0)
                         (gl:clear :color-buffer-bit :depth-buffer-bit)
-                        (draw-world r w *live-view*)
+                        (draw-world r w *live-view* :colony *live-colony*)
                         (live-draw-hud *live-hud* w
                                        (view-vw *live-view*)
                                        (view-vh *live-view*)
