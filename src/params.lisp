@@ -186,6 +186,54 @@ Deliberately *not* implemented by lowering k or raising n.  Both would
 have moved trail-following in the same direction while changing the
 choice function itself, which §3.8 is a test of.")
 
+(defparameter *trail-lane-offset* 0.008f0
+  "How far off the centre line of a trail an ant may prefer to walk,
+metres.  Each ant draws its own, uniformly in ±this, and keeps it for
+life (ANT-TRAIL-OFFSET).  0 restores the old behaviour exactly — every
+ant steering to dead centre — which is what makes the difference
+measurable rather than asserted.
+
+The old behaviour was a mistake with a very ordinary cause.  Tropotaxis
+was written to null the difference between the two antennae, and nulling
+that difference *is* the definition of standing on the ridge of the
+gradient — so the rule that makes ants good at following trails also made
+every one of them follow the identical line.  A deposit is a packet 3 cm
+across (*trail-packet-radius*) and the colony was walking it in single
+file, shoulder to shoulder, with nowhere to pass and no width for traffic
+to sort into.  Real trails are broad; this is what makes this one broad.
+
+**Measured**, 400 ants on an 80 cm trail, three seeds.  Band width is the
+mean |lateral offset| of ants in the corridor; blocked is the fraction of
+trail time an ant spends with another same-direction ant inside 8 mm and
+34 degrees of dead ahead — which is the complaint this fixes, quantified:
+
+    lane    band     blocked   food
+    0.000   0.0183   80.0%     877
+    0.004   0.0194   64.6%     852
+    0.008   0.0238   47.0%     834
+    0.012   0.0272   39.9%     739
+
+Eighty percent at zero.  Four ticks in five, an ant on the trail had
+another ant right in front of it going the same way.
+
+8 mm is a little over half the packet radius, so the band is about as
+wide as the chemical trail actually is and ants do not habitually walk
+where they cannot smell anything.  It nearly halves the blocking and
+costs about 5% of the food: ants spread across a road are nearer its
+edges, so they lose it sooner.  0.004 is the conservative option at 65%
+blocked and half the cost.
+
+The obvious implementation is the wrong one and is recorded because it
+looks right.  Steering `bias` to a constant instead of to zero — telling
+the ant to hold a given left/right imbalance — measures at -21% food:
+`bias` is a *normalised* asymmetry, so a fixed target asks for a
+particular gradient shape rather than a particular position, and there is
+no such place at a stable distance from a trail whose strength changes as
+it is used.  Ants holding one drifted off the trail entirely, and the
+blocking metric duly fell, which looked like success and was ants
+leaving.  Offsetting the sensing frame in metres asks a question the
+geometry can answer.")
+
 (defparameter *trail-noise-suppression* 0.85f0
   "How much of the heading noise a strong trail removes.  [cal] Same
 argument as *trail-turn-gain*, from the other side: a committed
@@ -1244,7 +1292,7 @@ relaxation from chasing floating-point noise forever.")
                *speed-spread*
                *gait-stride* *ant-disc-pixels* *ant-detail-pixels*
                *sensor-offset* *sensor-spread* *turn-rate*
-               *trail-turn-gain* *trail-noise-suppression*
+               *trail-turn-gain* *trail-noise-suppression* *trail-lane-offset*
                *choice-n* *choice-k* *choice-eavesdrop*
                *trail-tau* *trail-decay-scale* *trail-cap* *trail-deposit*
                *trail-packet-spacing* *trail-packet-radius*

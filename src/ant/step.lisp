@@ -40,6 +40,15 @@ not.  One stream, one question.")
 Drawn on the ant's id alone, with no tick, so it is a fixed property of
 the individual rather than a per-tick coin flip.")
 
+(defconstant +stream-lane+ 9
+  "Which part of a trail's width this ant prefers — see ANT-TRAIL-OFFSET.
+
+On the ant's id alone with no tick, exactly like +STREAM-HAND+ and
++STREAM-PACE+, and for the same reason: it is a property of the
+individual, and a value re-rolled every tick would be noise on the step
+rather than a trait.  The model already has noise on the step, in the
+heading, where it belongs.")
+
 (defconstant +stream-pace+ 8
   "How fast this ant walks relative to its colony — see ANT-PACE.
 
@@ -265,6 +274,30 @@ this width the two are indistinguishable anyway."
   (+ (- 1.0f0 *speed-spread*)
      (* 2.0f0 *speed-spread* (rnd01 id 0 +stream-pace+ seed))))
 
+(declaim (inline ant-trail-offset))
+(defun ant-trail-offset (id seed)
+  "How far to one side of the trail this ant likes to walk, in metres.
+Zero is the centre line.  Fixed for the life of the ant.
+
+Implemented by sliding the ant's whole three-point sensing frame sideways
+(CHOOSE-TURN), so the ant still steers to put *the ridge of the gradient*
+between its antennae — it simply holds those antennae offset from its
+body.  Its body therefore settles that far off the centre line, and the
+equilibrium is as stable as the centred one because it is the same
+equilibrium in a shifted frame.
+
+Uniform, and a lifelong trait rather than a per-tick draw, for the
+reasons given at +STREAM-LANE+ and in ANT-PACE.  It costs no per-ant
+storage at all: it is derived from the id the ant already has, on a
+stream of its own, which is what lets a new trait be added for the price
+of one constant.
+
+Lateralisation in ants is documented — ANT-HANDEDNESS already leans on it
+— so individual variation in antennal steering is the defensible reading
+rather than a convenience."
+  (declare (type (unsigned-byte 32) id seed) (optimize (speed 3) (safety 0)))
+  (* *trail-lane-offset* (- (* 2.0f0 (rnd01 id 0 +stream-lane+ seed)) 1.0f0)))
+
 (defun clear-bearing (f x y bearing prefer off)
   "BEARING if an antenna held that way is over open ground, else the
 nearest direction that is.
@@ -347,10 +380,27 @@ switch into and no switching logic to get wrong (§3.5)."
          (k *choice-k*)
          (hl (- heading spread))
          (hr (+ heading spread))
-         (cl (sense-at w colony-id (+ x (* off (cos hl))) (+ y (* off (sin hl)))))
-         (cc (sense-at w colony-id (+ x (* off (cos heading)))
-                       (+ y (* off (sin heading)))))
-         (cr (sense-at w colony-id (+ x (* off (cos hr))) (+ y (* off (sin hr)))))
+         ;; This ant's own place across the width of a trail
+         ;; (ANT-TRAIL-OFFSET): the whole sensing frame slides sideways,
+         ;; so the ant still centres the gradient's ridge between its
+         ;; antennae and its *body* ends up that far off the middle.
+         ;;
+         ;; Without it every ant nulls the same imbalance, and nulling the
+         ;; imbalance is the definition of standing on the ridge — so the
+         ;; colony walked a 3 cm trail in single file down one line, with
+         ;; nowhere to pass and no width for traffic to sort into.
+         (lane (ant-trail-offset id (world-seed w)))
+         (lx (* lane (- (sin heading)))) (ly (* lane (cos heading)))
+         ;; The three antennal sample points, bound once.  Every sense
+         ;; this ant has is taken at these same three places, so computing
+         ;; them once is both cheaper than the copies this grew and the
+         ;; only way the readings cannot drift apart from one another.
+         (xl (+ x lx (* off (cos hl)))) (yl (+ y ly (* off (sin hl))))
+         (xc (+ x lx (* off (cos heading)))) (yc (+ y ly (* off (sin heading))))
+         (xr (+ x lx (* off (cos hr)))) (yr (+ y ly (* off (sin hr))))
+         (cl (sense-at w colony-id xl yl))
+         (cc (sense-at w colony-id xc yc))
+         (cr (sense-at w colony-id xr yr))
          ;; Feel for terrain with the same three antennal points (§3.2).
          ;;
          ;; An ant that cannot tell a wall is there until it has walked
@@ -374,12 +424,9 @@ switch into and no switching logic to get wrong (§3.5)."
          ;; convenience.
          (fld (colony-field (nth colony-id (world-colonies w))))
          (avoid *obstacle-avoidance*)
-         (bl (blocked-factor fld (+ x (* off (cos hl))) (+ y (* off (sin hl)))
-                             avoid))
-         (bc (blocked-factor fld (+ x (* off (cos heading)))
-                             (+ y (* off (sin heading))) avoid))
-         (br (blocked-factor fld (+ x (* off (cos hr))) (+ y (* off (sin hr)))
-                             avoid))
+         (bl (blocked-factor fld xl yl avoid))
+         (bc (blocked-factor fld xc yc avoid))
+         (br (blocked-factor fld xr yr avoid))
          (wl (* bl (choice-weight (+ k cl) n)))
          (wc (* bc (choice-weight (+ k cc) n)))
          (wr (* br (choice-weight (+ k cr) n)))
@@ -390,7 +437,8 @@ switch into and no switching logic to get wrong (§3.5)."
                     (+ wl wc wr)
                     (progn (setf wl 1.0f0 wc 1.0f0 wr 1.0f0) 3.0f0)))
          (u (* (rnd01 id tick +stream-choice+ (world-seed w)) total)))
-    (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u))
+    (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u
+                      lane lx ly xl yl xc yc xr yr))
     ;; Second value: how strongly this ant can smell a trail at all,
     ;; as C/(k+C) of the best sensor — 0 in clean ground, approaching 1
     ;; on a saturated road.  The caller uses it to decide how *hard* to
