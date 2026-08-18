@@ -115,7 +115,8 @@
    #:bridge-share #:bridge-winner
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
-   #:ant-handedness #:ant-pace
+   #:ant-handedness #:ant-pace #:ant-trail-offset
+   #:*trail-lane-offset*
    #:world-step! #:world-run! #:colony-step! #:colony-feed! #:world-seed-population!
    ;; render/png (antsim/render)
    #:write-png #:crc32 #:adler32

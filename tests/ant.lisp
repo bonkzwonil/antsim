@@ -74,7 +74,8 @@ only holds if the three options come out equally likely."
   "n > 1 is the entire model (§3.3): a small concentration difference has
 to produce a *large* probability difference.  With n = 2 and one arm at
 2k, the preference must be well past the linear 2:1."
-  (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 32))
+  (let* ((ant:*trail-lane-offset* 0.0f0) ; isolate the choice function
+         (w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 32))
          (c (ant:add-colony w :nest-x 0.2f0 :nest-y 0.2f0))
          (f (ant:colony-field c))
          (right 0) (n 6000))
@@ -99,6 +100,7 @@ a doubled concentration must produce only a *linear* preference.  If this
 ever shows amplification, the selection seen elsewhere is coming from
 something other than the choice function."
   (let* ((ant:*choice-n* 1.0f0)
+         (ant:*trail-lane-offset* 0.0f0) ; isolate the choice function
          (w (ant:make-world :width 0.4f0 :height 0.4f0 :capacity 32))
          (c (ant:add-colony w :nest-x 0.2f0 :nest-y 0.2f0))
          (f (ant:colony-field c))
@@ -239,6 +241,14 @@ The trail runs west to east and ends at x = 0.40 with open ground
 beyond, so an ant following it eastward walks off the end.  Nothing
 stops it leaving; the question is how long it stays."
   (let* ((ant:*trail-lost-threshold* lost)
+         ;; Lane offset off, and the reason is this fixture rather than
+         ;; the rule.  The trail below is laid with FIELD-DEPOSIT! at
+         ;; single cells, so it is one cell — 5 mm — wide, where a real
+         ;; trail is a row of 3 cm packets.  A lane preference of 8 mm
+         ;; therefore puts the ant entirely beside this trail rather than
+         ;; across its width, and what would be measured is the fixture's
+         ;; thinness and not the U-turn edge this test is about.
+         (ant:*trail-lane-offset* 0.0f0)
          (w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 16
                             :seed seed))
          (c (ant:add-colony w :nest-x 0.1f0 :nest-y 0.5f0 :nest-r 0.02f0
