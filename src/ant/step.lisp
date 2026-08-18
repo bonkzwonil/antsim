@@ -678,11 +678,17 @@ switch into and no switching logic to get wrong (§3.5)."
                           (setf (aref bxs bi) (+ x (* (/ fdx fd) step))
                                 (aref bys bi) (+ y (* (/ fdy fd) step)))))))
                   (let* ((rate (* *crop-fill-rate* (food-quality f)))
-                         (take (min rate
-                                    (- 1.0f0 (aref (ants-crop a) i))
-                                    (food-amount f))))
+                         ;; the crop is f32 and the source is double, so
+                         ;; the clamp is done in double and the result
+                         ;; comes back to f32 for the crop
+                         (take (float (min (float rate 1.0d0)
+                                           (float (- 1.0f0
+                                                     (aref (ants-crop a) i))
+                                                  1.0d0)
+                                           (food-amount f))
+                                      1.0f0)))
                     (incf (aref (ants-crop a) i) take)
-                    (decf (food-amount f) take)
+                    (decf (food-amount f) (float take 1.0d0))
                     ;; and it eats.  The crop is the colony's; this is
                     ;; the ant's own, and an ant standing on food is not
                     ;; hungry.  Not charged to the source: a forager's
@@ -969,6 +975,9 @@ switch into and no switching logic to get wrong (§3.5)."
                       (when (<= (+ (* ddx ddx) (* ddy ddy))
                                 (* *nest-arrival-radius* *nest-arrival-radius*))
                         (let ((load (aref (ants-crop a) i)))
+                          (when (> load 0.0f0)
+                            (incf (colony-harvested c) load)
+                            (incf (colony-trips c)))
                           (incf (colony-stock c) (* load (- 1.0f0 *crop-to-energy*)))
                           (setf (aref (ants-energy a) i)
                                 (min 1.0f0 (+ (aref (ants-energy a) i)
@@ -1003,7 +1012,13 @@ switch into and no switching logic to get wrong (§3.5)."
                     ;; not a bearing and it never becomes one — an ant
                     ;; learns from a contact that things are going well,
                     ;; not which way to walk (see ANT-ENCOUNTER-STEP!).
-                    (cond ((world-food-at w x2 y2)
+                    (cond ((let ((arrived (world-food-at w x2 y2)))
+                             ;; The tally rides on the transition rather
+                             ;; than on a scan, so it counts arrivals and
+                             ;; not ant-ticks-spent-on-a-pile.  A counter
+                             ;; is commutative, so the tick stays
+                             ;; order-independent.
+                             (when arrived (incf (food-visits arrived)) t))
                            (setf (aref (ants-state a) i) +ant-at-food+))
                           ((< (aref (ants-energy a) i)
                               (* (aref (ants-resolve a) i)
@@ -1600,7 +1615,8 @@ stops producing brood, and decays."
     (dolist (f (world-foods w))
       (when (plusp (food-renew f))
         (setf (food-amount f)
-              (min (food-initial f) (+ (food-amount f) (food-renew f))))))
+              (min (food-initial f)
+                   (+ (food-amount f) (float (food-renew f) 1.0d0))))))
     (dolist (c (world-colonies w))
       (colony-step! w c)))
   (values))

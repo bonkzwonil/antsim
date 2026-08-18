@@ -33,7 +33,11 @@
    ;; The §3.8 bridge apparatus.  Last, because it builds worlds and runs
    ;; ticks and therefore needs everything above it — and because nothing
    ;; above it may depend on an experiment.
-   (:file "world/bridge"))
+   (:file "world/bridge")
+   ;; The rest of §3.8's apparatus: Beckers' two sources, and §3.12's two
+   ;; colonies over one contested pile.  Same rule as the bridges —
+   ;; nothing above may depend on an experiment.
+   (:file "world/trials"))
   :in-order-to ((test-op (test-op "antsim/test"))))
 
 (defsystem "antsim/scenario"

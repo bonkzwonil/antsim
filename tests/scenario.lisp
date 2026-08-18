@@ -162,7 +162,7 @@ radius is absolute: two sources side by side can be compared by eye."
         (ant:food-current-radius big) (ant:food-current-radius small))
     ;; and eating half of it takes the radius to 1/sqrt(2)
     (let ((r0 (ant:food-current-radius big)))
-      (setf (ant:food-amount big) 2000.0f0)
+      (setf (ant:food-amount big) 2000.0d0)
       (is (< (abs (- (ant:food-current-radius big) (/ r0 (sqrt 2.0f0))))
              1.0f-4)
           "half eaten should be 1/sqrt(2) of the radius"))))
@@ -175,7 +175,7 @@ radius must produce the run it always did."
     (is (< (abs (- (ant:food-current-radius f) 0.03f0)) 1.0f-5)
         "a full source should be drawn at its authored radius, got ~,5f"
         (ant:food-current-radius f))
-    (setf (ant:food-amount f) 625.0f0)     ; a quarter left
+    (setf (ant:food-amount f) 625.0d0)     ; a quarter left
     (is (< (abs (- (ant:food-current-radius f) 0.015f0)) 1.0f-5)
         "a quarter left should be half the radius, got ~,5f"
         (ant:food-current-radius f))))

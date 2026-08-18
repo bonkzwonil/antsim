@@ -1,0 +1,60 @@
+{
+  "name": "two tribes",
+
+  "_what": "Two colonies, three sources, and a border between them.",
+  "_what2": "Each tribe has a source close enough to be its own and the",
+  "_what3": "third sits on the midline where both can reach it. Nothing",
+  "_what4": "in an ant knows a rival exists: the tribes interact through",
+  "_what5": "exactly two channels, both built earlier -- separate trail",
+  "_what6": "fields read through epsilon (concept 3.12), and recognition",
+  "_what7": "by colony id at the antennae (M3), so a stranger is avoided",
+  "_what8": "harder, never fed, and never believed.",
+
+  "_shape": "The wall is a broken spine on the midline. It does not seal",
+  "_shape2": "anything -- there are gaps north and south of centre -- but it",
+  "_shape3": "means the contested pile is reached round one end or the",
+  "_shape4": "other, so the two tribes meet somewhere rather than",
+  "_shape5": "everywhere. Watch the gaps: that is where the traffic is.",
+
+  "world": { "width": 1.000, "height": 0.640, "capacity": 9000 },
+
+  "obstacles": [
+    { "rect": { "x0": 0.492, "y0": 0.180, "x1": 0.508, "y1": 0.290 } },
+    { "rect": { "x0": 0.492, "y0": 0.350, "x1": 0.508, "y1": 0.460 } },
+
+    { "rect": { "x0": 0.240, "y0": 0.400, "x1": 0.380, "y1": 0.416 } },
+    { "rect": { "x0": 0.620, "y0": 0.400, "x1": 0.760, "y1": 0.416 } },
+
+    { "rect": { "x0": 0.240, "y0": 0.224, "x1": 0.380, "y1": 0.240 } },
+    { "rect": { "x0": 0.620, "y0": 0.224, "x1": 0.760, "y1": 0.240 } }
+  ],
+
+  "colonies": [
+    { "id": "west",
+      "nest": { "x": 0.090, "y": 0.320, "r": 0.022 },
+      "capacity": 4000,
+      "start": 300,
+      "stock": 700.0 },
+
+    { "id": "east",
+      "nest": { "x": 0.910, "y": 0.320, "r": 0.022 },
+      "capacity": 4000,
+      "start": 300,
+      "stock": 700.0 }
+  ],
+
+  "_food": "The two flanking piles are 22 cm from their own nest and 70",
+  "_food2": "from the other, so they are private in practice without being",
+  "_food3": "fenced. The middle pile is 41 cm from both and is the only",
+  "_food4": "thing worth arguing about. It is also the richest, which is",
+  "_food5": "what stops the tribes settling quietly for their own corner.",
+
+  "food": [
+    { "x": 0.190, "y": 0.530, "r": 0.028, "amount": 40000.0, "quality": 0.8 },
+    { "x": 0.810, "y": 0.530, "r": 0.028, "amount": 40000.0, "quality": 0.8 },
+    { "x": 0.500, "y": 0.560, "r": 0.034, "amount": 90000.0, "quality": 1.0 }
+  ],
+
+  "seed": 20260818,
+  "duration_s": 3600
+}

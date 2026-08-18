@@ -16,8 +16,27 @@
   (x 0.0f0 :type f32) (y 0.0f0 :type f32) (r 0.01f0 :type f32)
   ;; Amount depletes; at zero the source is gone and the trail to it dies
   ;; by evaporation alone, with no special case anywhere (§3.7).
-  (amount 0.0f0 :type f32)
-  (initial 0.0f0 :type f32)
+  ;;
+  ;; **Double, and single precision was silently wrong here.**  Everything
+  ;; else in the model is f32 on purpose — positions, fields, crop — and
+  ;; this is the one place that fails, because it is the only accumulator
+  ;; in the system whose *magnitude* and whose *increment* are separated
+  ;; by six orders of magnitude.  A forager takes 0.02 units of a
+  ;; 500 000-unit pile in a tick.  At 500 000 an f32 ulp is 0.031, so
+  ;; 0.02 is below half an ulp and `(decf amount take)` **rounds back to
+  ;; where it started** — the pile is eaten from for ever and never goes
+  ;; down.  Found by the Beckers apparatus, which reported 850 feeding
+  ;; visits to a source that had lost nothing at all; a poor source is
+  ;; worse still, since its take is quality-scaled and smaller yet.
+  ;;
+  ;; It is not only the unlimited sources.  Wherever the take is near half
+  ;; an ulp the *rate* is wrong rather than absent — at 500 000 with
+  ;; quality 1.0, take 0.02 rounds up to 0.031 and the pile empties 56%
+  ;; too fast.  Below about 30 000 units the error stops mattering, which
+  ;; is why the shipped scenarios never showed it and the acceptance
+  ;; apparatus did.
+  (amount 0.0d0 :type double-float)
+  (initial 0.0d0 :type double-float)
   ;; Units of food per square metre of pile (§5.1).
   ;;
   ;; This is what makes the drawn disc mean something absolute.  Without
@@ -36,11 +55,17 @@
   ;; source below *trail-quality-threshold* is eaten but never recruited
   ;; to.  Two acceptance rows depend on this one number.
   (quality 1.0f0 :type f32)
-  (renew 0.0f0 :type f32))              ; units per colony tick
+  (renew 0.0f0 :type f32)               ; units per colony tick
+  ;; Feeding arrivals, ever.  This is the traffic measure the two Beckers
+  ;; rows are actually about, and it is not the same as depletion: crop
+  ;; fill rate is quality-modulated, so a poor source gives up less food
+  ;; per visit and depletion confounds "how many ants came" with "how
+  ;; much each one got".  Counted where an ant enters AT-FOOD.
+  (visits 0 :type fixnum))
 
 (defun food-empty-p (f)
   (declare (type food f))
-  (<= (food-amount f) 0.0f0))
+  (<= (food-amount f) 0.0d0))
 
 (defconstant +pi-f+ 3.1415927f0)
 
@@ -64,7 +89,11 @@ of the geometry for free rather than needing a rule of its own."
   (declare (type food f))
   (let ((d (food-density f)))
     (if (plusp d)
-        (sqrt (/ (max 0.0f0 (food-amount f)) (* +pi-f+ d)))
+        ;; the amount is double (see the struct); the radius is a world
+        ;; coordinate and stays f32 like every other one
+        (float (sqrt (/ (max 0.0d0 (food-amount f))
+                        (* (float +pi-f+ 1.0d0) (float d 1.0d0))))
+               1.0f0)
         0.0f0)))
 
 (defun food-density-for (r amount)
@@ -72,9 +101,10 @@ of the geometry for free rather than needing a rule of its own."
 
 The default when a scenario gives a radius but no density, which keeps
 every existing scenario behaving exactly as it did."
-  (declare (type f32 r amount))
+  (declare (type f32 r) (type double-float amount))
   (if (and (plusp r) (plusp amount))
-      (/ amount (* +pi-f+ r r))
+      (float (/ amount (* (float +pi-f+ 1.0d0) (float r 1.0d0) (float r 1.0d0)))
+             1.0f0)
       0.0f0))
 
 ;;; --------------------------------------------------------------------
@@ -91,6 +121,13 @@ every existing scenario behaving exactly as it did."
   ;; unaddable later without touching every line that reads a pheromone.
   (field nil :type (or null field))
   (stock 0.0f0 :type f32)               ; nest food store
+  ;; Gross crop carried in, ever.  STOCK is a *balance* — it nets out
+  ;; upkeep, brood and the meals handed to ants in the nest — so two
+  ;; colonies with equal stock may have foraged very differently, and
+  ;; the §3.8 competition row is a claim about foraging.  Counted at the
+  ;; nest door, before any of it is spent.
+  (harvested 0.0f0 :type f32)
+  (trips 0 :type fixnum)                ; laden arrivals, ditto
   ;; What the renderer's stock gauge treats as "full".  Display only:
   ;; stock has no natural ceiling, so the starting value is the only
   ;; honest reference point there is.
@@ -254,7 +291,7 @@ DENSITY, when given, wins.  With neither, a scenario behaves as it always
 has."
   (declare (type world w))
   (let* ((x (float x 1.0f0)) (y (float y 1.0f0)) (r (float r 1.0f0))
-         (amount (float amount 1.0f0))
+         (amount (float amount 1.0d0))
          (d (if density
                 (float density 1.0f0)
                 (food-density-for r amount)))

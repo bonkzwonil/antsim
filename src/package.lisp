@@ -75,9 +75,10 @@
    ;; world/scene — what a scenario names (§6)
    #:food #:food-x #:food-y #:food-r #:food-amount #:food-initial
    #:food-density #:food-density-for
-   #:food-quality #:food-renew #:food-empty-p #:food-body
+   #:food-quality #:food-renew #:food-empty-p #:food-body #:food-visits
    #:colony #:colony-id #:colony-name #:colony-field #:colony-stock
    #:colony-population #:colony-capacity #:colony-born #:colony-died
+   #:colony-harvested #:colony-trips
    #:colony-nest-x #:colony-nest-y #:colony-nest-r #:colony-alive-p
    #:colony-forage-urgency #:colony-leave-probability
    #:colony-energy-threshold #:colony-giveup-threshold
@@ -115,6 +116,14 @@
    #:bridge-counts #:bridge-lengths
    #:bridge-tally! #:bridge-run! #:bridge-reset-counts!
    #:bridge-share #:bridge-winner
+   ;; world/trials — Beckers' two sources, and §3.12's two colonies
+   #:choice-trial #:make-two-source-world #:make-poor-source-world
+   #:choice-trial-world #:choice-trial-colony #:choice-trial-foods
+   #:choice-run! #:choice-reset-counts! #:choice-shares
+   #:competition #:make-competition-world
+   #:competition-world #:competition-near #:competition-far
+   #:competition-food #:competition-run! #:competition-share
+   #:colony-trail-fidelity
    ;; ant/step — the tick (§3.2-§3.5, §4.3)
    #:wrap-angle #:angle-toward #:sense-at #:choose-turn
    #:ant-handedness #:ant-pace #:ant-trail-offset

@@ -164,3 +164,125 @@ replicates: ~{~,3f~^ ~}" mean (length shares) shares)
         (is (>= s 0.55f0)
             "one replicate collapsed to ~,3f, which is not a thin margin ~
 but a different result: ~{~,3f~^ ~}" s shares)))))
+
+;;; --------------------------------------------------------------------
+;;; Beckers — quality (§3.8)
+;;; --------------------------------------------------------------------
+;;;
+;;; The bridges vary *distance* and hold quality fixed.  These two vary
+;;; quality and hold distance fixed, which is the other half of the same
+;;; claim: recruitment is modulated by what is at the end of the trip, and
+;;; below a concentration it does not happen at all.
+;;;
+;;; Apparatus in src/world/trials.lisp.  Both sources sit the same
+;;; distance from one nest, so the fork is the nest door — see the note
+;;; there on why two options an ant cannot smell at once are not a choice.
+
+(defparameter *quality-seeds* '(1 2 3 4)
+  "Four rather than the bridges' six, and mirrored, which is eight runs.
+
+The mirror is worth more here than two further seeds would be.  A
+one-sided row cannot tell selection from a *side* preference — and the
+model has per-ant handedness in it, so a side preference is a live
+possibility rather than a pedantic one.  Running each pair both ways
+round and requiring the rich source to win in both directions rules it
+out in a way no number of same-side replicates can.")
+
+(defun %rich-share (seed rich-left &key (warm 6000) (ticks 12000))
+  "Share of feeding visits taken by the *richer* of two equal-distance
+sources.  RICH-LEFT places it on the left, so the same claim can be
+asserted with the geometry mirrored.
+
+The warm-up is discarded.  The opening minutes are the colony finding the
+arena at all, and counting them measures how long a random walk takes to
+stumble on a pile rather than what the trails then did with it."
+  (let* ((qa (if rich-left 1.0f0 0.4f0))
+         (qb (if rich-left 0.4f0 1.0f0))
+         (tr (make-two-source-world :seed seed :quality-a qa :quality-b qb)))
+    (choice-run! tr warm)
+    (choice-reset-counts! tr)
+    (choice-run! tr ticks)
+    (let ((sh (choice-shares tr)))
+      (when sh (if rich-left (first sh) (second sh))))))
+
+(test the-richer-of-two-equal-sources-wins
+  "Beckers et al. 1993: at equal distance a colony selects the richer
+source, because deposition is quality-modulated and nothing else differs.
+
+Poor here is 0.4 — above *trail-quality-threshold*, deliberately.  Both
+sources are recruited to; the claim is about the *ratio*, not about one of
+them being switched off, and setting the poor one below the threshold
+would be testing the row below instead of this one.
+
+Asserted as an aggregate, and the reason is measured rather than assumed:
+the equal-quality control run over eight seeds came out at a mean of
+0.514 with a range of 0.387 to 0.911 — a single seed does break symmetry
+here exactly as it does on the binary bridge, so a per-replicate bar on
+this row would be asserting the absence of a phenomenon the model is
+supposed to have.  Measured with a real quality difference, all eight
+runs went to the richer source, mean 0.72, worst 0.628."
+  (let ((shares '()))
+    (dolist (rich-left '(t nil))
+      (dolist (seed *quality-seeds*)
+        (let ((s (%rich-share seed rich-left)))
+          (is-true s "seed ~d (~:[rich right~;rich left~]) recorded no ~
+feeding visits at all, so nothing was selected between"
+                   seed rich-left)
+          (when s (push s shares)))))
+    (let* ((shares (nreverse shares))
+           (mean (/ (reduce #'+ shares) (length shares)))
+           (wins (count-if (lambda (x) (> x 0.5f0)) shares)))
+      (is (>= mean 0.60f0)
+          "the richer source averaged only ~,3f of feeding visits across ~
+~d runs: ~{~,3f~^ ~}" mean (length shares) shares)
+      ;; one seed is allowed to go the other way; two is a different result
+      (is (>= wins (- (length shares) 1))
+          "the richer source won only ~d of ~d runs: ~{~,3f~^ ~}"
+          wins (length shares) shares))))
+
+(test poor-food-is-eaten-and-never-advertised
+  "Beckers' other result, and both halves have to hold at once: below a
+concentration threshold a forager feeds from a source and walks home
+*without laying*.  A colony that refused to eat it would pass half of
+this row while modelling something else entirely.
+
+The threshold is a switch rather than a taper (*trail-quality-threshold*)
+and the measurement is correspondingly sharp.  Over three seeds, 15
+simulated minutes each:
+
+    quality    taken   visits   field total
+      0.10     714      742          0.0
+      0.15     771      783          0.0
+      0.29     829      837          0.0
+      0.31    2113     2607      34490.0
+      0.50    2414     2868      61848.2
+      1.00    2701     3061     137335.5
+
+Note what happens across the step: not only does a field appear, the
+visit count triples.  That is the recruitment the poor source is being
+denied, and it is why the row is worth having as an experiment rather
+than as a unit test on the deposit rule."
+  (let ((poor (* 0.5f0 *trail-quality-threshold*))
+        (rich (min 1.0f0 (* 2.0f0 *trail-quality-threshold*))))
+    (dolist (seed '(1 2))
+      ;; below the threshold: eaten, and no trail anywhere in the arena
+      (let* ((tr (make-poor-source-world :seed seed :quality poor))
+             (f (first (choice-trial-foods tr)))
+             (c (choice-trial-colony tr)))
+        (choice-run! tr 18000)
+        (is (> (- (food-initial f) (food-amount f)) 100.0d0)
+            "seed ~d: only ~,1f units were taken from a source of quality ~
+~,2f, so the colony is not exploiting it and the second half of this row ~
+is vacuous" seed (- (food-initial f) (food-amount f)) poor)
+        (is (= 0.0d0 (field-total (colony-field c)))
+            "seed ~d: a source of quality ~,2f, below the ~,2f threshold, ~
+was recruited to — the field holds ~,1f" seed poor
+            *trail-quality-threshold* (field-total (colony-field c))))
+      ;; above it: the same apparatus, and now there is a trail
+      (let* ((tr (make-poor-source-world :seed seed :quality rich))
+             (c (choice-trial-colony tr)))
+        (choice-run! tr 18000)
+        (is (> (field-total (colony-field c)) 0.0d0)
+            "seed ~d: quality ~,2f is above the ~,2f threshold and still ~
+laid nothing, so the row above is passing for the wrong reason"
+            seed rich *trail-quality-threshold*)))))

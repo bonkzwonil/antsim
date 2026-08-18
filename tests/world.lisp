@@ -398,3 +398,54 @@ run is a claim the model is making."
     (dotimes (i 100) (ant:field-step! f 1.0f0))
     (is (= 0.0d0 (ant:field-total f)))
     (is (= 0.0f0 (ant:field-max f)))))
+
+;;; ------------------------------------------------------------- food
+;;;
+;;; A source is an accumulator, and it is the only one in the model whose
+;;; magnitude and whose increment are six orders of magnitude apart.  That
+;;; is what these guard.
+
+(test a-large-source-registers-a-single-small-take
+  "A forager takes ~0.02 units per tick.  Held in single precision a
+500 000-unit pile cannot see that: the ulp up there is 0.031, so 0.02 is
+under half an ulp and the subtraction rounds straight back to where it
+started.  The pile is then eaten from for ever and never goes down.
+
+This is not hypothetical.  It is what the Beckers apparatus found first —
+850 recorded feeding visits to a source that had lost nothing at all —
+and a poor source is worse still, because its take is quality-scaled and
+smaller yet.  Asserted on the struct rather than through a colony run, so
+a regression names the cause instead of a food total being slightly off."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0))
+         (f (ant:add-food w 0.5f0 0.5f0 0.03f0 500000.0f0)))
+    (let ((before (ant:food-amount f)))
+      (decf (ant:food-amount f) 0.02d0)
+      (is (< (ant:food-amount f) before)
+          "a 0.02 take vanished into a ~,0f-unit pile — the amount is ~
+           back in single precision" before)
+      (is (< (abs (- (- before (ant:food-amount f)) 0.02d0)) 1.0d-9)
+          "the take was quantised: ~,6f went missing rather than 0.02"
+          (- before (ant:food-amount f))))
+    ;; and a thousand of them add up to what a thousand of them should
+    (let ((before (ant:food-amount f)))
+      (dotimes (i 1000) (decf (ant:food-amount f) 0.02d0))
+      (is (< (abs (- (- before (ant:food-amount f)) 20.0d0)) 1.0d-6)
+          "1000 takes of 0.02 came to ~,6f rather than 20"
+          (- before (ant:food-amount f))))))
+
+(test a-sources-radius-tracks-what-is-left-of-it
+  "The drawn and blocking radius is derived from the amount, so it has to
+survive the same arithmetic.  A quarter of the food left is half the
+radius, because the amount is an *area*."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0))
+         (f (ant:add-food w 0.5f0 0.5f0 0.04f0 100000.0f0)))
+    (is (< (abs (- (ant:food-current-radius f) 0.04f0)) 1.0f-4)
+        "a full source is not at its authored radius: ~,5f"
+        (ant:food-current-radius f))
+    (setf (ant:food-amount f) 25000.0d0)
+    (is (< (abs (- (ant:food-current-radius f) 0.02f0)) 1.0f-4)
+        "a quarter of the food should be half the radius, got ~,5f"
+        (ant:food-current-radius f))
+    (setf (ant:food-amount f) 0.0d0)
+    (is-true (ant:food-empty-p f))
+    (is (= 0.0f0 (ant:food-current-radius f)))))
