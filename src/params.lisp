@@ -186,7 +186,7 @@ Deliberately *not* implemented by lowering k or raising n.  Both would
 have moved trail-following in the same direction while changing the
 choice function itself, which §3.8 is a test of.")
 
-(defparameter *trail-lane-offset* 0.008f0
+(defparameter *trail-lane-offset* 0.004f0
   "How far off the centre line of a trail an ant may prefer to walk,
 metres.  Each ant draws its own, uniformly in ±this, and keeps it for
 life (ANT-TRAIL-OFFSET).  0 restores the old behaviour exactly — every
@@ -216,12 +216,38 @@ trail time an ant spends with another same-direction ant inside 8 mm and
 Eighty percent at zero.  Four ticks in five, an ant on the trail had
 another ant right in front of it going the same way.
 
-8 mm is a little over half the packet radius, so the band is about as
-wide as the chemical trail actually is and ants do not habitually walk
-where they cannot smell anything.  It nearly halves the blocking and
-costs about 5% of the food: ants spread across a road are nearer its
-edges, so they lose it sooner.  0.004 is the conservative option at 65%
-blocked and half the cost.
+**4 mm and not 8, and the reason is a second measurement.**  Displacing
+an ant's sensing frame displaces its *body* the other way, and the test
+for arriving at food asks about the body — so an ant on the outer lane can
+walk around a full source and go home empty.  Reported from the window as
+a stream of ants curving past food none of them touched.  Measured, on
+outbound legs that came within 5 mm of a pile's edge:
+
+    lane    legs close   missed        food
+    0.000       2683      1 (0.0%)     3232
+    0.004       2520      7 (0.3%)     3048
+    0.008       2128     38 (1.8%)     2654
+    0.012       1859     27 (1.5%)     2343
+
+The misses are real and scale with the offset, but note that they are not
+where the food goes: 1.8% of approaches cannot account for an 18% fall in
+delivery.  Most of that is the cost this parameter always had — ants
+spread across a road are nearer its edges and lose it sooner — and a
+small source makes it much worse than the 80 cm trail measured above,
+which is exactly where being 8 mm off the line matters most.
+
+So 4 mm keeps most of the traffic benefit (80% blocked to 65%) for a
+third of the delivery cost and a sixth of the misses, and §3.8 passes with
+it.  8 mm is available and documented; it is not the better trade.
+
+**Four attempts to fix the miss directly are on record and all of them
+cost a §3.8 row**: widening the arrival radius, widening it only for
+detection, testing at the sensing point, and testing at the sensing point
+on both sides (0.550, 0.558, 0.555, 0.670 against a bar of 0.80).  The
+useful by-product was learning that gating eating on WORLD-FOOD-AT is
+itself a regression, and that detection and feeding must ask at the same
+point or an ant notices food, is told on the next tick there is none, and
+leaves with nothing.
 
 The obvious implementation is the wrong one and is recorded because it
 looks right.  Steering `bias` to a constant instead of to zero — telling
@@ -1261,11 +1287,28 @@ navigation problem and no amount of tuning contact or the give-way rules
 reaches it.
 
 The other number was not the question and is the larger finding: contact
-costs **half the food delivered**, 1617 against 3259.  That is congestion
-at the nest entrance, at the source, and along every metre between them,
-and nothing in this project had measured it before.  It is not an
-argument for switching it off — a colony whose ants occupy no space is
-not a colony — but it does say how large the term is.")
+costs **half the food delivered**, 1617 against 3259 on that scenario and
+about 19% on the live-demo arena.  That is congestion at the nest
+entrance, at the source, and along every metre between them, and nothing
+in this project had measured it before.
+
+**And it cannot be switched off, for a reason that is not realism.**  Run
+the §3.8 rows with it NIL and the binary bridge fails in the most
+interesting way available: every replicate commits, and *all six choose
+the same arm*.  That is a preference, not symmetry breaking, and it is
+the one outcome the row exists to rule out.
+
+The likely mechanism is worth stating, flagged as a reading rather than a
+measurement: congestion is a **negative feedback**.  A crowded arm is a
+slower arm, which pushes some of its traffic to the other one, and that
+is what keeps the choice genuinely open long enough for a seed to decide
+it.  Take contact away and the earliest tiny lead is amplified without
+anything to oppose it, so the same arm wins every time regardless of the
+seed.  Deneubourg's result needs the ants to be in each other's way.
+
+So this stays a diagnostic.  It is the fastest way to find out whether a
+jam is navigation or crowding — which is what it was built for and what it
+answered — and it is not a configuration anyone should run science on.")
 
 (defparameter *relax-iterations* 3
   "Jacobi relaxation iterations per motion tick.  [cal] §8: the
