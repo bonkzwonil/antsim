@@ -523,16 +523,45 @@ most likely to be hunting for the ant they just clicked."
             (hud-quad h px py 4.0 ph r g bl 0.95))
           (hud-text h tx ty (format nil "ANT ~D" (aref (ants-id a) i))
                     :scale s)
-          (let ((waited (aref (ants-waited a) i)))
-            (multiple-value-bind (r g bl) (ant-state-rgb st waited)
-              (hud-text h tx (+ ty line) (ant-state-name st waited)
-                        :scale s :r r :g g :b bl))
-            ;; and for how long, in seconds rather than ticks: the panel
-            ;; is read by a person, and the rest of it is in seconds
-            (when (plusp waited)
-              (hud-text h (+ tx 148) (+ ty line)
-                        (format nil "~,1Fs" (* waited *motion-dt*))
-                        :scale s :r 0.95 :g 0.25 :b 0.22)))
+          (let ((waited (aref (ants-waited a) i))
+                (ttl (aref (ants-alarm-ttl a) i))
+                (cool (aref (ants-alarm-cool a) i)))
+            ;; Alarm is deliberately not a state (§3.3): the ant keeps its
+            ;; errand and stops acting on it.  That is right for the model
+            ;; and wrong for the panel, which would label an ant OUTBOUND
+            ;; while it is in fact running from a poke — the same
+            ;; misreading ANT-STATE-NAME exists to prevent, and the same
+            ;; answer: say the thing that is actually happening.
+            ;;
+            ;; The stripe down the left stays *state*-coloured, so the
+            ;; errand is not lost — the panel says what the ant is doing
+            ;; in text and what it will go back to in colour.
+            (cond
+              ((plusp ttl)
+               (hud-text h tx (+ ty line) "ALARMED"
+                         :scale s :r 1.00 :g 0.55 :b 0.20)
+               (hud-text h (+ tx 148) (+ ty line)
+                         (format nil "~,1Fs" (* ttl *motion-dt*))
+                         :scale s :r 1.00 :g 0.55 :b 0.20))
+              ;; Habituated, and worth showing rather than hiding: an ant
+              ;; standing in a plume and ignoring it looks like a bug
+              ;; until the panel says it is deaf on purpose.
+              ((plusp cool)
+               (hud-text h tx (+ ty line) "SETTLING"
+                         :scale s :r 0.72 :g 0.45 :b 0.30)
+               (hud-text h (+ tx 148) (+ ty line)
+                         (format nil "~,1Fs" (* cool *motion-dt*))
+                         :scale s :r 0.72 :g 0.45 :b 0.30))
+              (t
+               (multiple-value-bind (r g bl) (ant-state-rgb st waited)
+                 (hud-text h tx (+ ty line) (ant-state-name st waited)
+                           :scale s :r r :g g :b bl))
+               ;; and for how long, in seconds rather than ticks: the panel
+               ;; is read by a person, and the rest of it is in seconds
+               (when (plusp waited)
+                 (hud-text h (+ tx 148) (+ ty line)
+                           (format nil "~,1Fs" (* waited *motion-dt*))
+                           :scale s :r 0.95 :g 0.25 :b 0.22)))))
           ;; Energy, crop and confidence as bars: all three are bounded,
           ;; and a bar reads faster than a number for anything bounded.
           ;;
