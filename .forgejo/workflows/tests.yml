@@ -36,14 +36,33 @@ jobs:
           path: ~/quicklisp
           key: quicklisp-linux-v1
 
+      # Unconditional, and deliberately not skipped on a cache hit.
+      #
+      # `ql:add-to-init-file` writes ~/.sbclrc, and ~/.sbclrc is not under
+      # the cached path.  So a cache *miss* installs Quicklisp and wires it
+      # up, while a cache *hit* restores ~/quicklisp and leaves SBCL with no
+      # idea it is there — and every later step dies with "Package QL does
+      # not exist".  That failure cannot happen on the first run of a new
+      # cache key and is certain on the second, which is the worst shape a
+      # CI bug can have; it cost a release build once already.
+      #
+      # Making the step idempotent rather than conditional demotes the cache
+      # to what it should always have been: an optimisation for the
+      # download, never a thing correctness depends on.
       - name: Install Quicklisp
-        if: steps.ql-cache.outputs.cache-hit != 'true'
         run: |
-          curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+          set -eu
+          if [ ! -f "$HOME/quicklisp/setup.lisp" ]; then
+            curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+            sbcl --non-interactive \
+              --load /tmp/quicklisp.lisp \
+              --eval '(quicklisp-quickstart:install)'
+          fi
+          grep -qs 'quicklisp/setup.lisp' "$HOME/.sbclrc" 2>/dev/null ||
+            echo '(load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))' \
+              >> "$HOME/.sbclrc"
           sbcl --non-interactive \
-            --load /tmp/quicklisp.lisp \
-            --eval '(quicklisp-quickstart:install)' \
-            --eval '(ql-util:without-prompting (ql:add-to-init-file))'
+            --eval '(format t "~&quicklisp dist ~a~%" (ql:dist-version "quicklisp"))'
 
       - name: Core suite
         run: make test
@@ -73,14 +92,33 @@ jobs:
           path: ~/quicklisp
           key: quicklisp-linux-v1
 
+      # Unconditional, and deliberately not skipped on a cache hit.
+      #
+      # `ql:add-to-init-file` writes ~/.sbclrc, and ~/.sbclrc is not under
+      # the cached path.  So a cache *miss* installs Quicklisp and wires it
+      # up, while a cache *hit* restores ~/quicklisp and leaves SBCL with no
+      # idea it is there — and every later step dies with "Package QL does
+      # not exist".  That failure cannot happen on the first run of a new
+      # cache key and is certain on the second, which is the worst shape a
+      # CI bug can have; it cost a release build once already.
+      #
+      # Making the step idempotent rather than conditional demotes the cache
+      # to what it should always have been: an optimisation for the
+      # download, never a thing correctness depends on.
       - name: Install Quicklisp
-        if: steps.ql-cache.outputs.cache-hit != 'true'
         run: |
-          curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+          set -eu
+          if [ ! -f "$HOME/quicklisp/setup.lisp" ]; then
+            curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+            sbcl --non-interactive \
+              --load /tmp/quicklisp.lisp \
+              --eval '(quicklisp-quickstart:install)'
+          fi
+          grep -qs 'quicklisp/setup.lisp' "$HOME/.sbclrc" 2>/dev/null ||
+            echo '(load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))' \
+              >> "$HOME/.sbclrc"
           sbcl --non-interactive \
-            --load /tmp/quicklisp.lisp \
-            --eval '(quicklisp-quickstart:install)' \
-            --eval '(ql-util:without-prompting (ql:add-to-init-file))'
+            --eval '(format t "~&quicklisp dist ~a~%" (ql:dist-version "quicklisp"))'
 
       - name: Renderer suite (software rasteriser)
         run: make test-render-ci

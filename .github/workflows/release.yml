@@ -126,14 +126,34 @@ jobs:
           path: ~/quicklisp
           key: quicklisp-release-linux-v1
 
+      # Unconditional, and deliberately not skipped on a cache hit.
+      #
+      # `ql:add-to-init-file` writes ~/.sbclrc, and ~/.sbclrc is not under
+      # the cached path.  So a cache *miss* installs Quicklisp and wires it
+      # up, and a cache *hit* restores ~/quicklisp while leaving SBCL with
+      # no idea it is there — every later step then dies with "Package QL
+      # does not exist".  That is a failure which cannot happen on the
+      # first run of a new cache key and is guaranteed on the second,
+      # which is the worst shape a CI bug can have.
+      #
+      # Making the whole step idempotent rather than conditional demotes
+      # the cache to what it should have been: an optimisation for the
+      # download, and never a thing correctness depends on.
       - name: Install Quicklisp
-        if: steps.ql-cache.outputs.cache-hit != 'true'
         run: |
-          curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+          set -eu
+          if [ ! -f "$HOME/quicklisp/setup.lisp" ]; then
+            curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+            sbcl --non-interactive \
+              --load /tmp/quicklisp.lisp \
+              --eval '(quicklisp-quickstart:install)'
+          fi
+          grep -qs 'quicklisp/setup.lisp' "$HOME/.sbclrc" 2>/dev/null ||
+            echo '(load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))' \
+              >> "$HOME/.sbclrc"
+          # Prove it, here, where the message names the cause.
           sbcl --non-interactive \
-            --load /tmp/quicklisp.lisp \
-            --eval '(quicklisp-quickstart:install)' \
-            --eval '(ql-util:without-prompting (ql:add-to-init-file))'
+            --eval '(format t "~&quicklisp dist ~a~%" (ql:dist-version "quicklisp"))'
 
       # Before anything is built, not after: the command line is the part
       # of a release that a smoke test cannot reach.  --list proves the
@@ -290,21 +310,32 @@ jobs:
           path: ~/quicklisp
           key: quicklisp-release-windows-v1
 
+      # Unconditional, for the reason spelled out in the Linux job: the
+      # init file ~/.sbclrc is not inside the cached directory, so a cache
+      # hit would restore Quicklisp and leave SBCL unable to find it.
       - name: Install Quicklisp
-        if: steps.ql-cache.outputs.cache-hit != 'true'
         run: |
           $ErrorActionPreference = 'Stop'
-          curl.exe -fsSL --retry 3 --retry-delay 5 `
-            -o quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
-          if ($LASTEXITCODE -ne 0) { throw "download failed: curl exit $LASTEXITCODE" }
-          # Same principle as the two downloads above: check that what
-          # arrived is the thing, not a page apologising for its absence.
-          if (-not (Select-String -Path quicklisp.lisp -Pattern 'quicklisp-quickstart' -Quiet)) {
-            throw "quicklisp.lisp does not look like Quicklisp"
+          $setup = Join-Path $HOME 'quicklisp\setup.lisp'
+          if (-not (Test-Path $setup)) {
+            curl.exe -fsSL --retry 3 --retry-delay 5 `
+              -o quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+            if ($LASTEXITCODE -ne 0) { throw "download failed: curl exit $LASTEXITCODE" }
+            # Same principle as the two downloads above: check that what
+            # arrived is the thing, not a page apologising for its absence.
+            if (-not (Select-String -Path quicklisp.lisp -Pattern 'quicklisp-quickstart' -Quiet)) {
+              throw "quicklisp.lisp does not look like Quicklisp"
+            }
+            sbcl --non-interactive --load quicklisp.lisp `
+                 --eval '(quicklisp-quickstart:install)'
           }
-          sbcl --non-interactive --load quicklisp.lisp `
-               --eval '(quicklisp-quickstart:install)' `
-               --eval '(ql-util:without-prompting (ql:add-to-init-file))'
+          $init = Join-Path $HOME '.sbclrc'
+          if (-not (Test-Path $init) -or
+              -not (Select-String -Path $init -Pattern 'quicklisp/setup.lisp' -SimpleMatch -Quiet)) {
+            Add-Content $init '(load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))'
+          }
+          sbcl --non-interactive `
+            --eval '(format t "~&quicklisp dist ~a~%" (ql:dist-version "quicklisp"))'
 
       - name: Save the binary
         env:
