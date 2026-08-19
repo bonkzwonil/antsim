@@ -687,6 +687,146 @@ ants abreast instead of fourteen — so the lettering stops being a
 bottleneck. The small file is the one where the word shapes the traffic;
 the large one is where the *distance* does. They are worth having both.
 
+### Route memory (§3.4, M4) — shipped, and it closes the pockets
+
+The entry above — *pockets kill ants* — ends by naming what is missing:
+not a better bearing, but something other than a bearing.  Route memory
+is that, and it is the first mechanism since M2.1 that both pays and
+survives §3.8.
+
+An ant records its own outward track as up to twelve points 2 cm apart,
+and falls back to it **only when the bearing home is blocked**.  The path
+is walkable by construction: it contains no wall, because the ant did not
+walk through one.
+
+    arena                     route off   route on
+    live-demo, one wall            548        548     harvested
+    word scenario                  888       1264     harvested
+    word scenario                  140        119     corpses
+    binary bridge                0.914      0.918     mean share
+    binary bridge, worst seed    0.892      0.900
+
+**The two foraging numbers are the result together.**  One small wall is
+rarely between an ant and its nest, so a fix aimed at concavities should
+do nothing there, and it does nothing to the unit.  The word scenario is
+concavities the whole way and it is worth 42%.  A mechanism that helped
+on both would be doing something other than what it claims.
+
+**It failed first, in the obvious way, and the suite caught it in one
+run.**  The natural implementation has the ant follow the remembered
+track the whole way home — which is retracing its own meander: 470 ticks
+to cover 10 cm, and the homing acceptance row said so immediately.  It is
+also the wrong animal.  *Cataglyphis* runs the vector straight home and
+does not retrace; a route is what you fall back on when the vector cannot
+be walked.
+
+Note that this also settles the expired measurement flagged in the
+pockets entry.  Letting the *trail* override the bearing was −29% and was
+owed a re-run; it is superseded rather than re-run, because the ant's own
+track is a better answer than the colony's field to the question "which
+way from here is walkable" — the track is this ant's, this trip, and
+contains no wall by construction, where the field is an average over
+everyone who ever came past.
+
+### Three mechanisms that had nothing to do (M4)
+
+Response thresholds, the no-entry field and search spirals were all
+built, tested, and change nothing at shipped parameters.  Three different
+measured reasons, and the pattern is the finding:
+
+| mechanism | why it is inert |
+|---|---|
+| Response thresholds | The stimulus is bimodal.  Measured across a colony's life it reads **0.000** while the larder holds and **1.000** within minutes of its failing, with the intermediate values appearing only as a transient on the way down.  A threshold needs a graded middle to slice and there is none.  Three threshold spreads returned byte-identical numbers, which is what a parameter that never fires looks like. |
+| No-entry field | The marks never agree.  Marking where an ant *gave up* scatters them over the arena — the field peaked at **0.01** against a cap of 20.  Marking an exhausted source concentrates them (0.65) but fires only for the cohort standing on it when it ran dry, because an ant arriving later never enters AT-FOOD at all. |
+| Search spirals | The failure does not occur.  Raise `*pi-noise*` from 0.02 to 0.5 and the mechanism plainly works — one seed's homing goes from 5765 ticks to 304 — but at the shipped noise a home vector does not run out short of the nest, and a colony run harvests **529 against 529**, to the unit. |
+
+None of this is an argument against any of the three; each fires and works
+when its precondition is met.  They are failure-recovery mechanisms, and
+this model's ants do not currently fail in the ways they recover from.
+Two of them want the same missing piece — a remembered food *location*,
+where an ant here keeps only a bearing.
+
+**The general lesson is about how to evaluate a mechanism at all.**  A
+measurement of "does it help" is only meaningful once the situation it
+helps in is something the model produces.  Otherwise the honest reading
+of a null result is *the experiment did not run*, not *the mechanism is
+worthless* — and the two are easy to confuse when both print 529.
+
+### A source that could be eaten from for ever (M4)
+
+Found by new apparatus rather than by reasoning: the Beckers rig reported
+850 feeding visits to a pile that had lost nothing at all.
+
+Food amount is the one accumulator in the model whose magnitude and whose
+increment are six orders apart.  A forager takes 0.02 units of a 500 000-
+unit pile in a tick; at 500 000 a single-precision ulp is 0.031, so the
+take is under half an ulp and `(decf amount take)` rounds straight back
+to where it started.
+
+It was not confined to the unlimited sources.  Wherever the take lands
+near half an ulp the *rate* is wrong rather than absent — at 500 000 with
+quality 1.0 a take of 0.02 rounds up to 0.031 and the pile empties 56%
+too fast.  Below roughly 30 000 units the error stops mattering, which is
+exactly why every shipped scenario looked right.
+
+Amount and initial are `double-float` now — the only doubles in the model
+— and two tests guard it on the struct, so a regression names the cause
+instead of a food total being quietly off.
+
+### ε does not blur a trail; it merges two (M4, §3.12)
+
+§3.12 predicted that raising ε would "visibly degrade both colonies'
+trail fidelity".  Testing it needed the claim restated twice.
+
+The first apparatus put two nests either side of one contested pile.
+Fidelity was flat in ε from 0.0 to 1.0 — and the reason was geometry, not
+model: each colony's field lay almost entirely where the other's did not,
+so there was nothing for ε to confuse.  **An apparatus in which the
+mechanism cannot act is not evidence about the mechanism**, which is the
+same mistake the bridge file records for two gaps 40 cm apart.
+
+On crossing routes — nests at opposite corners, each colony's source at
+the corner diagonally across, so the fields overlap along their whole
+length at an angle, and *neither colony competes for anything* — the
+result inverts the expected sign:
+
+    eps   concentration   route fidelity   harvest sw   harvest se
+   0.00        0.4955          0.3570           3012         3017
+   0.10        0.5019          0.3846           3032         2948
+   0.30        0.4658          0.3954           3044         2995
+   0.60        0.5269          0.3563           2902         2848
+   1.00        0.6014          0.3266           2828         2764
+
+Concentration — how *thin* each colony's field is — goes **up**.  That is
+not a defect: two colonies reading each other's marks converge on one
+shared road network, and one shared network is thinner than two separate
+ones.  It also leads half of each colony toward the other's food, which
+is why harvest falls at the same time.
+
+So fidelity for this row has to mean *correctness* and not thinness: the
+share of a colony's mark lying on the way to its own source.  And a
+little eavesdropping helps — route fidelity peaks at ε = 0.3 — which is
+an argument for the shipped ε being small rather than zero.
+
+### Corpses are bulldozed, so necrophoresis needs a moving control (M4)
+
+The pockets entry above corrects an earlier claim that corpses trap ants,
+on the grounds that a corpse is a movable body and ants shove it.
+Measuring necrophoresis put a number on how much shoving that is, and it
+is enough to matter to the experiment:
+
+    necrophoresis   clump before -> after   within 6 cm of nest
+        off             5.83  ->   6.18          24  ->  12
+        off             5.28  ->   5.67          20  ->  10
+        on              5.83  ->  11.43          24  ->   0
+        on              5.28  ->  10.96          20  ->   1
+
+**Half the corpses leave the nest area with the behaviour switched off.**
+A run against "nothing happens" would have credited traffic's work to the
+undertakers.  Against the moving control, clumping roughly doubles where
+the traffic alone barely moves it, and the nest goes to nothing rather
+than to half.
+
 ## On the list, not yet measured
 
 - **The README's per-seed bridge tables.** Stale since `d6b0035` (see
