@@ -43,16 +43,26 @@
       "stock": 700.0 }
   ],
 
-  "_food": "The two flanking piles are 22 cm from their own nest and 70",
-  "_food2": "from the other, so they are private in practice without being",
-  "_food3": "fenced. The middle pile is 41 cm from both and is the only",
-  "_food4": "thing worth arguing about. It is also the richest, which is",
-  "_food5": "what stops the tribes settling quietly for their own corner.",
+  "_food": "The scenario is a sequence, not a standoff, and the amounts",
+  "_food2": "are what make it one. Each tribe has a flanking pile 23 cm",
+  "_food3": "away and 75 from the other tribe, so it is private in",
+  "_food4": "practice without being fenced -- and it is small. It runs out",
+  "_food5": "in about twenty simulated minutes.",
+
+  "_food6": "The third pile sits on the midline in the gap between the two",
+  "_food7": "wall segments, 38 cm from both nests and much the largest. It",
+  "_food8": "is further than the private ones and richer, so nobody",
+  "_food9": "bothers with it while the easy food lasts. When the flanking",
+  "_food10": "piles empty, both tribes arrive at the same chokepoint at",
+  "_food11": "about the same time -- which is the thing this scenario is",
+  "_food12": "for. A first version made the private piles large enough to",
+  "_food13": "last, and both tribes simply settled for their own corner and",
+  "_food14": "never met at all.",
 
   "food": [
-    { "x": 0.190, "y": 0.530, "r": 0.028, "amount": 40000.0, "quality": 0.8 },
-    { "x": 0.810, "y": 0.530, "r": 0.028, "amount": 40000.0, "quality": 0.8 },
-    { "x": 0.500, "y": 0.560, "r": 0.034, "amount": 90000.0, "quality": 1.0 }
+    { "x": 0.190, "y": 0.530, "r": 0.026, "amount": 9000.0, "quality": 0.8 },
+    { "x": 0.810, "y": 0.530, "r": 0.026, "amount": 9000.0, "quality": 0.8 },
+    { "x": 0.500, "y": 0.320, "r": 0.034, "amount": 120000.0, "quality": 1.0 }
   ],
 
   "seed": 20260818,
