@@ -133,7 +133,7 @@ SCENARIO=scenarios/foraging.json make live
 SEED=12345 make live   # repeat an exact run
 ```
 
-Six scenarios ship:
+Seven scenarios ship:
 
 | scenario | what it is for |
 |---|---|
@@ -143,6 +143,7 @@ Six scenarios ship:
 | `antsim` | the name in obstacles, on a desk-sized 1.00 × 0.72 m arena |
 | `antsim-large` | the same word five times over, at 5.00 × 3.60 m |
 | `antsim-overload` | the small arena with 1400 ants on 40 units of stock |
+| `two-tribes` | two colonies, a private pile each that runs out, and one large source on the border between them |
 
 Scenarios are JSON ([§6](docs/concept.md#6-the-scenario-file)) and validation is
 strict: an unknown key is an error and the message names the path, because a
@@ -161,6 +162,7 @@ rather than real time — the things worth watching take minutes to an hour.
 | left-click | inspect an ant — state, energy, crop, age, distance home, and whether it has the reserve to set out |
 | `a` | drop a food source at the cursor |
 | `n` | resting ants: collide with each other, or pass through |
+| `t` | step to the next colony — whose trail field is drawn, and whose counters the HUD shows |
 | `space` | pause |
 | `+` / `-` | time compression, halving and doubling |
 | `home` | frame the whole world |
