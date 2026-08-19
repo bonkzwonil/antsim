@@ -48,12 +48,8 @@ twenty simulated minutes in does not cost you the twenty minutes.
 
 SBCL compiles all of it straight to machine code — no VM, no JIT warm-up — and
 with types declared the numeric core runs level with C and occasionally past it.
-
-SBCL then compiles straight to machine code — no VM, no JIT warm-up — and with
-types declared the numeric core runs level with C and occasionally past it. So
-the exploratory half and the tight loop are the same language in the same file,
-and over SLIME you can recompile one function into a colony that is already
-running instead of starting the twenty simulated minutes again.
+So the exploratory half and the tight loop are the same language in the same
+file.
 
 **[The full argument, with the code it rests on →](docs/WHYLISP.md)**
 
