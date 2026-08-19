@@ -326,6 +326,15 @@ that every other chemical respects."
   (declare (type world w) (type colony c))
   (or (colony-alarm c)
       (let ((f (make-field :width (world-width w) :height (world-height w)
+                           ;; The trail field's cell, explicitly, rather
+                           ;; than the parameter both happen to default
+                           ;; to.  The renderer sizes one texture from the
+                           ;; trail field and uploads both fields through
+                           ;; it, so two grids that disagreed would not be
+                           ;; a wrong picture — they would be a write past
+                           ;; the end of a texture.  Making them the same
+                           ;; object's answer is cheaper than checking.
+                           :cell (field-cell (colony-field c))
                            :tau *alarm-tau* :cap *alarm-cap*
                            :diffusion *alarm-diffusion*
                            :diffusion-steps *alarm-diffusion-steps*)))

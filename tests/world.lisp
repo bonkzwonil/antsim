@@ -657,3 +657,24 @@ worth, which is the budget the real loop gives it."
           (is (and (= 0.0f0 dx) (= 0.0f0 dy))
               "the ant is out but still overlapping: correction (~,5f ~,5f)"
               dx dy))))))
+
+(test the-alarm-field-is-the-same-grid-as-the-trail
+  "Not a detail: the renderer sizes one texture from the trail field and
+uploads both fields through it, so two grids that disagreed would not be
+a wrong picture — they would be a write past the end of a texture.  The
+cell is taken from the trail field rather than from the parameter they
+both happen to default to, and this is what says so."
+  (let* ((w (ant:make-world :width 0.5f0 :height 0.3f0 :capacity 32))
+         (c (ant:add-colony w :name "one" :nest-x 0.25f0 :nest-y 0.15f0))
+         (trail (ant:colony-field c))
+         (alarm (ant:ensure-alarm-field w c)))
+    (is (= (ant:field-w trail) (ant:field-w alarm))
+        "widths differ: trail ~d, alarm ~d"
+        (ant:field-w trail) (ant:field-w alarm))
+    (is (= (ant:field-h trail) (ant:field-h alarm))
+        "heights differ: trail ~d, alarm ~d"
+        (ant:field-h trail) (ant:field-h alarm))
+    (is (= (ant:field-cell trail) (ant:field-cell alarm)))
+    ;; and it is the same field on the second call, not a fresh one
+    (is (eq alarm (ant:ensure-alarm-field w c))
+        "ENSURE-ALARM-FIELD built a second field over the first")))
