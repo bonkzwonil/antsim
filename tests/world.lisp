@@ -449,3 +449,112 @@ radius, because the amount is an *area*."
     (setf (ant:food-amount f) 0.0d0)
     (is-true (ant:food-empty-p f))
     (is (= 0.0f0 (ant:food-current-radius f)))))
+
+;;; ------------------------------------------- terrain placed by hand
+;;;
+;;; ADD-BLOCK is the live window's one way of changing terrain in a world
+;;; that is already running (§5.5).  The window needs a GL context and is
+;;; not testable here; the world mutation is where the consequences are,
+;;; and all of it is in the core.
+
+(defun %block-world (&key (nest-x 0.5f0) (nest-y 0.5f0))
+  (let ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 64)))
+    (ant:add-colony w :name "one" :nest-x nest-x :nest-y nest-y :nest-r 0.02f0)
+    w))
+
+(test a-block-becomes-terrain-in-every-field
+  "A block has to reach both of a colony's fields, not just the trail.
+
+The repellent shares the grid abstraction and nothing else, so it is the
+one an addition forgets — and a no-entry mark that survives inside a rock
+is a mark ants would read through solid terrain.  ADD-OBSTACLE rasterizes
+into both; this pins that it stays that way, and that a blocked cell
+really does refuse to hold chemistry."
+  (let* ((w (%block-world))
+         (c (first (ant:world-colonies w)))
+         (f (ant:colony-field c))
+         (rf (ant:colony-repel c)))
+    (multiple-value-bind (poly why) (ant:add-block w 0.2f0 0.8f0 0.01f0)
+      (is-true poly "a block in open arena was refused: ~a" why)
+      (is (null why))
+      (is (member poly (ant:world-obstacles w))))
+    (is-true (ant:field-blocked-p f 0.2f0 0.8f0)
+             "the trail field does not know about the block")
+    (is-true (ant:field-blocked-p rf 0.2f0 0.8f0)
+             "the repellent field does not know about the block")
+    (is-false (ant:field-blocked-p f 0.6f0 0.3f0)
+              "a cell nowhere near the block came out blocked")
+    ;; and the trail that was already there does not survive under it
+    (ant:field-deposit! f 0.2f0 0.8f0 50.0f0)
+    (ant:field-step! f)
+    (is (= 0.0f0 (ant:field-at f 0.2f0 0.8f0))
+        "pheromone is sitting inside a rock: ~,4f"
+        (ant:field-at f 0.2f0 0.8f0))))
+
+(test a-block-will-not-seal-a-nest
+  "Refused, and refused on the *disc* rather than on the centre.
+
+A block that merely clips the entrance is the dangerous one: it looks
+placed-next-to rather than placed-on, and it walls in a colony just as
+completely.  So the check is closest-point against the nest radius, and
+the interesting assertion is the near miss — 0.525 puts the block's lower
+edge at 0.515, inside a nest that reaches 0.52."
+  (let ((w (%block-world)))
+    (multiple-value-bind (poly why) (ant:add-block w 0.5f0 0.5f0 0.01f0)
+      (is (null poly) "a block straight onto the nest was allowed")
+      (is (eq :nest why)))
+    (multiple-value-bind (poly why) (ant:add-block w 0.5f0 0.525f0 0.01f0)
+      (is (null poly) "a block clipping the nest entrance was allowed")
+      (is (eq :nest why)))
+    ;; a refusal must not have left anything behind
+    (is (null (ant:world-obstacles w))
+        "a refused block was added to the world anyway")
+    ;; clear of the disc, so it is terrain like any other
+    (multiple-value-bind (poly why) (ant:add-block w 0.5f0 0.545f0 0.01f0)
+      (is-true poly "a block clear of the nest was refused: ~a" why))))
+
+(test a-block-outside-the-arena-is-a-miss-not-an-error
+  "The view can be zoomed out past the world's edge, so a click outside is
+an ordinary thing to do and must not signal.  A block whose *centre* is
+inside may hang over the edge: the boundary already stops everything, so
+there is nothing there to get wrong."
+  (let ((w (%block-world)))
+    (is (eq :nest (nth-value 1 (ant:add-block w 0.5f0 0.5f0 0.01f0))))
+    (dolist (p '((-0.01 0.5) (1.01 0.5) (0.5 -0.01) (0.5 1.01)))
+      (multiple-value-bind (poly why)
+          (ant:add-block w (float (first p) 1.0f0) (float (second p) 1.0f0)
+                         0.01f0)
+        (is (null poly) "a block at ~a was placed outside the arena" p)
+        (is (eq :outside why))))
+    (is (null (ant:world-obstacles w)))
+    ;; on the edge, hanging half out, is fine
+    (is-true (ant:add-block w 0.0f0 0.5f0 0.01f0))))
+
+(test a-block-dropped-on-an-ant-pushes-it-out
+  "The docstring's claim, asserted rather than believed.
+
+ADD-BLOCK does not consult the ants standing where it lands; it relies on
+the ordinary terrain constraint recovering a disc found *inside* a
+polygon on the next tick.  If that ever stopped being true, a block
+dropped on a crowd would trap it silently — every ant still alive, still
+stepping, and none of them able to leave.  Three iterations is one tick's
+worth, which is the budget the real loop gives it."
+  (let* ((w (%block-world))
+         (b (ant:world-bodies w))
+         (i (ant:bodies-alloc b 0.2f0 0.8f0 ant:*ant-radius* ant:+body-ant+)))
+    (multiple-value-bind (poly why) (ant:add-block w 0.2f0 0.8f0 0.01f0)
+      (is-true poly "the fixture block was refused: ~a" why)
+      (is-true (ant:point-in-polygon-p poly 0.2f0 0.8f0)
+               "the fixture ant is not inside the block to begin with")
+      (ant:bodies-resolve! b (ant:world-obstacles w))
+      (let ((x (aref (ant:bodies-x b) i))
+            (y (aref (ant:bodies-y b) i)))
+        (is-false (ant:point-in-polygon-p poly x y)
+                  "an ant is still inside the block after a tick, at ~
+                   (~,4f ~,4f)" x y)
+        ;; and out by its own radius, not merely across the boundary
+        (multiple-value-bind (dx dy)
+            (ant:disc-polygon-correction poly x y ant:*ant-radius*)
+          (is (and (= 0.0f0 dx) (= 0.0f0 dy))
+              "the ant is out but still overlapping: correction (~,5f ~,5f)"
+              dx dy))))))

@@ -68,6 +68,36 @@ the food rather than a fraction of what it started as (§5.1).  Also the
 collision radius — a smaller pile has a shorter edge, so fewer ants can
 reach it at once, which is the queueing at a dwindling source you can
 watch happen.")
+(defparameter *live-block-half* 0.010f0
+  "Half the side of the square the O key drops, metres.
+
+So a 2 cm block, which is not an arbitrary size: the walls the scenarios
+author are 1.6 cm thick (`two-tribes`), and terrain placed by hand should
+be the same order as terrain placed by the file or the two do not compare.
+Four ant body lengths, so it is an obstruction rather than a pebble, and
+small enough that a wall is something you draw rather than something you
+stamp once.")
+
+(defparameter *live-block-limit* 200
+  "How many blocks may be dropped by hand into one world.
+
+There is a limit because O repeats while it is held, and because terrain
+is the one thing in the world with no spatial index: BODIES-RESOLVE!
+tests every body against every polygon, every iteration, every tick.
+That is a bounding-box rejection and it is cheap — 200 blocks against
+4000 bodies is a few percent of one core — but it is linear in a number a
+key repeat can drive to thousands, and a window that quietly slows to a
+crawl the longer you hold a key is worse than one that says it has had
+enough.  Scenario obstacles are not counted: those are the author's
+business, and no author has written 200.")
+
+(defvar *live-blocks* 0
+  "Blocks dropped by hand so far, against *LIVE-BLOCK-LIMIT*.")
+
+(defvar *live-block-note* nil
+  "The last thing LIVE-DROP-BLOCK had to say, or NIL when it had nothing.
+Held so a repeating key does not repeat its complaint — see there.")
+
 (defvar *live-selected* nil
   "Slot of the inspected ant, or NIL.  Held with its id so the panel can
 tell 'the ant you clicked' from 'whatever now occupies that slot' — slots
@@ -129,6 +159,15 @@ otherwise silently swap the readout for a different individual.")
       ((#\a #\A)
        (destructuring-bind (cx cy) (glfw:get-cursor-position)
          (live-drop-food (float cx 1.0f0) (float cy 1.0f0))))
+      ;; Terrain, by hand, into a world that is already running.  Held
+      ;; down rather than pressed once: GLFW repeats the character
+      ;; callback, so O plus a moving cursor paints a wall out of blocks,
+      ;; and a wall is the shape of the only question worth asking here —
+      ;; whether a colony that has committed to a road can find another
+      ;; one once that road is cut.
+      ((#\o #\O)
+       (destructuring-bind (cx cy) (glfw:get-cursor-position)
+         (live-drop-block (float cx 1.0f0) (float cy 1.0f0))))
       ((#\n #\N)
        (setf *resting-ants-block* (not *resting-ants-block*))
        (format t "~&resting ants ~:[pass through each other~;collide~]~%"
@@ -228,6 +267,46 @@ still works once a colony has committed to a road somewhere else."
                     (food-amount f) wx wy))
           (format t "~&food: (~,3f ~,3f) is outside the arena~%" wx wy)))))
 
+(defun live-drop-block (px py)
+  "Drop a square of terrain where the cursor is (§5.5).
+
+The counterpart to LIVE-DROP-FOOD, and deliberately the same shape of
+intervention: it changes the *world* and tells no ant that anything has
+happened.  Nothing reroutes a trail, nothing clears the pheromone that
+now runs into a wall, and no ant is informed that the road it has been
+walking for ten minutes is shut.  What happens next is the model's
+answer, which is the only reason to have the key.
+
+The pheromone already laid on the covered cells does go, because
+ADD-OBSTACLE rasterizes into the mask and FIELD-STEP! forces a blocked
+cell to zero — chemistry cannot sit inside a rock.  The trail *up to* the
+wall survives and keeps recruiting ants to it, which is the interesting
+half: a colony walks into its own obstruction for as long as the trail
+outlives it."
+  (when (and *live-world* *live-view*)
+    (multiple-value-bind (wx wy) (view-screen->world *live-view* px py)
+      (let ((note
+              (if (>= *live-blocks* *live-block-limit*)
+                  (format nil "block: ~d is the limit — see *live-block-limit*"
+                          *live-block-limit*)
+                  (multiple-value-bind (poly why)
+                      (add-block *live-world* wx wy *live-block-half*)
+                    (cond
+                      (poly (incf *live-blocks*) nil)
+                      ((eq why :nest)
+                       "block: not over a nest entrance — it would seal the colony in")
+                      ((eq why :outside)
+                       (format nil "block: (~,3f ~,3f) is outside the arena" wx wy))
+                      (t (format nil "block: refused (~a)" why)))))))
+        ;; O repeats while it is held — that is what makes a wall
+        ;; something you draw — so a line printed on every call would bury
+        ;; the terminal in thirty copies a second of the same complaint.
+        ;; Print a note only when it *changes*, which is the moment it
+        ;; carries information, and let silence mean it worked.
+        (unless (equal note *live-block-note*)
+          (setf *live-block-note* note)
+          (when note (format t "~&~a~%" note)))))))
+
 (defun live-inspect (px py)
   "Report the ant nearest the click.  §5.5 lists inspection under the
 window's controls; the rich version is M5's, and this is the cheap one
@@ -284,6 +363,7 @@ declining to (§3.5).  So the panel names the second one."
     ("DRAG"  "PAN")
     ("CLICK" "INSPECT")
     ("A"     "ADD FOOD")
+    ("O"     "OBSTACLE")
     ("H"     "HIDE")
     ("N"     "NEST")
     ("C"     "CONTACT")
@@ -608,6 +688,8 @@ Returns the world, so a session can keep poking at it afterwards."
             *live-renderer* r
             *live-hud* (make-hud)
             *live-selected* nil
+            *live-blocks* 0
+            *live-block-note* nil
             *live-colony* 0
             *live-view* (view-fit w :vw width :vh height)
             *live-paused* nil)

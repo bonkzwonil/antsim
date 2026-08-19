@@ -299,6 +299,61 @@ which MAKE-COLONY handles by rasterizing what is already there."
       (field-rasterize-polygon! (colony-repel c) p))
     p))
 
+(defun rect-covers-nest-p (w x0 y0 x1 y1)
+  "True when the axis-aligned rectangle reaches any colony's nest disc.
+
+Closest point on the rectangle to the disc centre, which is exact and
+does not care whether the disc is inside the rectangle, outside it, or
+straddling an edge — the three cases a pair of bounding-box tests gets
+wrong in different ways."
+  (declare (type world w) (type f32 x0 y0 x1 y1))
+  (dolist (c (world-colonies w) nil)
+    (let* ((nx (colony-nest-x c)) (ny (colony-nest-y c)) (r (colony-nest-r c))
+           (qx (min (max nx x0) x1))
+           (qy (min (max ny y0) y1))
+           (dx (- nx qx)) (dy (- ny qy)))
+      (declare (type f32 nx ny r qx qy dx dy))
+      (when (<= (+ (* dx dx) (* dy dy)) (* r r))
+        (return t)))))
+
+(defun add-block (w cx cy half)
+  "Put a square obstacle of side 2*HALF, centred on (CX, CY), into a world
+that is already running (§5.5).
+
+Values: the polygon, or NIL and a keyword saying why not.
+
+  :OUTSIDE  the centre is not in the arena.  The same rule ADD-FOOD's
+            caller uses and for the same reason — the view can be zoomed
+            out past the world's edge, and terrain placed there would sit
+            where no ant can reach and read as a bug rather than a miss.
+            A block whose centre is inside may hang over the edge, which
+            is harmless: the arena boundary already stops everything.
+
+  :NEST     it would cover a nest entrance.  Refused rather than allowed,
+            because a sealed nest is not an experiment.  Every ant inside
+            is stuck for the rest of the run, the colony starves without
+            one line of the model saying that is what happened, and on
+            screen it is indistinguishable from foraging having broken.
+            Walling off a *food source* is allowed and is half the point
+            of the key: the difference is that a colony can answer it.
+
+Ants standing where the block lands are not consulted.  They are pushed
+out by the ordinary terrain constraint on the next tick —
+DISC-POLYGON-CORRECTION recovers a disc found *inside* a polygon, which
+is the same path as an ant that walked into a wall.  So a block dropped
+on a crowd squeezes it outwards rather than trapping it, and that is
+worth knowing before dropping one on a busy trail."
+  (declare (type world w))
+  (let ((cx (float cx 1.0f0)) (cy (float cy 1.0f0)) (half (float half 1.0f0)))
+    (unless (and (<= 0.0f0 cx (world-width w))
+                 (<= 0.0f0 cy (world-height w)))
+      (return-from add-block (values nil :outside)))
+    (let ((x0 (- cx half)) (y0 (- cy half))
+          (x1 (+ cx half)) (y1 (+ cy half)))
+      (if (rect-covers-nest-p w x0 y0 x1 y1)
+          (values nil :nest)
+          (values (add-obstacle w (list x0 y0  x1 y0  x1 y1  x0 y1)) nil)))))
+
 (defun add-food (w x y r amount &key (quality 1.0f0) (renew 0.0f0) density)
   "Add a food source.
 

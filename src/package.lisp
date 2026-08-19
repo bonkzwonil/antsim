@@ -100,7 +100,7 @@
    #:world #:make-world #:world-width #:world-height #:world-bodies
    #:world-ants #:world-colonies #:world-foods #:world-obstacles
    #:world-tick #:world-seed #:world-seconds #:world-food-at #:world-food-near
-   #:add-obstacle #:add-food #:add-colony
+   #:add-obstacle #:add-food #:add-colony #:add-block #:rect-covers-nest-p
    ;; ant/state — the ant table (§3.5)
    #:ants #:make-ants #:ants-n #:ants-live #:ants-capacity #:ant-live-p
    #:ants-id #:ants-body #:ants-colony #:ants-state #:ants-heading
