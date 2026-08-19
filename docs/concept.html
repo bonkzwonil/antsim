@@ -501,7 +501,7 @@
 <div class="shell">
 
   <header class="masthead">
-    <p class="eyebrow">Design document · rev. 3 · 17 August 2026 · built, and running</p>
+    <p class="eyebrow">Design document · rev. 4 · 19 August 2026 · built, and running</p>
     <h1 class="wordmark">antsim</h1>
     <p class="standfirst">
       A top-down, GL-rendered colony of individual ants — foraging, recruiting,
@@ -528,8 +528,8 @@
       <div><dt>Stack</dt><dd>SBCL 2.6.4 · OpenGL 4.5 core</dd></div>
       <div><dt>Verified on</dt><dd>RTX 3070, driver 580.159.04</dd></div>
       <div><dt>Reference species</dt><dd><em>Lasius niger</em></dd></div>
-      <div><dt>Milestone</dt><dd>M3 — the vector ant ships, the encounter does not</dd></div>
-      <div><dt>Suite</dt><dd>43 022 checks · 95 renderer checks · 0 failures</dd></div>
+      <div><dt>Milestone</dt><dd>M4 — the society; v1.0.0, the first shipped build</dd></div>
+      <div><dt>Suite</dt><dd>43 128 checks · 95 renderer checks · 0 failures</dd></div>
       <div><dt>Author</dt><dd>Mathias Menzel-Nielsen</dd></div>
       <div><dt>Copyright</dt><dd>© 2026 — all rights reserved</dd></div>
     </dl>
@@ -2010,21 +2010,40 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
             what keeps arena size, ant count and render scale from having to be guessed
             up front. <em>First time you can watch a trail form, at whatever scale you
             like.</em></div></li>
-          <li><span class="tag">M3</span><div><b>The ant model, and how ants meet. <span class="state open">half built — current</span></b>
+          <li><span class="tag done">M3</span><div><b>The ant model, and how ants meet. <span class="state">done</span></b>
             The vector ant, the tripod gait rig, VS articulation, LOD, antennae,
             payload, state tint. The one genuinely novel piece of engineering in the
             project. Note the collision model does not change: the disc stays, the
-            drawing gets legs. <em>The first half is built</em> — all of that ships,
-            articulated in the vertex shader with the world-planted foot rather than
-            the baked-pose fallback. The second half is the one still open: turning
-            an overlap into an <em>encounter</em>, and the lane formation that rides
-            on it.</div></li>
-          <li><span class="tag">M4</span><div><b>Scenarios and behaviour depth. <span class="state later">next</span></b>
-            JSON loading, richer scenes, then the deferred half of §3.9 in dependency
-            order: response thresholds and age polyethism, trophallaxis, the no-entry
-            and alarm fields, necrophoresis and middens, U-turns and search spirals.
-            Multiple colonies and the ε competition scenario.</div></li>
-          <li><span class="tag">M5</span><div><b>Interaction. <span class="state later">partly, early</span></b>
+            drawing gets legs. All of that ships, articulated in the vertex shader
+            with the world-planted foot rather than the baked-pose fallback. The
+            second half — turning an overlap into an <em>encounter</em> — took the
+            exchange with it: once the broad phase reports who met whom and at what
+            bearing, recognition, giving way and trophallaxis are one function
+            between them and none is more than a handful of lines. A contact carries
+            evidence about <em>when</em> and never about <em>where</em>, because this
+            genus tests negative for tactile transfer of direction, and a model that
+            handed over a bearing would be inventing a channel the animal has been
+            shown not to have. <em>Lanes did not form</em>, which §3.11 expected them
+            to: 1.7 mm of lateral separation between the outbound and returning
+            streams with the give-way rule, against 2.1 mm without, on a 55 cm trail
+            with 600 ants. What giving way buys is throughput, which is the smaller
+            claim and the one there is evidence for.</div></li>
+          <li><span class="tag done">M4</span><div><b>The society, and three mechanisms that had nothing to do. <span class="state">done</span></b>
+            Multiple colonies, which needed no change to the tick at all — the
+            per-colony indirection of §3.12 held, and the work was apparatus.
+            Necrophoresis on Deneubourg's sorting model, which takes the corpses
+            within 6 cm of a nest from 24 to 0. And <em>route memory</em>, which
+            closes the oldest open flaw in the model: the home vector is a vector and
+            not a path, so a laden ant used to drive at whatever stood between it and
+            the nest and slide along it. An ant now keeps its own outward track and
+            falls back to it when the bearing home is blocked — harvest 888 → 1264 on
+            the word scenario, whose entire geometry is concavities, and no change at
+            all on an arena with one small wall, which is the right shape of result
+            for a fix aimed at concavities. Response thresholds, the no-entry field
+            and search spirals ship too, and are <em>inert</em> at shipped parameters
+            for three different measured reasons: this model's ants do not currently
+            fail in the ways they recover from.</div></li>
+          <li><span class="tag">M5</span><div><b>Interaction. <span class="state open">partly built — current</span></b>
             Click an ant to inspect it, drop food, place obstacles, poke the nest and
             watch the alarm field propagate. The window already exists from M2; this is
             what you can <em>do</em> to a running world.</div></li>
@@ -2081,7 +2100,7 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
               nonlinearity amplifies the head start into a commitment.</span>
           </li>
           <li>
-            <span class="big">43 022</span>
+            <span class="big">43 128</span>
             <span class="what">Checks in the core suite, plus 95 in the renderer
               suite. Zero failures.</span>
             <span class="sub">Neither needs a GPU: the renderer suite runs on
@@ -2219,7 +2238,7 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
               <tr><td>Trail dynamics tuned into a regime that looks right but is not</td><td><span class="chip mid">Medium</span></td><td>The <code>n = 1</code> control test — if it still selects a path, the selection is coming from something other than the choice function</td></tr>
               <tr><td>Non-overlap relaxation does not converge in a dense crowd</td><td><span class="chip mid">Medium</span></td><td>Jacobi with fixed 2–3 iterations is a <em>soft</em> constraint — residual overlap is bounded, not zero. If a queue at a rich source jitters, raise iterations before changing the scheme; §3.8 measures it rather than assuming it</td></tr>
               <tr><td>Multi-rate clocks introduce order dependence</td><td><span class="chip mid">Medium</span></td><td>Both shared-state writes are buffered and folded in; the determinism test catches regressions</td></tr>
-              <tr><td>Corpses accumulate until they choke a nest</td><td><span class="chip lo">Low</span></td><td>Intended, and visible. It is the argument for necrophoresis at M4 — but a scenario running for simulated weeks needs the midden behaviour before its results mean anything</td></tr>
+              <tr><td>Corpses accumulate until they choke a nest</td><td><span class="chip lo">Low</span></td><td>Intended, and visible. It was the argument for necrophoresis, which M4 built — corpses within 6 cm of a nest go from 24 to 0, so a scenario running for simulated weeks now has the midden behaviour its results depend on</td></tr>
               <tr><td>Performance</td><td><span class="chip lo">Low</span></td><td>5 k ants × 160 k cells at 20 Hz is small; waldameisen already instanced 3 k</td></tr>
             </tbody>
           </table>
@@ -2327,9 +2346,9 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
       </section>
 
       <footer>
-        <span>antsim — design document rev. 3, 17 August 2026</span>
+        <span>antsim — design document rev. 4, 19 August 2026</span>
         <span><a href="https://github.com/bonkzwonil/antsim">github.com/bonkzwonil/antsim</a></span>
-        <span>Next step: M3's encounter event</span>
+        <span>Next step: M5 — what you can do to a running world</span>
         <span>© 2026 Mathias Menzel-Nielsen — all rights reserved</span>
       </footer>
 
