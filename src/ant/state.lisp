@@ -187,6 +187,12 @@
   ;; but that body is marked carried and drops out of the collision pass,
   ;; because a corpse being held is not a corpse in the way.
   (corpse nil :type (or null u32v))
+  ;; Ticks this ant has spent in a systematic search (§3.9, M4).  Zero
+  ;; whenever it is not searching, so the number always means "unbroken
+  ;; ticks since the home vector ran out" — the spiral's radius is a
+  ;; function of it, and a lifetime total would make every search after
+  ;; the first start at the wrong width.
+  (search nil :type (or null u32v))
   (free nil :type (or null fixv))
   (nfree 0 :type fixnum))
 
@@ -215,6 +221,7 @@ size them alike."
               :partner-ttl (mku16 capacity) :partner-gave (mku8 capacity)
               :fed-by (mku32 capacity +no-ant+)
               :corpse (mku32 capacity +no-body+)
+              :search (mku32 capacity)
               :id (mku32 capacity) :body (mku32 capacity)
               :colony (mku8 capacity) :state (mku8 capacity +ant-dead+)
               :heading (mkf32 capacity) :crop (mkf32 capacity)

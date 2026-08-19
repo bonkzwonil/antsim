@@ -768,6 +768,29 @@ switch into and no switching logic to get wrong (§3.5)."
                  ((null f)
                   ;; Nothing within reach at all, so the meal really is
                   ;; over and the ant turns for home with what it has.
+                  ;;
+                  ;; **And if it has nothing, this is the dead end the
+                  ;; no-entry field is for** (§3.9, M4).  An ant standing
+                  ;; where a source was, with an empty crop, has the
+                  ;; cleanest evidence any ant in this model ever gets:
+                  ;; it came here for food, and there is none.  Marked
+                  ;; here rather than at the give-up point, and the
+                  ;; difference is the whole usefulness of the field —
+                  ;; give-ups happen wherever an ant happened to run low,
+                  ;; so those marks scatter over the arena and never
+                  ;; agree with one another.  Measured that way the field
+                  ;; peaked at 0.01 against a cap of 20.  Marks laid on
+                  ;; an exhausted source all land in the same place, and
+                  ;; agreement is the only thing that makes a pheromone
+                  ;; mean anything.
+                  ;;
+                  ;; The crop test is what keeps it honest: an ant shoved
+                  ;; off a working pile also arrives here, and it is
+                  ;; carrying the proof that the pile works.
+                  (when (and (plusp *repel-dead-end*)
+                             (<= (aref (ants-crop a) i) 0.0f0))
+                    (field-deposit-packet!
+                     (colony-repel c) x y *repel-dead-end*))
                   (setf (aref (ants-state a) i) +ant-returning+))
                  (t
                   ;; Shoved off the pile: walk back on, exactly as a
@@ -960,6 +983,42 @@ switch into and no switching logic to get wrong (§3.5)."
                                               (aref (ants-energy a) i))
                                            (max 1.0f-6 ethr)))))))
                  (declare (type f32 hv-len urge ethr))
+                 ;; Wehner's systematic search (§3.9, M4).  A returning
+                 ;; ant whose home vector has run down but which is not at
+                 ;; the nest is lost in the one specific way path
+                 ;; integration fails: the estimate is spent and the error
+                 ;; is unbiased, so the nest is *near here* and nowhere
+                 ;; else it knows of.  The answer is loops of growing
+                 ;; radius about this point, not a random walk — a random
+                 ;; walk goes back over ground it has already searched and
+                 ;; has no reason to widen.
+                 ;;
+                 ;; Sits before the homing term rather than after it, and
+                 ;; falls through to it: an ant that finds the nest while
+                 ;; searching still steers at it on the very next tick,
+                 ;; because hv-len is re-read then and the search is over.
+                 (let ((nx (- x (colony-nest-x c)))
+                       (ny (- y (colony-nest-y c))))
+                   (declare (type f32 nx ny))
+                   (if (and *search-spiral* returning
+                            (< hv-len *spiral-trigger*)
+                            (> (+ (* nx nx) (* ny ny))
+                               (* *nest-arrival-radius* *nest-arrival-radius*)))
+                       (let* ((t0 (aref (ants-search a) i))
+                              (rate (/ *spiral-turn*
+                                       (+ 1.0f0
+                                          (/ (float t0 1.0f0)
+                                             (max 1.0f0 *spiral-growth*))))))
+                         (declare (type (unsigned-byte 32) t0) (type f32 rate))
+                         ;; One ant, one hand, for the life of it — a
+                         ;; spiral that changed direction would be a
+                         ;; random walk with extra steps.
+                         (setf heading
+                               (wrap-angle
+                                (+ heading (* (ant-handedness id seed) rate))))
+                         (when (< t0 4294967295)
+                           (setf (aref (ants-search a) i) (1+ t0))))
+                       (setf (aref (ants-search a) i) 0)))
                  (when (and (> hv-len 1.0f-4) (> urge 0.0f0))
                    ;; Home on the bearing if it is walkable and on the
                    ;; nearest walkable direction if it is not — the same

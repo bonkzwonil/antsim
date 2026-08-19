@@ -687,6 +687,54 @@ pressure at the same instant.  The three together give the population an
 age structure, which is the thing this model has never had: born, then
 developing, then in the nest, then out.")
 
+(defparameter *search-spiral* t
+  "Whether an ant whose path integrator has run out short of the nest
+searches systematically instead of wandering (§3.9, M4).
+
+[lit] Wehner & Srinivasan (1981), \"Searching behaviour of desert ants\",
+J. Comparative Physiology 142:315.  *Cataglyphis* that reaches the end of
+its home vector and finds no nest does not mill about: it runs loops of
+steadily growing radius centred on the point the vector ran out.  That is
+the optimal thing to do given what the animal knows — the nest is near
+that point, and the error in the estimate is unbiased, so the search
+should start where the estimate says and widen.
+
+**This is the failure mode path integration actually has**, which is why
+it is worth the arithmetic.  A home vector accumulates error over the
+whole outward journey (*pi-noise*); when it runs down, the ant is not
+lost in general, it is lost within a radius, and the radius is the only
+thing it knows.  Before this the model had such an ant fall through to
+the correlated random walk — the homing term is skipped once the vector
+is shorter than a tenth of a millimetre — which is a search that revisits
+where it has been and has no reason to widen.")
+
+(defparameter *spiral-turn* 0.22f0
+  "Turn rate at the centre of the search, radians per motion tick.  [cal]
+
+Sets the tightest loop the ant will run: at the walking speed of §3.1 and
+a tick of 50 ms, 0.22 rad gives a first circle a couple of centimetres
+across, which is about the accuracy the home vector has left when it runs
+out.  Starting tighter searches ground the ant has already ruled out.")
+
+(defparameter *spiral-growth* 400.0f0
+  "How fast the loops widen: the turn rate is *spiral-turn* / (1 + t/g)
+with t the ticks spent searching.  [cal]
+
+The 1/t law is the one that matters rather than the constant.  Constant
+speed with a turn rate falling as 1/t traces a spiral whose successive
+loops are evenly spaced, which is what covers an area without gaps and
+without going over the same ground twice — Wehner's ants do this and the
+geometry is why.  A constant turn rate would run one circle for ever.")
+
+(defparameter *spiral-trigger* 0.030f0
+  "How short the home vector must get before the ant treats the journey as
+finished and starts searching, in metres.  [cal]
+
+Just under *nest-arrival-radius*, so an ant that is genuinely home
+arrives rather than starting to search on the doorstep.  Above the radius
+the two rules would fight: the ant would begin looping while still
+walking in, and the loop would carry it back out.")
+
 (defparameter *repel-weight* 1.0f0
   "How strongly a no-entry mark divides down a direction's choice weight,
 as the w in 1/(1 + w·R) (§3.3, §3.9).  0 disables the field's effect on

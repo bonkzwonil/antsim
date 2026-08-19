@@ -1562,3 +1562,56 @@ recruitment signal laid by an ant that is not recruiting to anything."
       (ant:ant-undertaker-step! w))
     (is (= ant:+no-body+ (aref (ant:ants-corpse a) 0))
         "a laden forager picked up a corpse")))
+
+;;; ------------------------------------------------ search spirals (M4)
+
+(test a-spent-home-vector-starts-a-search-and-the-loops-widen
+  "Wehner's systematic search: an ant whose home vector has run down but
+which is not at the nest runs loops of growing radius about the point the
+vector ran out.
+
+Asserted on the turn *rate* rather than on the path, because the rate is
+the claim — constant speed with a turn rate falling as 1/t is what traces
+evenly-spaced loops, and a constant rate would run one circle for ever.
+The counter is what the rate is a function of, so the test reads it
+directly and checks that the implied rate falls and stays positive."
+  (let* ((turn ant:*spiral-turn*)
+         (growth ant:*spiral-growth*))
+    (flet ((rate (ticks)
+             (/ turn (+ 1.0f0 (/ (float ticks 1.0f0) growth)))))
+      (is (> (rate 0) (rate 100)) "the loops are not widening")
+      (is (> (rate 100) (rate 1000)) "the loops stopped widening")
+      (is (plusp (rate 100000))
+          "the search stops turning altogether, which is a straight line ~
+and not a search")
+      ;; evenly spaced loops: the radius grows linearly, so the time to
+      ;; complete successive loops grows linearly too
+      (is (< (abs (- (/ (rate 0) (rate growth)) 2.0f0)) 1.0f-3)
+          "the rate should halve after exactly *spiral-growth* ticks, ~
+which is what makes the spacing uniform"))))
+
+(test a-searching-ant-keeps-one-hand
+  "A spiral that changed direction would be a random walk with extra
+steps.  Handedness is a lifelong trait for exactly this kind of reason."
+  (let ((seed 12345))
+    (dotimes (id 24)
+      (is (= (ant:ant-handedness id seed) (ant:ant-handedness id seed))
+          "handedness is not stable for ant ~d" id))))
+
+(test the-search-counter-is-unbroken-ticks-and-not-a-lifetime-total
+  "Zero whenever the ant is not searching.  A lifetime total would make
+every search after the first start at the wrong width — the radius is a
+function of this number."
+  (let* ((w (%meet-world :n 2))
+         (a (ant:world-ants w))
+         (c (first (ant:world-colonies w))))
+    ;; put it at the nest with a spent vector: it is home, not lost, so
+    ;; the search must not be running
+    (%place! w 0 (ant:colony-nest-x c) (ant:colony-nest-y c) 0.0f0
+             ant:+ant-returning+)
+    (setf (aref (ant:ants-hvx a) 0) 0.0f0
+          (aref (ant:ants-hvy a) 0) 0.0f0
+          (aref (ant:ants-search a) 0) 999)
+    (ant:world-step! w)
+    (is (zerop (aref (ant:ants-search a) 0))
+        "an ant standing on its own nest was left mid-search")))

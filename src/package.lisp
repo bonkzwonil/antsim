@@ -40,6 +40,8 @@
    #:*queen-lay-rate* #:*brood-development-minutes*
    #:*forager-maturity-ticks* #:*age-shade-ticks*
    #:*response-threshold-lo* #:*response-threshold-hi* #:*response-steepness*
+   #:*search-spiral* #:*spiral-turn* #:*spiral-growth* #:*spiral-trigger*
+   #:ants-search
    #:*repel-weight* #:*repel-tau* #:*repel-dead-end* #:*repel-cap*
    #:colony-repel #:repel-at #:repel-tau #:repel-factor
    #:*necrophoresis* #:*undertaker-range* #:*midden-radius*
