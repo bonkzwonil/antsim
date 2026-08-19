@@ -714,23 +714,41 @@ which is the honest abstraction: the model has no landmarks to learn.")
 (defparameter *route-waypoints* 12
   "How many points of its outward path an ant remembers.  [cal]
 
-A budget, not a fidelity target.  Twelve points at *route-spacing* covers
-about a quarter of a metre of track, which is the scale of the obstacles
-in these arenas; past that the ant is far enough from where it started
-that the straight bearing home is a fair guess again.
+A budget, and *only* a budget: it bounds the memory, never the length of
+journey the route covers.  A full list halves its resolution and doubles
+its spacing rather than stopping, so twelve points span a 20 cm walk and a
+5 m one alike — see ROUTE-DECIMATE!.
 
-Costs two floats per point per ant — at the shipped capacity, under a
-megabyte for the whole colony.")
+This docstring used to argue the opposite, and the argument is worth
+keeping as a warning: twelve points at *route-spacing* covers a quarter of
+a metre, said the old text, and past that the ant is far enough from where
+it started that the straight bearing home is a fair guess again.  It is
+not.  The bearing is a fair guess when nothing is in the way, and the
+whole reason a route exists is the case where something is.  `two-tribes`
+is the counter-example that was already in the repository — 41 cm to a
+source behind a wall — and there the exhausted route pointed laden ants
+back through the wall.
+
+Costs three floats per ant plus two per point per ant — at the shipped
+capacity, under a megabyte for the whole colony.")
 
 (defparameter *route-spacing* 0.020f0
-  "How far the ant walks between remembered points, in metres.  [cal]
+  "How far the ant walks between remembered points at the *start* of a
+leg, in metres.  [cal]
 
 Two centimetres, which is a little under one obstacle-avoidance sensing
 distance.  Finer spacing does not buy a better route: the ant re-steers
 every tick and the points are targets to aim at, not a track to trace.
 Coarser spacing lets a corner fall between two points, which is the one
 failure that matters — the whole property being bought here is that the
-line between successive points is known to be walkable.")
+line between successive points is known to be walkable.
+
+Which is why this is the *initial* value and doubles as the buffer fills.
+Coarsening is not free by the argument above, so it is spent only where it
+must be: on a journey long enough that twelve points cannot span it at
+this spacing, where the alternative is not a finer route but no route at
+all over most of the walk.  Short journeys — the bridges, one obstacle in
+a demo arena — never leave 2 cm.")
 
 (defparameter *route-reach* 0.015f0
   "How close counts as having reached a remembered point, in metres.  [cal]

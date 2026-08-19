@@ -108,6 +108,30 @@ equivalent here. Keep the folder together.
 
 ---
 
+## Why there is no macOS build
+
+Because it would not run, and a download that starts and then cannot open
+its window is worse than no download.
+
+macOS caps OpenGL at **4.1** — frozen in 2018 and deprecated since. The
+renderer needs 4.4: the ants, bodies and HUD are fed to the GPU through a
+persistently-mapped SSBO, which is GL 4.3 for the buffer and 4.4 for the
+mapping. The context creation fails first; if it somehow did not, all
+twelve `#version 450 core` shaders would fail to compile.
+
+None of this is a packaging problem, so no amount of CI fixes it. GitHub
+does offer macOS runners and the build would very likely *succeed* — SBCL
+and GLFW are both a `brew install` away, and SBCL supports arm64 Darwin
+well. The binary would answer `--version` and `--list` perfectly happily
+and fail at the only thing it exists for.
+
+The route to macOS is a GL 4.1 render backend on texture buffer objects,
+scheduled in [§7, Beyond M6](concept.md#7-milestones) along with the
+reasons it is worth doing for Linux and Windows too — and the reasons to
+be wary of doing it only for macOS.
+
+---
+
 ## Building one by hand
 
 ```sh

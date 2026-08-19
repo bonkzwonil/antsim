@@ -207,6 +207,13 @@
   (route-n nil :type (or null u8v))      ; points recorded
   (route-i nil :type (or null u8v))      ; which one is being walked back to
   (route-d nil :type (or null f32v))     ; metres since the last point
+  ;; The spacing this ant is currently recording at.  Per ant and not a
+  ;; parameter because it *doubles* whenever the buffer fills, which is
+  ;; how a fixed budget of points can span a journey of any length: the
+  ;; route coarsens instead of stopping.  An ant on a 10 cm bridge never
+  ;; leaves *route-spacing*; one crossing the five-metre arena ends up
+  ;; several doublings above it.
+  (route-step nil :type (or null f32v))  ; metres between points, this leg
   (free nil :type (or null fixv))
   (nfree 0 :type fixnum))
 
@@ -241,6 +248,7 @@ size them alike."
               :route-stride (max 1 *route-waypoints*)
               :route-n (mku8 capacity) :route-i (mku8 capacity)
               :route-d (mkf32 capacity)
+              :route-step (mkf32 capacity *route-spacing*)
               :id (mku32 capacity) :body (mku32 capacity)
               :colony (mku8 capacity) :state (mku8 capacity +ant-dead+)
               :heading (mkf32 capacity) :crop (mkf32 capacity)

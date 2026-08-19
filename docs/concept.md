@@ -2132,6 +2132,22 @@ on when the vector cannot be walked, and making it conditional on the
 bearing being blocked is both the correct biology and much the smaller
 change.
 
+*And then it went wrong a second way, which took a scenario M4 did not
+have to expose.* The list filled and **stopped recording**, so it held
+the points nearest the *nest* — the half the return leg can already do
+with a straight bearing — and never saw the approach to the food. On the
+40 cm journeys M4 measured this merely wasted the mechanism; on
+`two-tribes`, where the west nest is 41 cm from a source behind a wall,
+it was worse than nothing, handing an ant standing at the food a waypoint
+19 cm backwards and through the wall it needed to avoid. A full list now
+halves its resolution and doubles its spacing instead, so a fixed budget
+of points spans a journey of any length. Both §3.8 rows *improved* — the
+double bridge's worst replicate went 0.719 to 0.962 — so the sentence
+above is superseded: §3.8 was untouched by route memory as M4 shipped it,
+and is measurably better with it working. The numbers, and the test that
+had been asserting the bug, are in
+[docs/experiments.md](experiments.md).
+
 *Delivered, correct, and inert.* **Response thresholds**, **the no-entry
 field** and **search spirals** are all built, tested, and change nothing
 at shipped parameters, for three different measured reasons set out in
@@ -2166,6 +2182,73 @@ already produces the contact list this needs (§3.11), which is the only
 reason it is worth naming this far out — the groundwork is a decision made
 in M1, the work itself is not scheduled.
 
+**Beyond M6 — the 4.1 backend, and with it macOS.** Not scheduled, and
+named here because the question was asked and the answer deserves to be
+written down once rather than rediscovered.
+
+There is no macOS build and cannot be one as the renderer stands. Apple
+froze OpenGL at **4.1** in 2018 and deprecated it outright; that is the
+ceiling on every Mac, Intel and Apple Silicon alike. What §5 actually
+requires, counted rather than estimated:
+
+| what | needs | sites |
+|---|---|---|
+| SSBO binds and uploads (`:shader-storage-buffer`) | GL 4.3 | 15 |
+| `layout(std430) buffer` blocks — Ants, Bodies, Items, Glyphs | GL 4.3 | 4 |
+| `glBufferStorage` + persistent coherent mapping | GL 4.4 | 3 |
+| `#version 450 core` | GL 4.5 | 12 |
+| direct state access | GL 4.5 | **0** |
+
+The last row is the interesting one. There is not a single DSA call in the
+renderer, so the 4.5 in the context request is very nearly just the shader
+declaration: **the true floor is 4.4, not 4.5.** That does not rescue
+macOS — 4.4 is still three releases above the ceiling — but it does mean
+the distance to 4.1 is smaller than the version numbers suggest, and it is
+concentrated in one mechanism rather than spread through the code.
+
+That mechanism is how the renderer feeds the GPU. Ants, bodies, HUD items
+and glyphs are all written straight through a persistently-mapped SSBO,
+which is *the* design decision of §5.1 and not an incidental use. Porting
+it means:
+
+1. **SSBO → texture buffer object** (GL 3.1). The natural substitute for
+   "one large array indexed by instance ID". A UBO cannot do it: 64 KB
+   does not hold thousands of ants.
+2. **Persistent coherent map → `glBufferData`/`glMapBufferRange` with an
+   explicit flush** (GL 3.0). Costs a copy per frame, which at these
+   buffer sizes is nothing measurable.
+3. **GLSL 450 → 410**, mechanical once (1) has landed.
+4. **A darwin context request** at 4.1 core forward-compatible, and a
+   darwin branch in `preload.lisp` — which today is `#-windows` and would
+   run the Linux libEGL search on a Mac and find nothing.
+
+The reason to want this is *not* mainly macOS. A 4.1 path is a floor
+reduction on every platform: it widens Linux and Windows to a decade more
+hardware, and it would make the software-rasteriser CI run cheaper. macOS
+comes along for free once the floor is low enough, which is the right way
+round — a port undertaken *for* macOS would be a port with one beneficiary
+and an expiry date.
+
+Because there is an expiry date. Apple deprecated OpenGL rather than
+merely stopping work on it, so a 4.1 backend on macOS is borrowed time and
+the durable answer there is Metal, presumably through MoltenVK. That is a
+much larger project than this one and it is not proposed.
+
+Two practical obstacles to record before anybody starts. Testing needs a
+real Mac: CI macOS runners may not permit a GL context without a window
+server session, and a backend nothing can exercise is a backend that
+rots. And distribution needs a signature — an unsigned binary is
+quarantined by Gatekeeper, and notarisation means a paid Apple developer
+account, which is a recurring cost attached to a platform we cannot
+currently render on.
+
+What *is* cheap, and is the honest first step whenever this is picked up:
+a macOS CI job that builds the core and runs `make test` and
+`make acceptance`. No graphics, no artefact, no claim that antsim runs on
+a Mac — just the standing proof that the simulation compiles and the
+science reproduces on arm64 Darwin, which is exactly the groundwork the
+port would otherwise have to establish first.
+
 ## 8. Risks
 
 | risk | severity | mitigation |
@@ -2178,6 +2261,7 @@ in M1, the work itself is not scheduled.
 | Scope — the science is deep enough to never ship | **high** | The §3.9 cut is the answer: M1 builds a named subset, §3.8's table is the definition of done, and everything else is explicitly scheduled rather than argued about again |
 | Non-overlap relaxation does not converge in a dense crowd | medium | Jacobi with a fixed 2–3 iterations is a *soft* constraint — residual overlap is bounded, not zero. If a queue at a rich source jitters or squeezes, raise iterations before changing the scheme; the acceptance row in §3.8 measures it rather than assuming it |
 | Corpses accumulate until they choke a nest | **closed, M4** | Necrophoresis, §3.9. Worth recording that the control was not "nothing happens": ant traffic bulldozes corpses whether or not anyone carries them, and that alone shifted half of them off the nest, so only a run with the behaviour switched off was an honest baseline |
+| The renderer's GL floor excludes whole platforms | low, accepted | The persistently-mapped SSBO path needs GL 4.4, which puts macOS (capped at 4.1 since 2018, and deprecated) permanently out of reach and rules out older hardware everywhere else. Accepted deliberately: §5.1's design is worth more than the platforms it costs, and the count is reassuring — 15 SSBO sites, 3 buffer-storage sites, and **zero** direct-state-access calls, so the exposure is one mechanism rather than a pervasive assumption. The way out, if it is ever wanted, is a 4.1 backend on texture buffer objects — see *Beyond M6* |
 | Failure-recovery mechanisms cannot be evaluated, because the model does not fail that way | medium | Named at M4, when three of them landed inert for three different measured reasons. It is not a defect in any of the three — each is correct and each fires when its precondition is met — but it does mean their value is currently unmeasurable, and that route memory and the parked stall detection are what would make them testable |
 
 ## 9. Open decisions
