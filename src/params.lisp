@@ -687,6 +687,57 @@ pressure at the same instant.  The three together give the population an
 age structure, which is the thing this model has never had: born, then
 developing, then in the nest, then out.")
 
+(defparameter *route-memory* t
+  "Whether a laden ant walks the path it came by instead of steering at
+the straight-line bearing home (§3.4, §3.9).
+
+**The home vector is a vector and not a path**, and §3.4 has recorded the
+consequence since M1: it cannot route around anything, so a returning ant
+drives at whatever stands between it and the nest and slides along it.
+From the window that is a trail bent along an obstacle's edge with corpses
+on it.  The obvious fix — let the trail argue with the bearing — was
+measured at M2.1 and is a 29% regression, because an ant that meanders
+along a road takes longer to get home than one that drives at the
+bearing.
+
+Route memory is the fix §3.4 actually names.  The ant already walks a
+path that got it *to* the food, and that path is by construction
+walkable: it contains no wall, because the ant did not walk through one.
+Remembering it costs a short list of points and turns the return leg from
+a bearing into a route.
+
+[lit] The landmark/route mode of *Formica* and *Cataglyphis* — a forager
+learns a habitual route and follows it, rather than recomputing a straight
+line.  Here it is the ant's own outward track and not learned scenery,
+which is the honest abstraction: the model has no landmarks to learn.")
+
+(defparameter *route-waypoints* 12
+  "How many points of its outward path an ant remembers.  [cal]
+
+A budget, not a fidelity target.  Twelve points at *route-spacing* covers
+about a quarter of a metre of track, which is the scale of the obstacles
+in these arenas; past that the ant is far enough from where it started
+that the straight bearing home is a fair guess again.
+
+Costs two floats per point per ant — at the shipped capacity, under a
+megabyte for the whole colony.")
+
+(defparameter *route-spacing* 0.020f0
+  "How far the ant walks between remembered points, in metres.  [cal]
+
+Two centimetres, which is a little under one obstacle-avoidance sensing
+distance.  Finer spacing does not buy a better route: the ant re-steers
+every tick and the points are targets to aim at, not a track to trace.
+Coarser spacing lets a corner fall between two points, which is the one
+failure that matters — the whole property being bought here is that the
+line between successive points is known to be walkable.")
+
+(defparameter *route-reach* 0.015f0
+  "How close counts as having reached a remembered point, in metres.  [cal]
+Comfortably wider than the ant, so a point is not missed by being jostled
+past it — an ant that overshoots its target and turns back to it would
+stall on the spot.")
+
 (defparameter *search-spiral* t
   "Whether an ant whose path integrator has run out short of the nest
 searches systematically instead of wandering (§3.9, M4).

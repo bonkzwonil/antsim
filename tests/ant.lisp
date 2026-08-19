@@ -1615,3 +1615,106 @@ function of this number."
     (ant:world-step! w)
     (is (zerop (aref (ant:ants-search a) 0))
         "an ant standing on its own nest was left mid-search")))
+
+;;; -------------------------------------------------- route memory (M4)
+
+(test a-route-records-points-at-the-configured-spacing
+  "The list is one point per *route-spacing* metres walked, not one per
+tick — an ant crawling through a crowd would otherwise fill its whole
+memory with the same square centimetre."
+  (let* ((w (%meet-world :n 2))
+         (a (ant:world-ants w))
+         (step (* 0.25f0 ant:*route-spacing*)))
+    (ant:route-clear! a 0)
+    ;; walk a straight line, a quarter of the spacing at a time
+    (dotimes (k 40)
+      (ant:route-record! a 0 (* step (1+ k)) 0.0f0 step))
+    ;; 40 quarter-steps is ten spacings; the first point is laid at once
+    (let ((n (aref (ant:ants-route-n a) 0)))
+      (is (and (>= n 9) (<= n 12))
+          "ten spacings of walking laid ~d points, which is not one per ~
+spacing" n))
+    ;; and they really are spaced
+    (let* ((cap (ant:ants-route-stride a))
+           (x0 (aref (ant:ants-route-x a) (+ 0 1)))
+           (x1 (aref (ant:ants-route-x a) (+ 0 2))))
+      (declare (ignorable cap))
+      (is (> (abs (- x1 x0)) (* 0.8f0 ant:*route-spacing*))
+          "consecutive points are only ~,4f apart" (abs (- x1 x0))))))
+
+(test a-full-route-keeps-the-end-nearest-the-food
+  "Which end to drop is the design decision.  The points near the food are
+the ones that get the ant out of whatever it worked around to reach the
+food, and they are what it needs first on the way back — so a full list
+stops recording rather than overwriting its earliest points."
+  (let* ((w (%meet-world :n 2))
+         (a (ant:world-ants w))
+         (cap (ant:ants-route-stride a)))
+    (ant:route-clear! a 0)
+    ;; walk far enough to overflow the list several times over
+    (dotimes (k (* 4 cap))
+      (ant:route-record! a 0 (* ant:*route-spacing* (1+ k)) 0.0f0
+                         ant:*route-spacing*))
+    (is (= cap (aref (ant:ants-route-n a) 0))
+        "the list holds ~d of ~d points" (aref (ant:ants-route-n a) 0) cap)
+    ;; the last point recorded is the last one that fitted, not the last
+    ;; one walked
+    (let ((last (aref (ant:ants-route-x a) (1- cap))))
+      (is (< last (* ant:*route-spacing* (1+ cap)))
+          "the list overwrote its early points: last x is ~,4f" last))))
+
+(test a-route-is-walked-back-from-the-far-end
+  "Consumed from the end nearest the food inward, and a point is dropped
+once the ant is within *route-reach* of it."
+  (let* ((w (%meet-world :n 2))
+         (a (ant:world-ants w)))
+    (ant:route-clear! a 0)
+    (dotimes (k 5)
+      (ant:route-record! a 0 (* ant:*route-spacing* (1+ k)) 0.0f0
+                         ant:*route-spacing*))
+    (let ((n0 (aref (ant:ants-route-n a) 0)))
+      ;; standing at the origin, the target is the furthest point
+      (multiple-value-bind (rx ry) (ant:route-target a 0 0.0f0 0.0f0)
+        (declare (ignore ry))
+        (is-true rx "a recorded route offered no target at all")
+        (when rx
+          (is (> rx (* 3.0f0 ant:*route-spacing*))
+              "the ant was sent to ~,4f, which is not the far end" rx)))
+      ;; stand on the far point: it is dropped and the next one offered
+      (let ((far (aref (ant:ants-route-x a) (1- n0))))
+        (multiple-value-bind (rx ry) (ant:route-target a 0 far 0.0f0)
+          (declare (ignore ry))
+          (is (< (aref (ant:ants-route-n a) 0) n0)
+              "arriving at a waypoint did not consume it")
+          (when rx
+            (is (< rx far) "the ant was sent back the way it had come")))))
+    ;; Walk it in properly — standing at each target in turn — and the
+    ;; route is used up, after which the ant falls back to the bearing.
+    ;; Not by standing at the origin and asking: the nearest point is a
+    ;; whole spacing away from there and is correctly still offered.
+    (let ((guard 0))
+      (loop
+        (multiple-value-bind (rx ry) (ant:route-target a 0 0.0f0 0.0f0)
+          (declare (ignore ry))
+          (unless rx (return))
+          (when (> (incf guard) 64)
+            (fail "the route never emptied")
+            (return))
+          ;; arrive at it
+          (ant:route-target a 0 rx 0.0f0))))
+    (is-false (ant:route-target a 0 0.0f0 0.0f0)
+              "a fully-consumed route still offers a target")))
+
+(test setting-out-forgets-the-last-journey
+  "A route is one leg's worth.  Two spliced together would send a
+returning ant back along a path it walked before the food moved."
+  (let* ((w (%meet-world :n 2))
+         (a (ant:world-ants w)))
+    (dotimes (k 5)
+      (ant:route-record! a 0 (* ant:*route-spacing* (1+ k)) 0.0f0
+                         ant:*route-spacing*))
+    (is (plusp (aref (ant:ants-route-n a) 0)))
+    (ant:route-clear! a 0)
+    (is (zerop (aref (ant:ants-route-n a) 0))
+        "clearing left ~d points behind" (aref (ant:ants-route-n a) 0))
+    (is-false (ant:route-target a 0 0.0f0 0.0f0))))

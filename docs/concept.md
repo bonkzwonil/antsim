@@ -810,7 +810,51 @@ These are not features. They are consequences, and each one is a test:
 
 That table is the project's definition of "working".
 
-**Status.** Seven of the ten in-scope rows pass. The two that are
+**Status (M4).** Every in-scope row now passes, and the competition row
+with them. M4 closed the three that had been open since M1 — quality-driven
+selection, no trail below the quality threshold, and task reallocation —
+and added apparatus for each in `src/world/trials.lisp`, alongside the
+bridges.
+
+- **Quality-driven selection.** Eight runs, mirrored left and right so a
+  *side* preference cannot be mistaken for a quality one — the model has
+  per-ant handedness in it, so that was a live alternative. All eight went
+  to the richer source, mean 0.72. Asserted as an aggregate, because the
+  equal-quality control over eight seeds ran 0.387 to 0.911: a single seed
+  breaks symmetry here exactly as it does on the binary bridge, so a
+  per-replicate bar would assert the absence of a phenomenon the model is
+  supposed to have.
+- **No trail below the quality threshold.** Sharp. Below 0.30 the colony
+  takes ~800 units and the field holds *exactly* zero; above it a trail
+  forms and the visit count triples. Both halves at once, which is the row.
+- **Task reallocation.** The share of the colony out of doors goes 0.844
+  before a 50% cull, 0.731 after, and back to 0.844 within 75 simulated
+  seconds. A *share* and not a count — a count would recover on growth
+  alone and say nothing about allocation.
+- **Competition.** The nearer colony took the contested source in all six
+  replicates, mean 0.584.
+
+**ε needed its claim restated, and the restatement is a result.** The
+first apparatus put two nests either side of one pile, where each colony's
+field lies almost entirely where the other's does not — fidelity was flat
+in ε from 0 to 1 for want of anything to confuse. On crossing routes,
+raising ε makes each colony's field *more* concentrated, 0.496 to 0.601,
+while both colonies harvest less. That is a merged trail network: two
+colonies reading each other's marks converge on one shared set of roads,
+thinner than two separate ones and leading half of each colony to the
+other's food. So fidelity here has to mean *correctness* — the share of a
+colony's mark lying on the way to its own source — and not thinness. A
+little eavesdropping helps: route fidelity peaks at ε = 0.3, which is an
+argument for the shipped ε being small rather than zero.
+
+**A bug the apparatus found before any behaviour did.** Food amount was
+single precision, and a source is the one accumulator in the model whose
+magnitude and increment are six orders apart: a 0.02 take on a 500 000-unit
+pile is under half an ulp, so the subtraction rounded back to where it
+started and a large source could be eaten from for ever without going
+down. Amounts are double now.
+
+**Historical status (M1–M3).** Seven of the ten in-scope rows passed. The two that are
 published *experiments* rather than properties — symmetry breaking and
 shortest-path selection — are implemented as such, on the apparatus in
 `src/world/bridge.lisp`, and run by `make acceptance`; measured across
@@ -825,8 +869,8 @@ probabilities rather than on bridge traffic, and non-interpenetration on
 a synthetic crowd rather than a scrum at a small source. Both should
 graduate to their apparatus.
 
-Still open: quality-driven selection, no trail below the quality
-threshold, and task reallocation.
+Those three — quality-driven selection, no trail below the quality
+threshold, and task reallocation — were closed at M4, above.
 
 ### 3.9 The M1 cut — what actually gets built first
 
@@ -853,15 +897,17 @@ acceptance list*. Everything below passes that test.
 | Corpses as bodies | **in** | Dying leaves a blocking disc. Passive — it costs one body kind and nothing else, and it makes the missing behaviour visible. |
 | Per-colony trail fields + ε | **in** | §3.12. M1 runs one colony, so ε never fires — but the indirection is free now and unaddable later. |
 | — | — | — |
-| No-entry, alarm, nest-marking fields | *later* | Three of the four fields. None is needed for §3.8; each is a self-contained addition to an existing field abstraction. |
-| Response thresholds, age polyethism | *later* | M1 has one task. Age still accumulates and still kills — it just does not yet steer behaviour. |
+| No-entry field | **built, M4, inert** | A second field per colony, read as a divisor 1/(1 + w·R) on the finished Deneubourg weight — not as a term inside it, which can drive the base negative. Correct, tested, and it does nothing at shipped parameters: the only trigger available marks where an ant *gave up*, and give-ups scatter, so the field peaks at 0.01 against a cap of 20. See `*repel-weight*`. |
+| Alarm and nest-marking fields | *later* | The other two. Neither is needed for §3.8, and each is the same self-contained addition the no-entry field turned out to be. |
+| Response thresholds | **built, M4, off** | Bonabeau's fixed-threshold model: every worker carries its own bar, drawn on its id, and answers one colony-wide stimulus through R(S) = S^n/(S^n + θ^n). Nothing counts foragers. Off because the stimulus is bimodal — a colony sits at urgency 0.000, or at 1.000 within minutes of its larder failing, and there is no graded middle to slice. See `*response-threshold-lo*`. |
+| Age polyethism | **built, M2.1, off** | `*forager-maturity-ticks*`. Measured at M4: turning it on damps task reallocation exactly as it should — the share out of doors recovers to 0.79–0.90 of pre-cull instead of 0.97–1.02, and harvest falls about 8% — because callow workers genuinely cannot be conscripted. Correct, and it is why the §3.8 row passes cleanly with it off. |
 | Trophallaxis between ants | **built, M3** | The pairwise coupling, and it really was the only one — but it rides on the encounter event rather than needing machinery of its own, which is why it arrived with M3 rather than M4. The tick stays order-independent because donors accumulate into a buffer instead of writing to each other. Changes sign with range; see `*trophallaxis-rate*`. |
-| Landmark / route memory | *later* | The *Formica* mode; irrelevant to a mass recruiter. |
+| Landmark / route memory | **built, M4** | The ant remembers its own outward track as a short list of points and falls back to it **only when the bearing home is blocked** — a route is what you use when the vector cannot be walked, not a thing to retrace. On the word scenario, whose whole geometry is concavities, harvest goes 888 to 1264 and corpses 140 to 119; on an arena with one small wall it changes nothing, which is the right shape of result. §3.8 untouched. The first mechanism this milestone that both pays and survives the bridge. |
 | Thigmotaxis | **built, M2.1** | Not an addition but a *correction*: the model had wall-following nobody wrote, and it was starving colonies. See §3.2. |
 | U-turns | **built, M2.1, off** | Works — trail residence ×3 — and does not pay: neutral on the bridge, −4% foraging. §3.2. |
-| Search spirals | *later* | Real, measured, and it makes trails *more* stable — so M1 passing without it is the stronger result. |
-| Necrophoresis | *later* | Corpses accumulate in M1 and nothing clears them. A behaviour, not a mechanism — it needs only a new task and a midden. |
-| Multiple colonies | *later* | The data model supports them from day one (§3.12); M1 runs one, because nothing in §3.8's core rows needs two. |
+| Search spirals | **built, M4, inert** | Wehner's systematic search: turn rate falling as 1/t, which is what traces evenly-spaced loops. It fires and works — raise `*pi-noise*` to 0.5 and one seed's homing goes from 5765 ticks to 304 — and on a colony it changes the harvest by nothing at all, 529 against 529. Path integration here is accurate enough that the failure it exists to fix does not occur. |
+| Necrophoresis | **built, M4** | Deneubourg's collective sorting, plus two rules his does not have: a floor under the drop probability, or the first corpse lifted in a clean arena is carried for ever, and a minimum distance from the nest, because his rules are direction-blind and would build a midden across the front door. Clumping roughly doubles and the nest goes to zero. Its own §3.8 row. |
+| Multiple colonies | **built, M4** | The data model supported them from day one (§3.12) and it held: two colonies needed no change to the tick. What M4 added is the apparatus to test them, an honest per-colony harvest counter, and tribe colouring — the gaster keeps behaviour, the head and mesosoma carry the tribe. |
 
 The rule for adding anything back: **it must be addable without changing
 the tick's shape.** Every deferred item above is either a new field on an
@@ -2048,13 +2094,63 @@ and one experiment worth recording says why: switching ant-ant contact
 off entirely leaves the same ants stuck against the same terrain (171
 against 185 over three seeds), so the furball is the appearance of that
 failure rather than its cause, and no amount of tuning traffic reaches
-it. Escaping a concavity needs route memory, which is M4.
+it. Escaping a concavity needs route memory, which M4 did not reach.
 
-**M4 — scenarios and behaviour depth.** JSON loading, richer scenes, and
-then the deferred half of §3.9 in dependency order: response thresholds and
-age polyethism, trophallaxis, the no-entry and alarm fields, necrophoresis
-and middens, U-turns and search spirals. Multiple colonies and the ε
-competition scenario.
+**M4 — the society, and three mechanisms that had nothing to do.** The
+plan was the deferred half of §3.9 in dependency order, on top of JSON
+loading and richer scenes. JSON loading turned out to have shipped at M2
+— the sentence had gone stale — so the milestone is the §3.9 items and
+what testing them found.
+
+*Delivered, and working.* **Multiple colonies**, which needed no change to
+the tick at all: §3.12's per-colony indirection held, and the work was
+apparatus, an honest per-colony harvest counter, and a way to tell tribes
+apart on screen. **Necrophoresis**, on Deneubourg's sorting model, which
+roughly doubles clumping and takes the corpses within 6 cm of a nest from
+24 to 0. And the three §3.8 rows that had been open since M1 — quality
+selection, the quality threshold, and task reallocation — each with its
+apparatus in `src/world/trials.lisp`.
+
+*Delivered, and the one that mattered.* **Route memory** closes the
+oldest open flaw in the model. §3.4 has recorded since M1 that the home
+vector is a *vector and not a path*, so a laden ant drives at whatever
+stands between it and the nest and slides along it — a trail bent along
+an obstacle edge with corpses on it. The ant now keeps its own outward
+track as a short list of points and falls back to it when the bearing
+home is blocked. On the word scenario, whose entire geometry is
+concavities, harvest goes 888 to 1264; on an arena with one small wall it
+changes nothing at all, which is the right shape of result for a fix
+aimed at concavities. §3.8 is untouched.
+
+Worth recording how it went wrong first, because the failure was
+instructive and the acceptance suite caught it in one run. The obvious
+implementation has the ant follow the remembered track the whole way
+home, and that means retracing its own meander: 470 ticks to cover 10 cm,
+which is not homing. It is also the wrong animal — *Cataglyphis* runs the
+vector straight home and does not retrace. A route is what you fall back
+on when the vector cannot be walked, and making it conditional on the
+bearing being blocked is both the correct biology and much the smaller
+change.
+
+*Delivered, correct, and inert.* **Response thresholds**, **the no-entry
+field** and **search spirals** are all built, tested, and change nothing
+at shipped parameters, for three different measured reasons set out in
+§3.9 and on each parameter. They are failure-recovery mechanisms, and the
+finding is that this model's ants do not currently fail in the ways they
+recover from: the foraging stimulus is bimodal rather than graded, dead
+ends produce marks too scattered to agree with one another, and path
+integration is accurate enough that a home vector does not run out short
+of the nest. None of that is an argument against the mechanisms — each
+fires and works when its precondition is met. It is an argument that
+their preconditions are what the model is missing, and two of them want
+the same thing: a remembered food *location*, where an ant here keeps
+only a bearing.
+
+*Found rather than planned.* Food amount was single precision, and a
+source is the one accumulator whose magnitude and increment are six orders
+apart; a large pile could be eaten from for ever without going down
+(§3.8). And ε turned out to need its claim restated rather than merely
+tested, which is the more interesting half of the competition row.
 
 **M5 — interaction.** Click an ant to inspect its state, drop food, place
 obstacles, poke the nest and watch the alarm field propagate. The window
@@ -2081,7 +2177,8 @@ in M1, the work itself is not scheduled.
 | Performance | low | 5 k ants × 160 k cells at 20 Hz is small; waldameisen already instanced 3 k |
 | Scope — the science is deep enough to never ship | **high** | The §3.9 cut is the answer: M1 builds a named subset, §3.8's table is the definition of done, and everything else is explicitly scheduled rather than argued about again |
 | Non-overlap relaxation does not converge in a dense crowd | medium | Jacobi with a fixed 2–3 iterations is a *soft* constraint — residual overlap is bounded, not zero. If a queue at a rich source jitters or squeezes, raise iterations before changing the scheme; the acceptance row in §3.8 measures it rather than assuming it |
-| Corpses accumulate until they choke a nest | low | Intended, and visible. It is the argument for necrophoresis at M4, not a defect — but a scenario running for simulated weeks needs the midden behaviour before its results mean anything |
+| Corpses accumulate until they choke a nest | **closed, M4** | Necrophoresis, §3.9. Worth recording that the control was not "nothing happens": ant traffic bulldozes corpses whether or not anyone carries them, and that alone shifted half of them off the nest, so only a run with the behaviour switched off was an honest baseline |
+| Failure-recovery mechanisms cannot be evaluated, because the model does not fail that way | medium | Named at M4, when three of them landed inert for three different measured reasons. It is not a defect in any of the three — each is correct and each fires when its precondition is met — but it does mean their value is currently unmeasurable, and that route memory and the parked stall detection are what would make them testable |
 
 ## 9. Open decisions
 

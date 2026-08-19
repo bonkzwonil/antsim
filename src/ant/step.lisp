@@ -159,6 +159,9 @@ initial condition rather than merely a convenient one."
                  (aref (ants-px a) i) sx
                  (aref (ants-py a) i) sy
                  (aref (ants-trailed a) i) 0.0f0
+                 (aref (ants-route-n a) i) 0
+                 (aref (ants-route-i a) i) 0
+                 (aref (ants-route-d a) i) 0.0f0
                  ;; Its own point in the tripod cycle (§5.2).  Zero would
                  ;; work and looks wrong: a cohort emerging together would
                  ;; step in unison, which is a thing ants conspicuously do
@@ -239,6 +242,73 @@ every line that reads a pheromone."
             (setf own v)
             (incf foreign v))))
     (+ own (* *choice-eavesdrop* foreign))))
+
+(defun route-clear! (a i)
+  "Forget the remembered outward path.  Called when a leg begins, so a
+route is always one journey's worth and never two spliced together."
+  (declare (type ants a) (type fixnum i))
+  (setf (aref (the u8v (ants-route-n a)) i) 0
+        (aref (the u8v (ants-route-i a)) i) 0
+        (aref (the f32v (ants-route-d a)) i) 0.0f0)
+  (values))
+
+(defun route-record! (a i x y step)
+  "Note that the ant has walked STEP metres and reached (X, Y), and lay
+down a waypoint if it is far enough from the last one.
+
+The list is a *stack* and not a ring: once it is full the ant stops
+recording rather than overwriting its earliest points.  Which end to drop
+is the whole design decision here, and dropping the far end is wrong —
+the points nearest the food are the ones that get the ant out of whatever
+it had to work around to reach the food, and they are what it needs
+first on the way back.  Keeping the beginning of the walk and losing the
+end would hand the return leg exactly the part it can already do with a
+straight bearing."
+  (declare (type ants a) (type fixnum i) (type f32 x y step)
+           (optimize (speed 3) (safety 1)))
+  (let ((n (aref (the u8v (ants-route-n a)) i))
+        (cap (ants-route-stride a)))
+    (declare (type (unsigned-byte 8) n) (type fixnum cap))
+    (when (< n cap)
+      (incf (aref (the f32v (ants-route-d a)) i) step)
+      (when (or (zerop n)
+                (>= (aref (the f32v (ants-route-d a)) i) *route-spacing*))
+        (let ((k (+ (* i cap) n)))
+          (declare (type fixnum k))
+          (setf (aref (the f32v (ants-route-x a)) k) x
+                (aref (the f32v (ants-route-y a)) k) y
+                (aref (the u8v (ants-route-n a)) i) (1+ n)
+                (aref (the f32v (ants-route-d a)) i) 0.0f0)))))
+  (values))
+
+(defun route-target (a i x y)
+  "The point this ant should currently be walking back to, or NIL when the
+route is used up.
+
+Consumes points from the far end inward: the ant aims at the last one it
+laid, and drops it once it is within *route-reach*.  Points behind that
+one are dropped with it, because arriving near a later point means the
+earlier ones have been passed — an ant that had to be marched back
+through every point it ever laid would be slower than the bearing it is
+replacing, which is the trap the M2.1 trail-following attempt fell into."
+  (declare (type ants a) (type fixnum i) (type f32 x y)
+           (optimize (speed 3) (safety 1)))
+  (let ((n (aref (the u8v (ants-route-n a)) i))
+        (cap (ants-route-stride a)))
+    (declare (type (unsigned-byte 8) n) (type fixnum cap))
+    (loop
+      (when (zerop n)
+        (setf (aref (the u8v (ants-route-n a)) i) 0)
+        (return-from route-target nil))
+      (let* ((k (+ (* i cap) (1- n)))
+             (rx (aref (the f32v (ants-route-x a)) k))
+             (ry (aref (the f32v (ants-route-y a)) k))
+             (dx (- rx x)) (dy (- ry y)))
+        (declare (type fixnum k) (type f32 rx ry dx dy))
+        (if (<= (+ (* dx dx) (* dy dy)) (* *route-reach* *route-reach*))
+            (decf n)
+            (progn (setf (aref (the u8v (ants-route-n a)) i) n)
+                   (return-from route-target (values rx ry))))))))
 
 (declaim (inline repel-factor))
 (defun repel-factor (c x y)
@@ -692,6 +762,8 @@ switch into and no switching logic to get wrong (§3.5)."
                ;; How deep this trip will dig, learnt here and carried.
                ;; An ant in the field cannot read the larder (§3.5).
                (setf (aref (ants-resolve a) i) (colony-giveup-threshold c))
+               ;; a fresh journey out is a fresh route
+               (route-clear! a i)
                (setf (aref (ants-state a) i) +ant-outbound+
                      ;; Set off along the bearing this ant came home on,
                      ;; scattered (§3.4).
@@ -1020,19 +1092,61 @@ switch into and no switching logic to get wrong (§3.5)."
                            (setf (aref (ants-search a) i) (1+ t0))))
                        (setf (aref (ants-search a) i) 0)))
                  (when (and (> hv-len 1.0f-4) (> urge 0.0f0))
-                   ;; Home on the bearing if it is walkable and on the
-                   ;; nearest walkable direction if it is not — the same
-                   ;; antennal veto the choice function got, applied to
-                   ;; the term that actually steers a laden ant.  See
-                   ;; CLEAR-BEARING for why the veto in CHOOSE-TURN could
-                   ;; not reach these ants.
-                   (setf heading
-                         (angle-toward heading
-                                       (clear-bearing (colony-field c) x y
-                                                      (atan hvy hvx)
-                                                      (ant-handedness id seed)
-                                                      *sensor-offset*)
-                                       (min 1.0f0 (/ urge (+ 1.0f0 urge)))))))
+                   ;; **The straight bearing home, unless it is shut —
+                   ;; then the way it came** (§3.4, §3.9).
+                   ;;
+                   ;; This is the fix §3.4 has been asking for since M1.
+                   ;; The home vector is a vector, not a path: it cannot
+                   ;; route around anything, so a laden ant drives at
+                   ;; whatever stands between it and the nest and slides
+                   ;; along it.  A remembered waypoint is a bearing the
+                   ;; ant has already proved it can walk.
+                   ;;
+                   ;; **Only when the bearing is blocked, and the first
+                   ;; version got this wrong.**  Following the remembered
+                   ;; track the whole way home means retracing the ant's
+                   ;; own meander, which is far longer than the straight
+                   ;; line — the homing acceptance row caught it at once:
+                   ;; 470 ticks to cover 10 cm, which is not homing.  It
+                   ;; is also the wrong animal.  *Cataglyphis* runs the
+                   ;; vector straight home and does not retrace; a route
+                   ;; is what you fall back on when the vector cannot be
+                   ;; walked.
+                   ;;
+                   ;; It replaces the *target* and nothing else.  The
+                   ;; urge, the veto and the turn rate are all untouched,
+                   ;; so an ant with a clear bearing behaves exactly as
+                   ;; it did before — which is what makes *route-memory*
+                   ;; measurable against the model without it.
+                   (let* ((home-bearing (atan hvy hvx))
+                          ;; Is the way home actually shut?  Asked at the
+                          ;; antenna, with the mask the field already
+                          ;; carries — the same question CLEAR-BEARING
+                          ;; answers, asked one step earlier so the answer
+                          ;; can choose between two *targets* rather than
+                          ;; only nudging one.
+                          (shut (and *route-memory* returning
+                                     (field-blocked-p
+                                      (colony-field c)
+                                      (+ x (* *sensor-offset*
+                                              (cos home-bearing)))
+                                      (+ y (* *sensor-offset*
+                                              (sin home-bearing)))))))
+                     (declare (type f32 home-bearing))
+                     (multiple-value-bind (rx ry)
+                         (if shut (route-target a i x y) (values nil nil))
+                       (let ((bearing (if rx
+                                          (atan (- ry y) (- rx x))
+                                          home-bearing)))
+                       (declare (type f32 bearing))
+                       (setf heading
+                             (angle-toward heading
+                                           (clear-bearing (colony-field c) x y
+                                                          bearing
+                                                          (ant-handedness id seed)
+                                                          *sensor-offset*)
+                                           (min 1.0f0
+                                                (/ urge (+ 1.0f0 urge))))))))))
                (setf (aref (ants-heading a) i) heading)
 
                ;; advance
@@ -1075,6 +1189,18 @@ switch into and no switching logic to get wrong (§3.5)."
 
                (let ((x2 (aref bxs bi)) (y2 (aref bys bi)))
                  (declare (type f32 x2 y2))
+                 ;; Note the outward track (§3.4, §3.9).  Recorded only
+                 ;; while outbound, so the list is one leg's worth and
+                 ;; never two spliced together — and recorded *after* the
+                 ;; move, so a waypoint is somewhere the ant has actually
+                 ;; stood.  That is the whole property being bought: a
+                 ;; point the ant reached is reachable, and the line
+                 ;; between two consecutive ones contains no wall,
+                 ;; because the ant did not walk through one.
+                 (when (and *route-memory* (= state +ant-outbound+))
+                   (route-record! a i x2 y2
+                                  (sqrt (+ (* (- x2 x) (- x2 x))
+                                           (* (- y2 y) (- y2 y))))))
                  (cond
                    (returning
                     ;; Deposit on the return trip, modulated by the

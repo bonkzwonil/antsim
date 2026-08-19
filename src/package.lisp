@@ -40,6 +40,9 @@
    #:*queen-lay-rate* #:*brood-development-minutes*
    #:*forager-maturity-ticks* #:*age-shade-ticks*
    #:*response-threshold-lo* #:*response-threshold-hi* #:*response-steepness*
+   #:*route-memory* #:*route-waypoints* #:*route-spacing* #:*route-reach*
+   #:ants-route-x #:ants-route-y #:ants-route-n #:ants-route-i
+   #:ants-route-stride #:route-clear! #:route-record! #:route-target
    #:*search-spiral* #:*spiral-turn* #:*spiral-growth* #:*spiral-trigger*
    #:ants-search
    #:*repel-weight* #:*repel-tau* #:*repel-dead-end* #:*repel-cap*

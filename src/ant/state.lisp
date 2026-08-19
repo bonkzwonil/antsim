@@ -193,6 +193,20 @@
   ;; function of it, and a lifetime total would make every search after
   ;; the first start at the wrong width.
   (search nil :type (or null u32v))
+  ;; The outward path, as up to *route-waypoints* points per ant, laid out
+  ;; ant-major: point k of ant i is at (i * stride + k).  Recorded walking
+  ;; out and consumed walking back (§3.4, §3.9).
+  ;;
+  ;; A flat array rather than a per-ant vector for the reason the whole
+  ;; table is struct-of-arrays: an ant is a row of indices into shared
+  ;; storage, and a per-ant object here would put a pointer chase in the
+  ;; middle of the tick.
+  (route-x nil :type (or null f32v))
+  (route-y nil :type (or null f32v))
+  (route-stride 0 :type fixnum)
+  (route-n nil :type (or null u8v))      ; points recorded
+  (route-i nil :type (or null u8v))      ; which one is being walked back to
+  (route-d nil :type (or null f32v))     ; metres since the last point
   (free nil :type (or null fixv))
   (nfree 0 :type fixnum))
 
@@ -222,6 +236,11 @@ size them alike."
               :fed-by (mku32 capacity +no-ant+)
               :corpse (mku32 capacity +no-body+)
               :search (mku32 capacity)
+              :route-x (mkf32 (* capacity (max 1 *route-waypoints*)))
+              :route-y (mkf32 (* capacity (max 1 *route-waypoints*)))
+              :route-stride (max 1 *route-waypoints*)
+              :route-n (mku8 capacity) :route-i (mku8 capacity)
+              :route-d (mkf32 capacity)
               :id (mku32 capacity) :body (mku32 capacity)
               :colony (mku8 capacity) :state (mku8 capacity +ant-dead+)
               :heading (mkf32 capacity) :crop (mkf32 capacity)
