@@ -234,11 +234,12 @@ Three entry points into it:
 
 ## Where it is
 
-**Version M4 · 2026-08-19.** M0 through M4 are signed off, M2.1 and M2.2 landed
-their corrections along the way, and **all ten of §3.8's in-scope rows now
-pass** — the last three, quality-driven selection, the quality threshold and
-task reallocation, closed on the two-source apparatus in
-[`src/world/trials.lisp`](src/world/trials.lisp).
+**Version 1.0.0 — milestone M4 · 2026-08-19**, and the first build that ships
+as a binary rather than as a checkout ([Getting it](#getting-it)). M0 through
+M4 are signed off, M2.1 and M2.2 landed their corrections along the way, and
+**all ten of §3.8's in-scope rows now pass** — the last three, quality-driven
+selection, the quality threshold and task reallocation, closed on the
+two-source apparatus in [`src/world/trials.lisp`](src/world/trials.lisp).
 
 **M3 finished with the encounter event**, and the prediction that justified
 building it held: once the broad phase reports *this ant met that ant, at this
