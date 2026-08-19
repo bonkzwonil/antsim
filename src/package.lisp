@@ -76,6 +76,7 @@
    #:field-deposit-packet!
    #:field-total #:field-max #:field-rasterize-polygon!
    #:field-cell-x #:field-cell-y #:field-tau #:field-cap
+   #:field-diffuse! #:field-diffusion #:field-diffusion-steps
    ;; world/bodies — the one non-overlap rule (§3.11)
    #:bodies #:make-bodies #:bodies-alloc #:bodies-free! #:bodies-resolve!
    #:bodies-become-corpse! #:bodies-rebuild-hash!

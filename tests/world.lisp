@@ -231,6 +231,105 @@ persistent, and nothing else in the system would notice."
     (is (= 0.0f0 (ant:field-at f 0.10f0 0.10f0)))
     (is (= 50.0f0 (ant:field-at f 0.02f0 0.02f0)))))
 
+;;; --------------------------------------------------------- diffusion
+;;;
+;;; §3.3's third line, which only the alarm field uses.  The trail and the
+;;; repellent do not diffuse and must not start: the first test here is
+;;; that this pass exists without touching them.
+
+(defun %spike-field (&key (diffusion 0.2f0) (steps 1) (cell 0.02f0))
+  "A 0.4 x 0.4 m field with one unit of something in the middle cell."
+  (let ((f (ant:make-field :width 0.4f0 :height 0.4f0 :cell cell
+                           :tau 1.0f9 :cap 1.0f9
+                           :diffusion diffusion :diffusion-steps steps)))
+    (setf (aref (ant:field-c f) (ant:field-index f 0.2f0 0.2f0)) 1.0f0)
+    f))
+
+(test a-field-that-does-not-diffuse-is-not-touched-by-the-pass
+  "The trail and the repellent ask for no diffusion, so FIELD-DIFFUSE! has
+to be exactly nothing for them — not 'a very small amount'.  Asserted on
+identity rather than on closeness, because the claim being made elsewhere
+is that adding diffusion left every existing measurement alone, and
+'close' is not that claim."
+  (let ((f (ant:make-field :width 0.2f0 :height 0.2f0)))
+    (is (= 0.0f0 (ant:field-diffusion f)))
+    (ant:field-deposit! f 0.10f0 0.10f0 50.0f0)
+    (ant:field-step! f 0.0f0)
+    (let ((before (map '(vector single-float) #'identity (ant:field-c f))))
+      (ant:field-diffuse! f)
+      (is (every #'= before (ant:field-c f))
+          "a non-diffusing field moved under FIELD-DIFFUSE!"))))
+
+(test diffusion-spreads-without-losing-anything
+  "Conservation is the property, not the shape.  An explicit Laplacian
+that is even slightly asymmetric leaks or gains a little every sub-step,
+and on a field that is stepped once a second for an hour a slow leak is
+indistinguishable from evaporation — which this field is supposed to be
+measuring separately."
+  (let* ((f (%spike-field :diffusion 0.25f0 :steps 8))
+         (before (ant:field-total f)))
+    (ant:field-diffuse! f)
+    (is (< (abs (- (ant:field-total f) before)) 1.0f-4)
+        "diffusion changed the total from ~,6f to ~,6f"
+        before (ant:field-total f))
+    (is (< (ant:field-at f 0.2f0 0.2f0) 1.0f0)
+        "the spike did not spread at all")
+    (is (plusp (ant:field-at f 0.24f0 0.2f0))
+        "nothing reached a cell two away")))
+
+(test diffusion-is-symmetric-in-all-four-directions
+  "A five-point stencil written by hand gets one of its four indices wrong
+sooner or later, and the failure is a plume that drifts — which reads as
+a wind nobody put in the model.  Equality, not closeness: the four
+neighbours are the same arithmetic on the same numbers."
+  (let ((f (%spike-field :diffusion 0.2f0 :steps 3)))
+    (ant:field-diffuse! f)
+    (let ((l (ant:field-at f 0.16f0 0.20f0))
+          (r (ant:field-at f 0.24f0 0.20f0))
+          (d (ant:field-at f 0.20f0 0.16f0))
+          (u (ant:field-at f 0.20f0 0.24f0)))
+      (is (plusp l) "nothing spread at all")
+      (is (= l r) "left ~,8f and right ~,8f disagree" l r)
+      (is (= l d) "left ~,8f and down ~,8f disagree" l d)
+      (is (= l u) "left ~,8f and up ~,8f disagree" l u))))
+
+(test diffusion-does-not-drain-into-a-wall
+  "The tempting shortcut is to treat a blocked neighbour as a
+zero-concentration one.  That is not a boundary, it is a *sink*: alarm
+laid against a wall would drain into the rock, fastest exactly where the
+ants are most crowded against it, and the field would look plausible
+while quietly losing its mass to the terrain.  No flux instead — a cell
+exchanges only with the neighbours it has."
+  (let ((f (ant:make-field :width 0.4f0 :height 0.4f0 :cell 0.02f0
+                           :tau 1.0f9 :cap 1.0f9
+                           :diffusion 0.25f0 :diffusion-steps 12)))
+    (ant:field-rasterize-polygon! f (square 0.24 0.0 0.40 0.40))
+    (setf (aref (ant:field-c f) (ant:field-index f 0.20f0 0.20f0)) 1.0f0)
+    (let ((before (ant:field-total f)))
+      (ant:field-diffuse! f)
+      (is (< (abs (- (ant:field-total f) before)) 1.0f-4)
+          "the wall absorbed ~,6f of the field"
+          (- before (ant:field-total f)))
+      (is (= 0.0f0 (ant:field-at f 0.30f0 0.20f0))
+          "there is chemistry inside the wall"))
+    ;; and it piles up against the wall rather than passing through it
+    (is (> (ant:field-at f 0.22f0 0.20f0) (ant:field-at f 0.18f0 0.20f0))
+        "the cell against the wall is no fuller than its mirror image, so ~
+         the reflected flux went somewhere else")))
+
+(test an-unstable-diffusion-is-refused-rather-than-clamped
+  "Above 0.25 the explicit scheme oscillates and then diverges.  Clamping
+would leave a caller with a wrong idea of what this number is and a field
+that looked almost right; the bound is a fact about the scheme and is
+worth saying out loud."
+  (signals error
+    (ant:make-field :width 0.1f0 :height 0.1f0
+                    :diffusion 0.4f0 :diffusion-steps 1))
+  ;; asking for diffusion but no steps is not an error, it is no diffusion
+  (let ((f (ant:make-field :width 0.1f0 :height 0.1f0
+                           :diffusion 0.2f0 :diffusion-steps 0)))
+    (is (= 0.0f0 (ant:field-diffusion f)))))
+
 ;;; ------------------------------------------------------ trail packets
 
 (test packet-carries-its-whole-amount

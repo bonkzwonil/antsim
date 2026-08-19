@@ -24,21 +24,53 @@
   (deposit nil :type (or null f32v))    ; buffer, folded in on the pheromone clock
   (blocked nil :type (or null u8v))     ; 1 where an obstacle covers the cell
   (tau 1800.0f0 :type f32)
-  (cap 100.0f0 :type f32))
+  (cap 100.0f0 :type f32)
+  ;; Diffusion (§3.3).  Zero for the trail and the repellent, which is
+  ;; why they pay nothing for this: no coefficient, no sub-steps, no
+  ;; scratch buffer allocated at all.
+  ;;
+  ;; DIFFUSION is the fraction of the difference to each of the four
+  ;; neighbours that moves per sub-step — dimensionless, not a coefficient
+  ;; in m^2/s.  That is the honest form for an explicit five-point scheme,
+  ;; because the thing that has to be bounded is exactly this number:
+  ;; above 0.25 the scheme oscillates and then diverges, whatever the cell
+  ;; size and whatever the clock.  Expressing it as a physical D would
+  ;; hide a stability limit inside a unit conversion, which is how an
+  ;; innocent-looking cell-size change turns a field into noise.
+  ;;
+  ;; Spread comes from DIFFUSION-STEPS instead: sub-steps within one
+  ;; pheromone tick.  RMS spread after N sub-steps is about
+  ;; sqrt(2 * DIFFUSION * N) cells, so distance is bought linearly in
+  ;; cost and quadratically in steps, and the bound is never approached.
+  (diffusion 0.0f0 :type f32)
+  (diffusion-steps 0 :type fixnum)
+  (scratch nil :type (or null f32v)))
 
 (defun make-field (&key width height (cell *cell-size*)
                         (origin-x 0.0f0) (origin-y 0.0f0)
-                        (tau (trail-tau)) (cap *trail-cap*))
+                        (tau (trail-tau)) (cap *trail-cap*)
+                        (diffusion 0.0f0) (diffusion-steps 0))
   "A field covering WIDTH x HEIGHT metres, at CELL resolution."
   (let* ((w (max 1 (round width cell)))
-         (h (max 1 (round height cell))))
+         (h (max 1 (round height cell)))
+         (diffusing (and (plusp diffusion) (plusp diffusion-steps))))
     (check-type w grid-dim)
     (check-type h grid-dim)
+    ;; Refused rather than clamped.  A caller that asks for 0.4 has a
+    ;; wrong idea of what this number is, and silently giving it 0.25
+    ;; would leave that idea intact and the field looking almost right.
+    (when (and diffusing (> diffusion 0.25f0))
+      (error "field diffusion ~,4f exceeds the explicit scheme's stability ~
+              bound of 0.25; ask for more DIFFUSION-STEPS instead"
+             diffusion))
     (%make-field :w w :h h :cell cell :inv-cell (/ 1.0f0 cell)
                  :origin-x origin-x :origin-y origin-y
                  :c (mkf32 (* w h)) :deposit (mkf32 (* w h))
                  :blocked (mku8 (* w h))
-                 :tau tau :cap cap)))
+                 :tau tau :cap cap
+                 :diffusion (if diffusing diffusion 0.0f0)
+                 :diffusion-steps (if diffusing diffusion-steps 0)
+                 :scratch (when diffusing (mkf32 (* w h))))))
 
 (declaim (inline field-cell-x field-cell-y field-index field-at))
 
@@ -169,28 +201,98 @@ packets commute and the ant loop stays order-independent (§4.2)."
                 (incf (aref dep (+ i (* j fw))) (* k wgt))))))))
     (values)))
 
+(defun field-diffuse! (f)
+  "The diffusion sub-steps of §3.3, or nothing at all when the field does
+not diffuse — which is the trail and the repellent, and is why they are
+unaffected by this existing.
+
+Explicit five-point Laplacian, no flux across a wall or across the arena
+edge.  A cell exchanges only with the neighbours it *has*: off-grid and
+blocked neighbours are not summed and not counted, which is a Neumann
+boundary and is what makes the scheme conserve.  The tempting shortcut —
+treat a wall as a zero-concentration neighbour — is a *sink*: alarm laid
+against a wall would drain into the rock, fastest exactly where the ants
+are most crowded against it.
+
+Two passes per sub-step, out of place.  In place would be Gauss-Seidel,
+so the answer would depend on the order cells are visited, and §4.4 does
+not allow the field to know which way the loop ran."
+  (declare (type field f) (optimize (speed 3) (safety 1)))
+  (let ((a (field-diffusion f))
+        (steps (field-diffusion-steps f)))
+    (declare (type f32 a) (type fixnum steps))
+    (when (or (zerop steps) (<= a 0.0f0))
+      (return-from field-diffuse! (values)))
+    (let ((c (field-c f))
+          (s (field-scratch f))
+          (blk (field-blocked f))
+          (w (field-w f))
+          (h (field-h f)))
+      (declare (type f32v c) (type u8v blk) (type fixnum w h))
+      (unless s (return-from field-diffuse! (values)))
+      (locally (declare (type f32v s))
+        (dotimes (step steps)
+          (dotimes (y h)
+            (let ((row (* y w)))
+              (declare (type fixnum row))
+              (dotimes (x w)
+                (let ((i (+ row x)))
+                  (declare (type fixnum i))
+                  (if (= 1 (aref blk i))
+                      (setf (aref s i) 0.0f0)
+                      (let ((here (aref c i))
+                            (acc 0.0f0))
+                        (declare (type f32 here acc))
+                        (macrolet ((edge (test j)
+                                     `(when ,test
+                                        (let ((jj ,j))
+                                          (declare (type fixnum jj))
+                                          (when (zerop (aref blk jj))
+                                            (incf acc (- (aref c jj) here)))))))
+                          (edge (plusp x)        (1- i))
+                          (edge (< x (1- w))     (1+ i))
+                          (edge (plusp y)        (- i w))
+                          (edge (< y (1- h))     (+ i w)))
+                        (setf (aref s i) (+ here (* a acc)))))))))
+          (replace c s)))))
+  (values))
+
 (defun field-step! (f &optional (dt *pheromone-dt*))
-  "One tick of the pheromone clock (§3.3):
+  "One tick of the pheromone clock (§3.3), in that section's order:
 
       C <- C * exp(-dt/tau)     evaporation — the colony's only way to forget
+      C <- C + D.grad^2 C       diffusion, for the fields that have any
       C <- C + deposits         accumulated since the last pheromone tick
       C <- min(C, cap)          saturation
 
-Diffusion is absent by design, not omission: real trail pheromone barely
-diffuses on the timescale that matters, and §3.9 cuts it from M1.  A
-blocked cell is forced to zero so an obstacle cannot carry a trail."
+Diffusion is off for the trail and the repellent, and that is design
+rather than omission: real trail pheromone barely diffuses on the
+timescale that matters, and §3.9 cuts it from M1.  The alarm field is the
+one that needs it, because a plume that only ever sat where it was
+released would not be a plume.  A field with no diffusion runs exactly
+the arithmetic it ran before this existed, operation for operation, so
+its results are unchanged bit for bit.
+
+A blocked cell is forced to zero throughout, so an obstacle cannot carry
+chemistry."
   (declare (type field f) (type f32 dt) (optimize (speed 3) (safety 1)))
+  (let ((c (field-c f))
+        (blk (field-blocked f))
+        (decay (exp (- (/ dt (field-tau f))))))
+    (declare (type f32v c) (type u8v blk) (type f32 decay))
+    (dotimes (i (length c))
+      (setf (aref c i) (if (= 1 (aref blk i)) 0.0f0 (* (aref c i) decay)))))
+  (field-diffuse! f)
   (let ((c (field-c f))
         (dep (field-deposit f))
         (blk (field-blocked f))
-        (decay (exp (- (/ dt (field-tau f)))))
         (cap (field-cap f)))
-    (declare (type f32v c dep) (type u8v blk) (type f32 decay cap))
+    (declare (type f32v c dep) (type u8v blk) (type f32 cap))
     (dotimes (i (length c))
       (setf (aref c i)
             (if (= 1 (aref blk i))
                 0.0f0
-                (min cap (+ (* (aref c i) decay) (aref dep i)))))
+                (min cap (+ (aref c i) (aref dep i)))))
       (setf (aref dep i) 0.0f0)))
   (values))
 
