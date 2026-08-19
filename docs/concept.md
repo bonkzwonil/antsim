@@ -2094,7 +2094,7 @@ and one experiment worth recording says why: switching ant-ant contact
 off entirely leaves the same ants stuck against the same terrain (171
 against 185 over three seeds), so the furball is the appearance of that
 failure rather than its cause, and no amount of tuning traffic reaches
-it. Escaping a concavity needs route memory, which M4 did not reach.
+it. Escaping a concavity needs route memory, which M4 went on to build.
 
 **M4 — the society, and three mechanisms that had nothing to do.** The
 plan was the deferred half of §3.9 in dependency order, on top of JSON
