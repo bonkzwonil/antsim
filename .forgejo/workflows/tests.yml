@@ -64,7 +64,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y sbcl curl libgl1 libegl1 libgbm1 \
-                             libglx-mesa0 mesa-utils
+                             libglx-mesa0 mesa-utils libglfw3
 
       - name: Cache Quicklisp
         id: ql-cache
@@ -84,3 +84,10 @@ jobs:
 
       - name: Renderer suite (software rasteriser)
         run: make test-render-ci
+
+      # The shipped binary's command line.  Here rather than in the `test`
+      # job because antsim/app reaches antsim/live and cl-glfw3 opens
+      # libglfw when it is loaded; this is the job that already has a
+      # graphics stack.  No window, no GPU.
+      - name: Command-line suite
+        run: make test-app-bare

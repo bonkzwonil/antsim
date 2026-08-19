@@ -27,6 +27,16 @@
 ;;;; The test suite guards the trap directly: a null GL version string is
 ;;;; an explicit assertion failure in tests/render.lisp, not a mystery.
 
+;;;; Windows has no part in any of this and must not be given one.  There
+;;;; the GL entry points come from opengl32.dll, a system library the
+;;;; loader finds by name, and everything past GL 1.1 is fetched through
+;;;; wglGetProcAddress against the current context — so there is exactly
+;;;; one implementation in the process by construction and no trap to
+;;;; avoid.  Preloading a driver there is not merely unnecessary, it is
+;;;; not a thing that can be done.  Hence the #-windows guards below,
+;;;; rather than a search that would find nothing and warn about it every
+;;;; time the shipped .exe starts.
+
 (defpackage #:antsim-gl
   (:use #:cl)
   (:export #:driver-library-directory #:preload-driver-gl #:*preloaded*))
@@ -44,6 +54,8 @@
 Both must come from the *same* directory: the failure this file prevents
 is precisely a mismatched pair, so finding one here and one elsewhere is
 not good enough."
+  #+windows nil
+  #-windows
   (let* ((env (uiop:getenv "GUIX_ENVIRONMENT"))
          (dirs (append (when env (list (concatenate 'string env "/lib/")))
                        *fallback-directories*)))
@@ -55,14 +67,23 @@ not good enough."
 (defvar *preloaded* nil
   "The directory the driver libraries were loaded from, once done.")
 
-(defun preload-driver-gl ()
-  "Load libEGL/libGL from the driver directory.  Idempotent."
+(defun preload-driver-gl (&key quiet)
+  "Load libEGL/libGL from the driver directory.  Idempotent.
+
+QUIET suppresses the missing-driver warning.  The shipped binary calls it
+that way on startup: the *live* window gets its GL from GLFW and never
+touches EGL, so a machine with no libEGL is a perfectly good machine to
+watch a colony on and has no business being warned at.  The headless
+paths still fail loudly, in LOAD-GL-LIBRARIES, where the failure is real."
   (or *preloaded*
+      #+windows nil
+      #-windows
       (let ((dir (driver-library-directory)))
         (unless dir
-          (warn "antsim: no libEGL.so.1 + libGL.so.1 found. ~
-                 On Guix run under: guix shell nvda@580 -- ...~@
-                 Rendering will probably produce black frames.")
+          (unless quiet
+            (warn "antsim: no libEGL.so.1 + libGL.so.1 found. ~
+                   On Guix run under: guix shell nvda@580 -- ...~@
+                   Rendering will probably produce black frames."))
           (return-from preload-driver-gl nil))
         (cffi:load-foreign-library
          (namestring (merge-pathnames "libEGL.so.1" dir)))

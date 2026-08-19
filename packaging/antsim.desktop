@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=antsim
+GenericName=Ant Colony Simulation
+Comment=A 2D ant colony simulation built on real behavioural science
+Exec=antsim
+Icon=antsim
+Categories=Science;Physics;
+Keywords=simulation;ants;pheromone;swarm;stigmergy;
+Terminal=false

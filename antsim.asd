@@ -8,7 +8,11 @@
 (defsystem "antsim"
   :description "A 2D ant colony simulation on real behavioural science — numeric core."
   :author "Mathias Menzel-Nielsen"
-  :version "0.4.0"        ; milestone M4 — the society: tribes, tasks, middens, routes
+  ;; The single source of truth for the version.  The build script stamps
+  ;; it into the binary, both packaging scripts name their output from it,
+  ;; and both release workflows refuse a tag that disagrees with it — see
+  ;; docs/shipping.md.
+  :version "1.0.0"        ; M4 — the society: tribes, tasks, middens, routes; first shipped build
   :depends-on ()                        ; core stays dependency-free (sb-thread only)
   :serial t
   :pathname "src"
@@ -86,6 +90,17 @@
   :pathname "src/live"
   :components ((:file "window")))
 
+(defsystem "antsim/app"
+  :description "The shipped program: argv, usage, exit codes (see docs/shipping.md)."
+  ;; The only system that knows a *program* exists.  Everything below it
+  ;; is a library, and stays one: nothing in antsim/live may depend on
+  ;; this, or the window could no longer be opened from a REPL without
+  ;; dragging a command-line parser in with it.
+  :depends-on ("antsim/live")
+  :serial t
+  :pathname "src/app"
+  :components ((:file "main")))
+
 (defsystem "antsim/test"
   :description "Test suite for the antsim core.  No GPU required."
   ;; antsim/scenario, not just antsim: the shipped bridge scenarios must be
@@ -107,6 +122,21 @@
   :perform (test-op (o c)
              (symbol-call :fiveam :run!
                           (find-symbol (string :antsim) :antsim/test))))
+
+(defsystem "antsim/app-test"
+  :description "The shipped binary's command line.  Needs GLFW to load, no GPU."
+  ;; Its own system rather than part of antsim/test, because antsim/app
+  ;; reaches antsim/live and cl-glfw3 opens libglfw when it is *loaded*.
+  ;; The core suite must stay runnable on a machine with no graphics stack
+  ;; at all (§4.1), and a test file that quietly imposes one would take
+  ;; that away from it.
+  :depends-on ("antsim/app" "fiveam")
+  :serial t
+  :pathname "tests"
+  :components ((:file "app"))
+  :perform (test-op (o c)
+             (symbol-call :fiveam :run!
+                          (find-symbol (string :app) :antsim/app-test))))
 
 (defsystem "antsim/render-test"
   :description "Renderer tests.  GL tests skip when no context is available."

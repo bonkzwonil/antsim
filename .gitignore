@@ -10,3 +10,6 @@
 
 # Render output from `make smoke` / the test suites.
 /out/
+
+# Release artefacts: `make binary` and packaging/build-appimage.sh.
+/dist/

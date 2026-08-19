@@ -31,9 +31,11 @@ SMOKE_PNG ?= out/m0-smoke.png
 # append its default configuration, so Quicklisp's own dists still resolve.
 export CL_SOURCE_REGISTRY := $(CURDIR):
 
-.PHONY: all test acceptance test-render test-render-mesa test-render-ci \
+.PHONY: all test acceptance test-app test-app-bare \
+        test-render test-render-mesa test-render-ci \
         test-render-bare smoke smoke-mesa live gallery word-scenario \
-        repl page clean
+        repl page clean binary binary-bare appimage appimage-bare \
+        icon dist-clean
 
 all: test
 
@@ -52,6 +54,22 @@ acceptance:
 	$(SBCL) --non-interactive \
 	  --eval '(ql:quickload :antsim/test :silent t)' \
 	  --eval '(uiop:quit (if (fiveam:run! (quote antsim/test::acceptance)) 0 1))'
+
+## test-app — the shipped binary's command line: argv, the scenario
+## search path, the exit codes.  Needs GLFW to *load* (antsim/app reaches
+## antsim/live), but opens no window and needs no GPU, so it runs
+## anywhere GLFW is installed — which includes the release CI.
+test-app:
+	$(WIN) sh -c 'LD_LIBRARY_PATH=$$GUIX_ENVIRONMENT/lib exec $(SBCL) \
+	  --non-interactive \
+	  --eval "(ql:quickload :antsim/app-test :silent t)" \
+	  --eval "(uiop:quit (if (fiveam:run! (quote antsim/app-test::app)) 0 1))"'
+
+## test-app-bare — the same, with no guix shell.  What CI runs.
+test-app-bare:
+	$(SBCL) --non-interactive \
+	  --eval '(ql:quickload :antsim/app-test :silent t)' \
+	  --eval '(uiop:quit (if (fiveam:run! (quote antsim/app-test::app)) 0 1))'
 
 ## test-render — renderer suite under the GPU shell.  This is the one
 ## that actually verifies rendering.
@@ -147,6 +165,60 @@ repl:
 page:
 	sbcl --script scripts/build-page.lisp
 
-clean:
+## --- shipping (docs/shipping.md) --------------------------------------
+##
+## `binary` saves an executable; `appimage` wraps it for Linux.  Neither
+## is what CI runs on a push — releases are tagged by hand, and the
+## workflows fire on the tag.  These targets exist so that the thing CI
+## does can be done here first, which is the only way to find out that it
+## works without burning a tag to learn it.
+
+## binary — save out/antsim (out/antsim.exe on Windows).
+##
+## Under a guix shell because the *build* needs GLFW present to load
+## cl-glfw3, exactly as `live` does.  The saved image does not: it closes
+## every foreign library before saving and opens them again on startup,
+## so the binary this produces is not tied to this profile.  See the long
+## comment in scripts/build-binary.lisp.
+##
+##   ANTSIM_COMPRESS=1 make binary    smaller core, slower start
+##   ANTSIM_VERSION=1.0.0-rc1 make binary
+BINARY ?= out/antsim
+SAVE_IMAGE = sbcl --dynamic-space-size $(HEAP) \
+	       --script scripts/build-binary.lisp $(BINARY)
+binary:
+	$(WIN) sh -c 'LD_LIBRARY_PATH=$$GUIX_ENVIRONMENT/lib exec $(SAVE_IMAGE)'
+
+## binary-bare — the same save, with no guix shell around it: for a
+## distribution where GLFW is an ordinary system package.  This is what
+## CI runs, and it shares $(SAVE_IMAGE) with the target above precisely so
+## that the two cannot drift into building different things.
+binary-bare:
+	$(SAVE_IMAGE)
+
+## appimage — dist/antsim-<version>-x86_64.AppImage.
+##
+## Builds the binary first.  Note that an AppImage built here is built
+## against *this* machine's glibc and, on Guix, against a /gnu/store
+## loader that no Ubuntu has — the packaging script says so out loud.
+## Releases are built on the oldest Ubuntu we support, in CI, for exactly
+## this reason: a binary runs on a newer glibc than it was built against,
+## never on an older one.
+appimage: binary
+	packaging/build-appimage.sh
+
+## appimage-bare — as appimage, without the guix shell.  What CI runs.
+appimage-bare: binary-bare
+	packaging/build-appimage.sh
+
+## icon — regenerate packaging/antsim.png.  Committed, so this is only
+## needed when the drawing changes.
+icon:
+	$(SBCL) --script scripts/build-icon.lisp
+
+dist-clean:
+	rm -rf dist
+
+clean: dist-clean
 	find . -name '*.fasl' -delete
 	rm -rf out

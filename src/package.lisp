@@ -183,4 +183,9 @@
    #:*gallery-directory*
    ;; live/window — the interactive view (§5.5), system antsim/live
    #:run-live #:live-demo #:live-scenario #:live-inspect
-   #:*live-speed* #:*live-paused*))
+   #:*live-speed* #:*live-paused*
+   ;; app/main — the shipped binary's command line, system antsim/app
+   #:main #:parse-command-line #:run-cli #:usage #:usage-error
+   #:image-restart-init #:*reopen-libraries*
+   #:find-scenario #:shipped-scenarios #:scenario-search-path
+   #:executable-directory #:*version* #:*program-name*))
