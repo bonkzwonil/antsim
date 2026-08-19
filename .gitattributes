@@ -1,0 +1,32 @@
+# Line endings are not cosmetic in this repository.
+#
+# Common Lisp's FORMAT has directives whose meaning *is* a newline.
+# `~@<newline>` prints the newline and swallows the indentation that
+# follows it, which is how the multi-line messages in src/render are
+# written.  Check the same file out with CRLF and the character after the
+# `~@` is a Return instead, so the directive becomes unknown and the file
+# does not compile:
+#
+#     error in FORMAT: Unknown directive (character: Return)
+#
+# git's core.autocrlf defaults to true on a Windows install, so this cost
+# a Windows release build — the source compiles everywhere it was written
+# and nowhere it was checked out with the other convention.  Nothing about
+# the Lisp is wrong; it is standard and it stays.
+#
+# Normalising to LF in the repository *and* in the working tree, on every
+# platform, is the fix.  Nothing here is edited by a tool that requires
+# CRLF, and the one Windows-native file — a PowerShell script — is read
+# perfectly well with LF endings by PowerShell 5 and 7 alike.
+* text=auto eol=lf
+
+# Binary, and must never be touched by any of the above: a normalised PNG
+# is a corrupt PNG.  `text=auto` detects this correctly on its own, but
+# the icon is the one file where getting it wrong is silent — the image
+# still has a size and a header, and only looks wrong.
+*.png binary
+
+# Rendered output and packaged artefacts, for the same reason.
+*.AppImage binary
+*.zip binary
+*.msi binary

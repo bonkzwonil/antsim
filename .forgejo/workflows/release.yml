@@ -1,0 +1,119 @@
+# The Linux packaging, on the canonical remote.
+#
+# What this does and, more importantly, what it does not.  It builds the
+# AppImage and proves it starts.  It does not publish a release: releases
+# live on the GitHub mirror, where .github/workflows/release.yml builds
+# both platforms from the same tag and attaches them to the Releases page.
+#
+# The reason is not that Forgejo cannot host a release — it can.  It is
+# that two release pipelines produce two AppImages, and two AppImages
+# built on two base images have two different glibc floors, so "the 1.0.0
+# Linux build" would name two files that are not the same file and only
+# one of which runs on Ubuntu 22.04.  One publisher, one artefact.
+#
+# So what is this for?  Day-to-day work lands here and almost never on
+# GitHub, which means a change that breaks the packaging would otherwise
+# be discovered by pushing a tag to the mirror — the one moment when
+# discovering it is most expensive.  This runs on the tag *here* first,
+# and on demand while the packaging is being changed.
+#
+# Needs a registered Actions runner.  With none this file is inert, which
+# costs nothing.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  appimage:
+    runs-on: docker
+    # The same image as tests.yml, for the same reason: it has node, which
+    # the runner needs to execute JS actions, plus a package manager.
+    # Note that this makes the glibc floor Debian 12's rather than Ubuntu
+    # 22.04's — one more reason the artefact from here is a check and not
+    # the release.
+    container:
+      image: node:20-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            sbcl make curl ca-certificates file zstd \
+            libglfw3 libgl1 libegl1
+
+      - name: Cache Quicklisp
+        id: ql-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/quicklisp
+          key: quicklisp-release-linux-v1
+
+      # Unconditional, and deliberately not skipped on a cache hit.
+      #
+      # `ql:add-to-init-file` writes ~/.sbclrc, and ~/.sbclrc is not under
+      # the cached path.  So a cache *miss* installs Quicklisp and wires it
+      # up, while a cache *hit* restores ~/quicklisp and leaves SBCL with no
+      # idea it is there — and every later step dies with "Package QL does
+      # not exist".  That failure cannot happen on the first run of a new
+      # cache key and is certain on the second, which is the worst shape a
+      # CI bug can have; it cost a release build once already.
+      #
+      # Making the step idempotent rather than conditional demotes the cache
+      # to what it should always have been: an optimisation for the
+      # download, never a thing correctness depends on.
+      - name: Install Quicklisp
+        run: |
+          set -eu
+          if [ ! -f "$HOME/quicklisp/setup.lisp" ]; then
+            curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+            sbcl --non-interactive \
+              --load /tmp/quicklisp.lisp \
+              --eval '(quicklisp-quickstart:install)'
+          fi
+          grep -qs 'quicklisp/setup.lisp' "$HOME/.sbclrc" 2>/dev/null ||
+            echo '(load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))' \
+              >> "$HOME/.sbclrc"
+          sbcl --non-interactive \
+            --eval '(format t "~&quicklisp dist ~a~%" (ql:dist-version "quicklisp"))'
+
+      # The same check the mirror does, done here first: a tag whose
+      # version disagrees with antsim.asd is a bad tag, and finding that
+      # out on the remote nobody pushes to is finding it out too late.
+      - name: Check the tag against antsim.asd
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -eu
+          asd="$(sed -n 's/.*:version *"\([^"]*\)".*/\1/p' antsim.asd | head -1)"
+          tag="${GITHUB_REF#refs/tags/}"
+          if [ "${tag#v}" != "$asd" ]; then
+            echo "tag $tag says ${tag#v}, antsim.asd says $asd" >&2
+            exit 1
+          fi
+          echo "tag $tag agrees with antsim.asd"
+
+      - name: Command-line suite
+        run: make test-app-bare
+
+      - name: Build the AppImage
+        run: make appimage-bare HEAP=4096
+
+      - name: Smoke-test it
+        run: |
+          set -eux
+          img="$(ls dist/*.AppImage)"
+          "$img" --appimage-extract >/dev/null
+          ./squashfs-root/AppRun --version
+          ./squashfs-root/AppRun --list
+          ./squashfs-root/AppRun --help >/dev/null
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: dist/*.AppImage
+          if-no-files-found: error

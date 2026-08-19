@@ -1,0 +1,31 @@
+#!/bin/sh
+# AppRun — the AppImage's entry point.
+#
+# Two jobs, and the second one is the whole reason an AppImage is the
+# Linux format here rather than a bare binary in a tarball.
+#
+# 1. Put the bundled libraries first on the loader path.  GLFW is the one
+#    that matters: it is not installed on a stock Ubuntu desktop, and
+#    "install libglfw3 first" is not a way to ship a program to somebody
+#    who wants to look at ants.  The image reopens its foreign libraries
+#    by soname at startup (see scripts/build-binary.lisp), so putting our
+#    copy in front of the loader's search is by itself enough to make it
+#    the one that gets used.
+#
+# 2. Leave the *driver* alone.  libGL and libEGL are emphatically not
+#    bundled and must not be: they belong to the user's graphics driver,
+#    they have to match the kernel module that is actually loaded, and a
+#    bundled Mesa in front of an NVIDIA driver is precisely the libGL trap
+#    the project already has a file about (README §5.4).  Appending rather
+#    than prepending the system directories is not an option either — the
+#    driver is found by the loader's own configuration, and we simply do
+#    not interfere.
+#
+# APPDIR is set by the AppImage runtime, but the AppDir can also be run
+# directly (./AppDir/AppRun) during packaging tests, where it is not.
+
+HERE="$(dirname "$(readlink -f "$0")")"
+export APPDIR="${APPDIR:-$HERE}"
+export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+exec "$HERE/usr/bin/antsim" "$@"

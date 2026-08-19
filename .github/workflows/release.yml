@@ -1,0 +1,446 @@
+# Standalone binaries for a release: a Linux AppImage and a Windows zip.
+#
+# Trigger, and why it is this one.  Ordinary work does not land here — the
+# canonical remote is the self-hosted instance and this repository is a
+# release mirror pushed by hand, so a workflow that fired on every main
+# push would fire almost never and be tested almost never.  It fires on a
+# tag instead, which is the moment a release actually exists:
+#
+#   git tag -a v1.0.0 -m 'antsim 1.0.0'
+#   git push github v1.0.0
+#
+# workflow_dispatch builds the same artefacts without publishing anything,
+# which is how a change to this file gets tested without spending a tag on
+# finding out that it was wrong.
+#
+# The version in antsim.asd is the single source of truth.  The first job
+# refuses a tag that disagrees with it, before either build starts: a
+# binary that reports a version its own system definition does not claim
+# is a bug that survives for years, because nobody thinks to check.
+#
+# Windows must be built on Windows.  SBCL saves an image by writing out
+# the memory of a running process with the runtime glued to the front, so
+# there is no cross-compilation to be had and no amount of wanting will
+# produce one from a Linux runner.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Pinned rather than "latest": a release is the one build that should be
+  # reproducible, and a toolchain that moves under it is how two tags with
+  # the same source produce two different binaries.  Both are ordinary
+  # bumps when there is a reason to bump them.
+  SBCL_WINDOWS_VERSION: '2.6.7'
+  GLFW_WINDOWS_VERSION: '3.4'
+  # The heap the shipped image is born with.  :save-runtime-options freezes
+  # it at build time, so this is not a build setting that happens to leak —
+  # it is the binary's dynamic space, forever.  4 GB of *reserved address
+  # space*, not memory: the largest scenario here runs in a small fraction
+  # of it.  The 8192 the Makefile defaults to is for building and testing
+  # and has no business being what a user's process reserves.
+  SHIP_HEAP: '4096'
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: v
+        name: Resolve and check the version
+        run: |
+          set -euo pipefail
+          asd="$(sed -n 's/.*:version *"\([^"]*\)".*/\1/p' antsim.asd | head -1)"
+          [ -n "$asd" ] || { echo "::error::no :version in antsim.asd"; exit 1; }
+
+          if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+            version="${tag#v}"
+            if [ "$version" != "$asd" ]; then
+              echo "::error::tag $tag says $version, antsim.asd says $asd"
+              exit 1
+            fi
+            publish=true
+          else
+            # A dispatch build is not the release and must not claim to be
+            # one, hence the suffix: an artefact that escapes into the
+            # world should say what it is.
+            tag=""
+            version="$asd+$(echo "$GITHUB_SHA" | cut -c1-7)"
+            publish=false
+          fi
+
+          case "$version" in
+            *-*) prerelease=true ;;      # v1.0.0-rc1 and friends
+            *)   prerelease=false ;;
+          esac
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag"         >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "building antsim $version (publish=$publish prerelease=$prerelease)"
+
+  linux:
+    needs: version
+    runs-on: ubuntu-latest
+    # Oldest Ubuntu we support, as a container rather than a runner label:
+    # glibc is forward-compatible and not backward-compatible, so building
+    # here is what makes the AppImage run on 22.04 and 24.04 alike, and
+    # pinning it this way does not expire the day GitHub retires a runner
+    # image.  (env is not available in this key, hence the literal.)
+    container:
+      image: ubuntu:22.04
+    steps:
+      - name: Install build dependencies
+        run: |
+          set -eux
+          apt-get update
+          # libglfw3 to link and to bundle; libgl1/libegl1 so cl-opengl
+          # can be loaded at build time.  No GPU is involved and none is
+          # needed: nothing here opens a context, it only saves an image.
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            sbcl make git curl ca-certificates file zstd \
+            libglfw3 libgl1 libegl1
+
+      - uses: actions/checkout@v4
+
+      - name: Cache Quicklisp
+        id: ql-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/quicklisp
+          key: quicklisp-release-linux-v1
+
+      # Unconditional, and deliberately not skipped on a cache hit.
+      #
+      # `ql:add-to-init-file` writes ~/.sbclrc, and ~/.sbclrc is not under
+      # the cached path.  So a cache *miss* installs Quicklisp and wires it
+      # up, and a cache *hit* restores ~/quicklisp while leaving SBCL with
+      # no idea it is there — every later step then dies with "Package QL
+      # does not exist".  That is a failure which cannot happen on the
+      # first run of a new cache key and is guaranteed on the second,
+      # which is the worst shape a CI bug can have.
+      #
+      # Making the whole step idempotent rather than conditional demotes
+      # the cache to what it should have been: an optimisation for the
+      # download, and never a thing correctness depends on.
+      - name: Install Quicklisp
+        run: |
+          set -eu
+          if [ ! -f "$HOME/quicklisp/setup.lisp" ]; then
+            curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+            sbcl --non-interactive \
+              --load /tmp/quicklisp.lisp \
+              --eval '(quicklisp-quickstart:install)'
+          fi
+          grep -qs 'quicklisp/setup.lisp' "$HOME/.sbclrc" 2>/dev/null ||
+            echo '(load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))' \
+              >> "$HOME/.sbclrc"
+          # Prove it, here, where the message names the cause.
+          sbcl --non-interactive \
+            --eval '(format t "~&quicklisp dist ~a~%" (ql:dist-version "quicklisp"))'
+
+      # Before anything is built, not after: the command line is the part
+      # of a release that a smoke test cannot reach.  --list proves the
+      # binary starts; it says nothing about what `--seed banana` does.
+      - name: Command-line suite
+        run: make test-app-bare
+
+      - name: Save the binary
+        env:
+          ANTSIM_VERSION: ${{ needs.version.outputs.version }}
+        run: make binary-bare HEAP=${{ env.SHIP_HEAP }}
+
+      - name: Build the AppImage
+        env:
+          ARCH: x86_64
+        run: packaging/build-appimage.sh "${{ needs.version.outputs.version }}"
+
+      # The one thing worth proving before publishing: that the packaged
+      # artefact starts, finds the files packed beside it, and is not
+      # secretly tied to this container.  It cannot open a window here —
+      # there is no display — and that is exactly why --list is the test:
+      # it exercises startup, the foreign-library reopen and the AppDir
+      # search path, all of which are the parts that break.
+      - name: Smoke-test the AppImage
+        run: |
+          set -eux
+          img="dist/antsim-${{ needs.version.outputs.version }}-x86_64.AppImage"
+          "$img" --appimage-extract >/dev/null
+          ./squashfs-root/AppRun --version
+          ./squashfs-root/AppRun --list
+          ./squashfs-root/AppRun --help >/dev/null
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SBCL
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = $env:SBCL_WINDOWS_VERSION
+          $url = "https://downloads.sourceforge.net/project/sbcl/sbcl/$v/sbcl-$v-x86-64-windows-binary.msi"
+          Write-Host "downloading $url"
+
+          # curl.exe rather than Invoke-WebRequest, and this is not a
+          # preference.  SourceForge decides what to serve from the user
+          # agent: a browser-shaped one gets the "your download will start
+          # shortly" HTML interstitial, and PowerShell's is browser-shaped.
+          # The HTML lands in sbcl.msi, and msiexec then reports 1620 —
+          # ERROR_INSTALL_PACKAGE_INVALID — which says nothing whatsoever
+          # about a download having gone wrong.  curl.exe ships in
+          # System32 on every supported Windows and gets the file.
+          curl.exe -fsSL --retry 3 --retry-delay 5 -o sbcl.msi $url
+          if ($LASTEXITCODE -ne 0) { throw "download failed: curl exit $LASTEXITCODE" }
+
+          # And prove it is a package before handing it to msiexec, so that
+          # the next time a download silently turns into a web page the
+          # error names that rather than an installer error code.  An MSI is
+          # an OLE compound file: D0 CF 11 E0 A1 B1 1A E1.
+          $msi = (Get-Item sbcl.msi).FullName
+          $len = (Get-Item $msi).Length
+          if ($len -lt 5MB) { throw "sbcl.msi is $len bytes — not a package" }
+          # .FullName, because .NET's idea of the current directory is not
+          # PowerShell's and a relative path here reads from the wrong place.
+          $head = [System.IO.File]::ReadAllBytes($msi)[0..7]
+          $hex = ($head | ForEach-Object { $_.ToString('X2') }) -join ''
+          if ($hex -ne 'D0CF11E0A1B11AE1') {
+            Write-Host "--- first bytes of what was downloaded ---"
+            Get-Content sbcl.msi -TotalCount 5 -ErrorAction SilentlyContinue
+            throw "sbcl.msi is not an MSI (starts $hex, $len bytes)"
+          }
+          Write-Host "sbcl.msi ok ($len bytes)"
+
+          $p = Start-Process msiexec.exe -Wait -PassThru `
+                 -ArgumentList '/i', 'sbcl.msi', '/qn', '/norestart', '/l*v', 'msi.log'
+          if ($p.ExitCode -ne 0) {
+            if (Test-Path msi.log) { Get-Content msi.log -Tail 40 }
+            throw "msiexec failed: $($p.ExitCode)"
+          }
+          # The known path first, a search only as a fallback.  The MSI has
+          # moved its install directory before, and a hardcoded path fails
+          # three steps later as a confusing "sbcl is not recognized" — but
+          # recursing the whole of Program Files on a runner this full of
+          # software costs minutes, so it is the second thing tried and not
+          # the first.
+          $roots = @("$env:ProgramFiles\Steel Bank Common Lisp",
+                     "${env:ProgramFiles(x86)}\Steel Bank Common Lisp")
+          $exe = $roots | Where-Object { Test-Path "$_\sbcl.exe" } |
+                 ForEach-Object { Get-Item "$_\sbcl.exe" } | Select-Object -First 1
+          if (-not $exe) {
+            Write-Host "not in the usual place; searching"
+            $exe = Get-ChildItem -Path "$env:ProgramFiles", "${env:ProgramFiles(x86)}" `
+                     -Filter sbcl.exe -Recurse -ErrorAction SilentlyContinue |
+                   Select-Object -First 1
+          }
+          if (-not $exe) { throw "sbcl.exe not found after install" }
+          $dir = $exe.Directory.FullName
+          Write-Host "sbcl at $dir"
+          Add-Content $env:GITHUB_PATH $dir
+          # SBCL_HOME must name the directory holding sbcl.core.  The MSI
+          # normally puts it beside the exe; if not, look under the same
+          # root rather than across the whole disk.
+          $core = Get-ChildItem -Path $dir -Filter sbcl.core -Recurse `
+                    -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($core) {
+            Add-Content $env:GITHUB_ENV "SBCL_HOME=$($core.Directory.FullName)"
+            Write-Host "SBCL_HOME=$($core.Directory.FullName)"
+          }
+
+      - name: Check SBCL
+        run: sbcl --version
+
+      - name: Fetch GLFW
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = $env:GLFW_WINDOWS_VERSION
+          $url = "https://github.com/glfw/glfw/releases/download/$v/glfw-$v.bin.WIN64.zip"
+          Write-Host "downloading $url"
+          # curl.exe and a magic-byte check for the same reason as the SBCL
+          # step above.  GitHub does not sniff user agents the way
+          # SourceForge does, so this one is insurance rather than a fix —
+          # but a redirect to a login or error page is exactly the failure
+          # that is cheapest to catch here and most confusing three steps
+          # later.  PK\x03\x04 is a zip.
+          curl.exe -fsSL --retry 3 --retry-delay 5 -o glfw.zip $url
+          if ($LASTEXITCODE -ne 0) { throw "download failed: curl exit $LASTEXITCODE" }
+          $head = [System.IO.File]::ReadAllBytes((Get-Item glfw.zip).FullName)[0..3]
+          $hex = ($head | ForEach-Object { $_.ToString('X2') }) -join ''
+          if ($hex -ne '504B0304') { throw "glfw.zip is not a zip (starts $hex)" }
+          Expand-Archive glfw.zip -DestinationPath glfw-bin -Force
+          # lib-static-ucrt: the C runtime is linked into the DLL, so the
+          # zip we ship depends on nothing a user might not have.  The
+          # vc20xx builds would add a Visual C++ redistributable to the
+          # list of things that can be missing on someone else's machine.
+          $dll = "glfw-bin/glfw-$v.bin.WIN64/lib-static-ucrt/glfw3.dll"
+          if (-not (Test-Path $dll)) { throw "glfw3.dll not at $dll" }
+          Copy-Item $dll glfw3.dll
+          Get-Item glfw3.dll | Format-List Name, Length
+
+      - name: Cache Quicklisp
+        id: ql-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/quicklisp
+          key: quicklisp-release-windows-v1
+
+      # Unconditional, for the reason spelled out in the Linux job: the
+      # init file ~/.sbclrc is not inside the cached directory, so a cache
+      # hit would restore Quicklisp and leave SBCL unable to find it.
+      - name: Install Quicklisp
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Join-Path $HOME 'quicklisp\setup.lisp'
+          if (-not (Test-Path $setup)) {
+            curl.exe -fsSL --retry 3 --retry-delay 5 `
+              -o quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+            if ($LASTEXITCODE -ne 0) { throw "download failed: curl exit $LASTEXITCODE" }
+            # Same principle as the two downloads above: check that what
+            # arrived is the thing, not a page apologising for its absence.
+            if (-not (Select-String -Path quicklisp.lisp -Pattern 'quicklisp-quickstart' -Quiet)) {
+              throw "quicklisp.lisp does not look like Quicklisp"
+            }
+            sbcl --non-interactive --load quicklisp.lisp `
+                 --eval '(quicklisp-quickstart:install)'
+          }
+          $init = Join-Path $HOME '.sbclrc'
+          if (-not (Test-Path $init) -or
+              -not (Select-String -Path $init -Pattern 'quicklisp/setup.lisp' -SimpleMatch -Quiet)) {
+            Add-Content $init '(load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))'
+          }
+          sbcl --non-interactive `
+            --eval '(format t "~&quicklisp dist ~a~%" (ql:dist-version "quicklisp"))'
+
+      - name: Save the binary
+        env:
+          ANTSIM_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # cl-glfw3 opens glfw3.dll when it is *loaded*, so the DLL has to
+          # be findable during the build and not only at run time.  The
+          # working directory is on the loader's search path; putting it on
+          # PATH as well costs nothing and removes the question.
+          $env:PATH = "$PWD;$env:PATH"
+          sbcl --dynamic-space-size $env:SHIP_HEAP --script scripts/build-binary.lisp out/antsim.exe
+          if (-not (Test-Path out/antsim.exe)) { throw "no out/antsim.exe" }
+
+      - name: Smoke-test the binary
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./out/antsim.exe --version
+          ./out/antsim.exe --help | Out-Null
+          # --list finds the scenarios beside the executable, so copy the
+          # DLL and the folder into place first: this is the shipped layout
+          # and testing anything else tests nothing.
+          New-Item -ItemType Directory -Force -Path out/scenarios | Out-Null
+          Copy-Item scenarios/*.json out/scenarios/
+          Copy-Item glfw3.dll out/
+          Push-Location out
+          ./antsim.exe --list
+          Pop-Location
+
+      - name: Build the zip
+        run: |
+          pwsh packaging/build-windows-zip.ps1 `
+            -Version '${{ needs.version.outputs.version }}' `
+            -Binary out/antsim.exe -GlfwDll glfw3.dll
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: [version, linux, windows]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # the only thing this workflow may write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect and checksum
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find artifacts -type f \( -name '*.AppImage' -o -name '*.zip' \) \
+            -exec mv {} dist/ \;
+          cd dist
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      # gh rather than a third-party action: it is on the runner already,
+      # it uses the token this job was granted rather than one more thing
+      # with access to the repository, and there is nothing here it does
+      # badly.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          # A quoted heredoc, so the backticks stay backticks and nothing in
+          # the prose can be mistaken for shell.  The block scalar above has
+          # already removed this file's own indentation, so what reaches the
+          # shell starts at column zero and the four-space indent below is
+          # the one markdown will read as a code block — which is the point.
+          cat > notes.raw <<'EOF'
+          Standalone builds. Neither needs SBCL, Quicklisp, or a checkout.
+
+          **Linux** — `antsim-VERSION-x86_64.AppImage`. `chmod +x` it and run it.
+          Built on Ubuntu 22.04, so it runs on 22.04 and anything later. GLFW is
+          bundled; OpenGL comes from your own graphics driver.
+
+          **Windows** — `antsim-VERSION-windows-x86_64.zip`. Unpack it and run
+          `antsim.exe`, keeping the folder together.
+
+          Both want a driver with OpenGL 4.5, which is any GPU driver of the last
+          decade.
+
+              antsim --help     the options, and the keys the window responds to
+              antsim --list     the scenarios in the package
+              antsim goss-double-bridge
+
+          Check a download against `SHA256SUMS`.
+          EOF
+          sed "s/VERSION/$VERSION/g" notes.raw > notes.md
+          cat notes.md
+
+          flags=(--title "antsim $VERSION" --notes-file notes.md --generate-notes)
+          [ "$PRERELEASE" = true ] && flags+=(--prerelease)
+
+          gh release create "$TAG" "${flags[@]}" dist/*

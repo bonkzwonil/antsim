@@ -109,9 +109,36 @@ vertex for vertex, and that the binary bridge's arms are equal to the last
 float — otherwise the published result and the thing you can look at would be
 two different experiments with the same name.
 
+## Getting it
+
+Standalone builds are attached to each
+[release](https://github.com/bonkzwonil/antsim/releases). Neither needs SBCL,
+Quicklisp, or a checkout.
+
+```sh
+chmod +x antsim-*-x86_64.AppImage
+./antsim-*-x86_64.AppImage                       # the demo
+./antsim-*-x86_64.AppImage --list                # what else is in there
+./antsim-*-x86_64.AppImage goss-double-bridge
+./antsim-*-x86_64.AppImage --help                # options, and the window's keys
+```
+
+On Windows, unpack the zip and run `antsim.exe` — keeping the folder together,
+because the program looks for its scenarios beside the executable and Windows
+looks for `glfw3.dll` there too.
+
+Both want a graphics driver providing OpenGL 4.5, which is any GPU driver of
+the last decade. The Linux build is made on Ubuntu 22.04 and so runs on 22.04
+and anything newer; GLFW is bundled, and OpenGL deliberately is not — it
+belongs to your driver, and shipping a second one is the failure
+[§5.4](docs/concept.md#54-headless-and-the-libgl-trap) is about.
+
+How the packages are built, and the things about a saved Lisp image that do not
+survive being moved to another machine: [docs/shipping.md](docs/shipping.md).
+
 ## Running it
 
-Needs SBCL and Quicklisp. The Makefile points `CL_SOURCE_REGISTRY` at the
+From source. Needs SBCL and Quicklisp. The Makefile points `CL_SOURCE_REGISTRY` at the
 checkout, so a clone builds where it stands with no setup. GPU targets wrap the
 command in a `guix shell`; see
 [§4.6](docs/concept.md#46-building-and-running) for why, and for what to do when
@@ -124,6 +151,9 @@ make live              # the interactive window
 make gallery           # regenerate the documentation's images
 make test-render       # renderer suite, on the GPU
 make test-render-mesa  # the same suite in software — no GPU needed
+make test-app          # the shipped binary's command line
+make binary            # out/antsim, a standalone executable
+make appimage          # dist/antsim-<version>-x86_64.AppImage
 
 SCENARIO=scenarios/foraging.json make live
 SEED=12345 make live   # repeat an exact run
@@ -192,6 +222,10 @@ and a result are different things.
   right tools for this, argued against the code rather than in the abstract.
 - **[docs/config.md](docs/config.md)** — every switch, its default, and where to
   set it.
+- **[docs/shipping.md](docs/shipping.md)** — how a release is built, what is
+  bundled and what is deliberately left to the user's machine, and the three
+  opinions a saved SBCL image holds about its build machine that do not survive
+  being moved to another one.
 
 Three entry points into it:
 [§3.3 the choice function](docs/concept.md#33-pheromones--the-field-and-the-nonlinearity-that-matters), which is the whole model
