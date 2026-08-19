@@ -137,6 +137,12 @@ and anything newer; GLFW is bundled, and OpenGL deliberately is not — it
 belongs to your driver, and shipping a second one is the failure
 [§5.4](docs/concept.md#54-headless-and-the-libgl-trap) is about.
 
+There is no macOS build. macOS caps OpenGL at 4.1 — frozen in 2018, deprecated
+since — which is well below what the renderer's shaders and buffers need, so
+this is a [renderer port](docs/concept.md#7-milestones) waiting to happen
+rather than a missing CI job.
+[docs/shipping.md](docs/shipping.md#why-there-is-no-macos-build) has the count.
+
 How the packages are built, and the things about a saved Lisp image that do not
 survive being moved to another machine: [docs/shipping.md](docs/shipping.md).
 
