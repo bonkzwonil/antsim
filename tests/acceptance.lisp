@@ -198,18 +198,18 @@ arena at all, and counting them measures how long a random walk takes to
 stumble on a pile rather than what the trails then did with it."
   (let* ((qa (if rich-left 1.0f0 0.4f0))
          (qb (if rich-left 0.4f0 1.0f0))
-         (tr (make-two-source-world :seed seed :quality-a qa :quality-b qb)))
-    (choice-run! tr warm)
-    (choice-reset-counts! tr)
-    (choice-run! tr ticks)
-    (let ((sh (choice-shares tr)))
+         (tr (ant:make-two-source-world :seed seed :quality-a qa :quality-b qb)))
+    (ant:choice-run! tr warm)
+    (ant:choice-reset-counts! tr)
+    (ant:choice-run! tr ticks)
+    (let ((sh (ant:choice-shares tr)))
       (when sh (if rich-left (first sh) (second sh))))))
 
 (test the-richer-of-two-equal-sources-wins
   "Beckers et al. 1993: at equal distance a colony selects the richer
 source, because deposition is quality-modulated and nothing else differs.
 
-Poor here is 0.4 — above *trail-quality-threshold*, deliberately.  Both
+Poor here is 0.4 — above ant:*trail-quality-threshold*, deliberately.  Both
 sources are recruited to; the claim is about the *ratio*, not about one of
 them being switched off, and setting the poor one below the threshold
 would be testing the row below instead of this one.
@@ -246,7 +246,7 @@ concentration threshold a forager feeds from a source and walks home
 *without laying*.  A colony that refused to eat it would pass half of
 this row while modelling something else entirely.
 
-The threshold is a switch rather than a taper (*trail-quality-threshold*)
+The threshold is a switch rather than a taper (ant:*trail-quality-threshold*)
 and the measurement is correspondingly sharp.  Over three seeds, 15
 simulated minutes each:
 
@@ -262,27 +262,261 @@ Note what happens across the step: not only does a field appear, the
 visit count triples.  That is the recruitment the poor source is being
 denied, and it is why the row is worth having as an experiment rather
 than as a unit test on the deposit rule."
-  (let ((poor (* 0.5f0 *trail-quality-threshold*))
-        (rich (min 1.0f0 (* 2.0f0 *trail-quality-threshold*))))
+  (let ((poor (* 0.5f0 ant:*trail-quality-threshold*))
+        (rich (min 1.0f0 (* 2.0f0 ant:*trail-quality-threshold*))))
     (dolist (seed '(1 2))
       ;; below the threshold: eaten, and no trail anywhere in the arena
-      (let* ((tr (make-poor-source-world :seed seed :quality poor))
-             (f (first (choice-trial-foods tr)))
-             (c (choice-trial-colony tr)))
-        (choice-run! tr 18000)
-        (is (> (- (food-initial f) (food-amount f)) 100.0d0)
+      (let* ((tr (ant:make-poor-source-world :seed seed :quality poor))
+             (f (first (ant:choice-trial-foods tr)))
+             (c (ant:choice-trial-colony tr)))
+        (ant:choice-run! tr 18000)
+        (is (> (- (ant:food-initial f) (ant:food-amount f)) 100.0d0)
             "seed ~d: only ~,1f units were taken from a source of quality ~
 ~,2f, so the colony is not exploiting it and the second half of this row ~
-is vacuous" seed (- (food-initial f) (food-amount f)) poor)
-        (is (= 0.0d0 (field-total (colony-field c)))
+is vacuous" seed (- (ant:food-initial f) (ant:food-amount f)) poor)
+        (is (= 0.0d0 (ant:field-total (ant:colony-field c)))
             "seed ~d: a source of quality ~,2f, below the ~,2f threshold, ~
 was recruited to — the field holds ~,1f" seed poor
-            *trail-quality-threshold* (field-total (colony-field c))))
+            ant:*trail-quality-threshold* (ant:field-total (ant:colony-field c))))
       ;; above it: the same apparatus, and now there is a trail
-      (let* ((tr (make-poor-source-world :seed seed :quality rich))
-             (c (choice-trial-colony tr)))
-        (choice-run! tr 18000)
-        (is (> (field-total (colony-field c)) 0.0d0)
+      (let* ((tr (ant:make-poor-source-world :seed seed :quality rich))
+             (c (ant:choice-trial-colony tr)))
+        (ant:choice-run! tr 18000)
+        (is (> (ant:field-total (ant:colony-field c)) 0.0d0)
             "seed ~d: quality ~,2f is above the ~,2f threshold and still ~
 laid nothing, so the row above is passing for the wrong reason"
-            seed rich *trail-quality-threshold*)))))
+            seed rich ant:*trail-quality-threshold*)))))
+
+;;; --------------------------------------------------------------------
+;;; Task reallocation (§3.8)
+;;; --------------------------------------------------------------------
+
+(test the-nest-pool-replaces-lost-foragers
+  "Remove half the foragers and the colony puts the same *share* of itself
+back out of doors, with nothing anywhere counting foragers.
+
+A share and not a count, and the distinction is the whole test.  A count
+recovers if the colony merely breeds — which it is doing throughout —
+so a count would pass on growth alone and say nothing about allocation.
+The share can only come back if ants that were in the nest go out.
+
+There is no controller to find.  Departure is a per-ant probability
+(COLONY-LEAVE-PROBABILITY) read against a colony-wide stimulus, and the
+recovery is what that equilibrium does when half its output is removed.
+
+Measured over three seeds: 0.844 0.863 0.880 of the colony out of doors
+before the cull, 0.731 0.759 0.786 immediately after, and back to 1.00
+1.02 0.97 of the pre-cull share inside ten simulated minutes — the first
+sample, 75 seconds later, is already there.  Harvest over the recovery is
+within 3% of the ten minutes before it.
+
+Note what is *not* required: response thresholds are off by default
+(*response-threshold-lo*) and this row passes without them.  They are a
+graded reserve, and a colony this well fed never draws on one — see the
+parameter for the measurement."
+  (dolist (seed '(1 2 3))
+    (let* ((w (ant:make-world :width 0.6f0 :height 0.5f0 :capacity 6000
+                          :seed seed))
+           (c (ant:add-colony w :name "home" :nest-x 0.30f0 :nest-y 0.06f0
+                            :nest-r 0.02f0 :capacity 4000 :stock 400.0f0)))
+      (ant:add-food w 0.30f0 0.38f0 0.030f0 500000.0f0 :quality 1.0f0)
+      (ant:world-seed-population! w c 400)
+      (ant:world-run! w 12000)
+      (flet ((share ()
+               (let ((p (ant:colony-population c)))
+                 (if (plusp p)
+                     (/ (float (ant:count-foragers w c) 1.0f0) p)
+                     0.0f0))))
+        (let* ((before (share))
+               (killed (ant:cull-foragers! w c 0.5f0))
+               (after (share)))
+          (is (plusp killed)
+              "seed ~d: nothing was culled, so the row is vacuous" seed)
+          (is (< after (* 0.95f0 before))
+              "seed ~d: culling half the foragers moved the share from ~
+~,3f only to ~,3f, so the shock is too small to recover from"
+              seed before after)
+          (ant:world-run! w 12000)
+          (let ((back (share)))
+            (is (>= back (* 0.90f0 before))
+                "seed ~d: the share out of doors was ~,3f before the cull ~
+and only ~,3f ten minutes after it — the nest pool did not convert"
+                seed before back)))))))
+
+;;; --------------------------------------------------------------------
+;;; Competition, and ε (§3.8, §3.12)
+;;; --------------------------------------------------------------------
+
+(test the-nearer-colony-wins-a-contested-source
+  "Two colonies, one pile, one of them closer to it (§3.12).
+
+Nothing tells an ant a rival exists.  The colonies interact through two
+channels and both predate this row: separate fields read through ε
+(SENSE-AT), and recognition by colony id at the antennae, so a stranger
+is avoided harder, never fed and never believed.  The near colony's
+advantage is that its round trip is shorter — the same asymmetry the
+double bridge runs on, moved from two arms of one colony to two colonies
+on one arm.
+
+Asserted on harvest and not on stock: stock is a *balance* that nets out
+upkeep, brood and meals handed out, so two colonies with equal stock may
+have foraged very differently.  COLONY-HARVESTED counts gross crop
+through the nest door.
+
+Measured over six seeds: 0.566 0.644 0.640 0.555 0.534 0.566, so the near
+colony took it every time, mean 0.584."
+  (let ((shares '()))
+    (dolist (seed '(1 2 3 4 5 6))
+      (let ((cm (ant:make-competition-world :seed seed)))
+        (ant:competition-run! cm 24000)
+        (let ((s (ant:competition-share cm)))
+          (is-true s "seed ~d: neither colony carried anything home" seed)
+          (when s (push s shares)))))
+    (let* ((shares (nreverse shares))
+           (mean (/ (reduce #'+ shares) (length shares)))
+           (wins (count-if (lambda (x) (> x 0.5f0)) shares)))
+      (is (>= mean 0.54f0)
+          "the near colony averaged only ~,3f of the harvest across ~d ~
+replicates: ~{~,3f~^ ~}" mean (length shares) shares)
+      (is (>= wins (- (length shares) 1))
+          "the near colony won only ~d of ~d: ~{~,3f~^ ~}"
+          wins (length shares) shares))))
+
+(test eavesdropping-costs-both-colonies
+  "Raising ε degrades both colonies (§3.12) — and the measurement is worth
+reading before the assertion, because the obvious way to state this row is
+wrong.
+
+The apparatus is MAKE-CROSSING-WORLD: nests at two corners, each colony's
+source at the corner diagonally opposite its own, so the routes form an X
+and the fields overlap along their whole length.  **Neither colony is
+competing for anything** — each has its own pile — so whatever ε does
+here is ε acting on trails and not two colonies fighting over lunch.
+
+Measured, four seeds, twenty simulated minutes:
+
+    eps   conc    route   harvest sw   harvest se
+   0.00   0.4955  0.3570        3012.        3017.
+   0.10   0.5019  0.3846        3032.        2948.
+   0.30   0.4658  0.3954        3044.        2995.
+   0.60   0.5269  0.3563        2902.        2848.
+   1.00   0.6014  0.3266        2828.        2764.
+
+`conc` is how *thin* each colony's field is and it goes the wrong way —
+**up**, from 0.496 to 0.601.  That is not a defect: two colonies reading
+each other's marks converge on one shared road network, and one shared
+network is thinner than two separate ones.  It also leads half of each
+colony toward the other's food, which is why harvest falls at the same
+time.
+
+So fidelity for this row has to mean *correctness*, not thinness:
+COLONY-ROUTE-FIDELITY, the share of a colony's pheromone lying on the way
+to its own source.  Note that a *little* eavesdropping helps — route
+fidelity peaks at ε = 0.3 — which is a result worth having and an
+argument for the shipped ε being small rather than zero.
+
+The effect is real and it is not large.  Asserted between the ends of the
+range only, on means over seeds, in the manner of the bridge rows."
+  (flet ((sweep (eps)
+           (let ((ant:*choice-eavesdrop* eps)
+                 (harvest 0.0d0) (route 0.0f0) (k 0))
+             (dolist (seed '(1 2 3))
+               (let* ((cm (ant:make-crossing-world :seed seed))
+                      (world (ant:competition-world cm))
+                      (near (ant:competition-near cm))
+                      (far (ant:competition-far cm))
+                      (fa (ant:competition-food cm))
+                      (fb (find fa (ant:world-foods world) :test-not #'eq)))
+                 (ant:competition-run! cm 24000)
+                 (let ((ra (ant:colony-route-fidelity near (ant:food-x fa) (ant:food-y fa)))
+                       (rb (ant:colony-route-fidelity far (ant:food-x fb) (ant:food-y fb))))
+                   (when (and ra rb)
+                     (incf harvest (+ (float (ant:colony-harvested near) 1.0d0)
+                                      (float (ant:colony-harvested far) 1.0d0)))
+                     (incf route (* 0.5f0 (+ ra rb)))
+                     (incf k)))))
+             (when (plusp k)
+               (values (/ harvest k) (/ route k))))))
+    (multiple-value-bind (h0 r0) (sweep 0.0f0)
+      (multiple-value-bind (h1 r1) (sweep 1.0f0)
+        (is-true (and h0 h1) "no colony laid a trail at all")
+        (when (and h0 h1)
+          (is (< h1 h0)
+              "ε = 1 carried ~,0f home against ~,0f at ε = 0, so ~
+eavesdropping cost these colonies nothing" h1 h0)
+          (is (< r1 r0)
+              "ε = 1 left ~,4f of each colony's trail on its own route ~
+against ~,4f at ε = 0 — the trails did not blur" r1 r0))))))
+
+;;; --------------------------------------------------------------------
+;;; Necrophoresis (§3.9)
+;;; --------------------------------------------------------------------
+
+(test scattered-corpses-are-gathered-and-the-nest-is-cleared
+  "Deneubourg's collective sorting, and the nest cleared as a consequence
+of it (§3.9).
+
+Corpses are seeded directly rather than waited for, exactly as the
+published experiment scatters items rather than breeding them: this row is
+about the sorting rule, and letting a colony starve first would measure
+its demography instead.
+
+**The control is not 'nothing happens'.**  Ant traffic bulldozes corpses
+whether or not anyone is carrying them, and that alone moves half of them
+off the nest — so a run without the behaviour is the only honest
+baseline.  Measured, 300 corpses, twenty simulated minutes, two seeds:
+
+    necrophoresis   clump before -> after   within 6 cm of nest
+        off             5.83  ->   6.18          24  ->  12
+        off             5.28  ->   5.67          20  ->  10
+        on              5.83  ->  11.43          24  ->   0
+        on              5.28  ->  10.96          20  ->   1
+
+Clumping roughly doubles where the traffic alone barely moves it, and the
+nest goes to nothing rather than to half.  No ant knows where a midden is
+or that one exists — a corpse is more likely to be put down where corpses
+already lie, and that is the whole of it."
+  (dolist (seed '(1 2))
+    (flet ((run-trial (on)
+             (let* ((ant:*necrophoresis* on)
+                    (w (ant:make-world :width 0.5f0 :height 0.5f0
+                                       :capacity 9000 :seed seed))
+                    (c (ant:add-colony w :name "home"
+                                         :nest-x 0.25f0 :nest-y 0.25f0
+                                         :nest-r 0.02f0 :capacity 4000
+                                         :stock 3000.0f0))
+                    (b (ant:world-bodies w)))
+               (ant:add-food w 0.25f0 0.44f0 0.025f0 500000.0f0)
+               (ant:world-seed-population! w c 350)
+               (dotimes (k 300)
+                 (ant:bodies-alloc b
+                                   (+ 0.06f0 (* 0.38f0 (ant:rnd01 k 0 901 seed)))
+                                   (+ 0.06f0 (* 0.38f0 (ant:rnd01 k 0 902 seed)))
+                                   ant:*ant-radius* ant:+body-corpse+))
+               (ant:world-run! w 24000)
+               (let ((pts '()) (near 0) (clump 0))
+                 (dotimes (i (ant:bodies-n b))
+                   (when (= (aref (ant:bodies-kind b) i) ant:+body-corpse+)
+                     (push (cons (aref (ant:bodies-x b) i)
+                                 (aref (ant:bodies-y b) i))
+                           pts)))
+                 (dolist (p pts)
+                   (let ((dx (- (car p) 0.25f0)) (dy (- (cdr p) 0.25f0)))
+                     (when (< (+ (* dx dx) (* dy dy)) (* 0.06f0 0.06f0))
+                       (incf near)))
+                   (dolist (q pts)
+                     (unless (eq p q)
+                       (let ((dx (- (car p) (car q))) (dy (- (cdr p) (cdr q))))
+                         (when (< (+ (* dx dx) (* dy dy)) (* 0.03f0 0.03f0))
+                           (incf clump))))))
+                 (values (if pts (/ (float clump 1.0f0) (length pts)) 0.0f0)
+                         near)))))
+      (multiple-value-bind (clump-off near-off) (run-trial nil)
+        (multiple-value-bind (clump-on near-on) (run-trial t)
+          (is (> clump-on (* 1.5f0 clump-off))
+              "seed ~d: corpses clumped to ~,2f with the behaviour and ~
+~,2f without it, which is not a sorting result — the traffic alone does ~
+that much" seed clump-on clump-off)
+          (is (< near-on (* 0.5f0 near-off))
+              "seed ~d: ~d corpses were still within 6 cm of the nest, ~
+against ~d with the behaviour off" seed near-on near-off))))))

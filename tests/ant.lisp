@@ -1449,3 +1449,116 @@ them.  A stranger does not count: it is not a nestmate contact."
         "a nestmate contact went uncounted")
     (is (zerop (aref (ant:ants-met a) 2))
         "a stranger was counted as a nestmate contact")))
+
+;;; ------------------------------------------------- necrophoresis (M4)
+;;;
+;;; The sorting result itself is an acceptance row — it needs a colony and
+;;; twenty simulated minutes.  These are the properties the row would sit
+;;; on top of, and they are the ones a regression would break silently.
+
+(defun %corpse-at (w x y)
+  "Drop a corpse body at (X, Y) and return its index."
+  (ant:bodies-alloc (ant:world-bodies w) (float x 1.0f0) (float y 1.0f0)
+                    ant:*ant-radius* ant:+body-corpse+))
+
+(test a-carried-corpse-is-out-of-the-collision-pass
+  "A corpse being held is not a corpse in the way.  Left in the solver it
+would be shoved off the ant carrying it every tick, and the two would
+fight over its position for as long as the carry lasted."
+  (let* ((w (%meet-world :n 2))
+         (b (ant:world-bodies w))
+         (j (%corpse-at w 0.5f0 0.5f0)))
+    (%place! w 0 0.5f0 0.5f0 0.0f0 ant:+ant-outbound+)
+    (ant:bodies-set-carried! b j t)
+    (is-true (ant:bodies-carried-p b j))
+    ;; exactly coincident with an ant, which without the flag is the
+    ;; deepest overlap the solver can be handed
+    (let ((x0 (aref (ant:bodies-x b) j))
+          (y0 (aref (ant:bodies-y b) j)))
+      (ant:bodies-resolve! b (ant:world-obstacles w))
+      (is (= x0 (aref (ant:bodies-x b) j))
+          "a carried corpse was moved by the collision pass: ~,5f -> ~,5f"
+          x0 (aref (ant:bodies-x b) j))
+      (is (= y0 (aref (ant:bodies-y b) j))
+          "a carried corpse was moved by the collision pass: ~,5f -> ~,5f"
+          y0 (aref (ant:bodies-y b) j)))
+    ;; and put down again it blocks exactly as before
+    (ant:bodies-set-carried! b j nil)
+    (is-false (ant:bodies-carried-p b j))))
+
+(test an-undertaker-that-dies-drops-what-it-was-carrying
+  "A corpse still flagged carried by an ant that no longer exists would be
+inert for the rest of the run — invisible to the collision pass, and never
+picked up again, because a carried corpse is not a candidate."
+  (let* ((w (%meet-world :n 2))
+         (b (ant:world-bodies w))
+         (a (ant:world-ants w))
+         (c (first (ant:world-colonies w)))
+         (j (%corpse-at w 0.5f0 0.5f0)))
+    (%place! w 0 0.5f0 0.5f0 0.0f0 ant:+ant-outbound+)
+    (setf (aref (ant:ants-corpse a) 0) j)
+    (ant:bodies-set-carried! b j t)
+    (ant:kill-ant w c 0)
+    (is-false (ant:bodies-carried-p b j)
+              "the corpse is still flagged carried by a dead ant")
+    (is (= ant:+body-corpse+ (aref (ant:bodies-kind b) j))
+        "the dropped corpse stopped being a corpse")))
+
+(test a-corpse-is-never-put-down-in-the-nest
+  "The one rule here that is not Deneubourg's.  His two probabilities are
+direction-blind — they would build a midden across the nest entrance quite
+happily — and carrying refuse *away* is what makes this necrophoresis
+rather than sorting."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 64))
+         (c (ant:add-colony w :name "home" :nest-x 0.5f0 :nest-y 0.5f0
+                              :stock 1.0f6))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w)))
+    (ant:world-seed-population! w c 1)
+    ;; a big pile of corpses right on the nest: the drop probability is
+    ;; as high as the density rule can make it
+    (dotimes (k 12)
+      (%corpse-at w (+ 0.5f0 (* 0.002f0 k)) 0.5f0))
+    (let ((held (%corpse-at w 0.5f0 0.5f0)))
+      (%place! w 0 0.5f0 0.5f0 0.0f0 ant:+ant-outbound+)
+      (setf (aref (ant:ants-corpse a) 0) held)
+      (ant:bodies-set-carried! b held t)
+      (dotimes (k 400)
+        (ant:bodies-rebuild-hash! b)
+        (ant:ant-undertaker-step! w))
+      (is-true (ant:bodies-carried-p b held)
+               "a corpse was put down on the nest itself, where the drop ~
+probability is at its highest and the rule says never"))))
+
+(test necrophoresis-off-means-no-corpse-is-touched
+  "The switch has to be a switch.  Every mechanism in this project that
+was measured against its own absence needed one, and a mechanism whose
+'off' still moves things cannot be measured at all."
+  (let* ((ant:*necrophoresis* nil)
+         (w (%meet-world :n 4))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w)))
+    (dotimes (k 4)
+      (%place! w k (+ 0.40f0 (* 0.001f0 k)) 0.40f0 0.0f0 ant:+ant-outbound+)
+      (%corpse-at w (+ 0.40f0 (* 0.001f0 k)) 0.40f0))
+    (dotimes (k 200)
+      (ant:bodies-rebuild-hash! b)
+      (ant:ant-undertaker-step! w))
+    (dotimes (k 4)
+      (is (= ant:+no-body+ (aref (ant:ants-corpse a) k))
+          "ant ~d picked a corpse up with the behaviour switched off" k))))
+
+(test an-ant-with-a-full-crop-does-not-stop-to-undertake
+  "Its mandibles are full.  Without this a returning forager drops its
+load's worth of trail while hauling a corpse instead, which is a
+recruitment signal laid by an ant that is not recruiting to anything."
+  (let* ((w (%meet-world :n 2))
+         (a (ant:world-ants w))
+         (b (ant:world-bodies w)))
+    (%place! w 0 0.40f0 0.40f0 0.0f0 ant:+ant-returning+ :crop 1.0f0)
+    (%corpse-at w 0.40f0 0.40f0)
+    (dotimes (k 200)
+      (ant:bodies-rebuild-hash! b)
+      (ant:ant-undertaker-step! w))
+    (is (= ant:+no-body+ (aref (ant:ants-corpse a) 0))
+        "a laden forager picked up a corpse")))

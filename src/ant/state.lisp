@@ -181,8 +181,20 @@
   ;; MIN over donor ids is commutative and associative, so the answer is
   ;; the same however the sweep is split (§4.4, §4.5).
   (fed-by nil :type (or null u32v))
+  ;; The corpse this ant is carrying, as a body index, or +NO-BODY+.
+  ;; Necrophoresis (§3.9, M4): the corpse keeps its body — it is still
+  ;; drawn, and an ant hauling one is the whole point of the behaviour —
+  ;; but that body is marked carried and drops out of the collision pass,
+  ;; because a corpse being held is not a corpse in the way.
+  (corpse nil :type (or null u32v))
   (free nil :type (or null fixv))
   (nfree 0 :type fixnum))
+
+(defconstant +no-body+ #xFFFFFFFF
+  "No body — an ant carrying no corpse.  The same bit pattern as +NO-ANT+
+and deliberately a separate name: one of them indexes the ant table and
+the other the body table, and a sentinel that is silently both is a
+sentinel that will one day be used against the wrong array.")
 
 (defconstant +no-ant+ #xFFFFFFFF
   "OF-BODY entry for a body that is not a live ant — food, a nest
@@ -202,6 +214,7 @@ size them alike."
               :partner (mku32 capacity +no-ant+)
               :partner-ttl (mku16 capacity) :partner-gave (mku8 capacity)
               :fed-by (mku32 capacity +no-ant+)
+              :corpse (mku32 capacity +no-body+)
               :id (mku32 capacity) :body (mku32 capacity)
               :colony (mku8 capacity) :state (mku8 capacity +ant-dead+)
               :heading (mkf32 capacity) :crop (mkf32 capacity)

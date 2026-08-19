@@ -49,6 +49,14 @@ individual, and a value re-rolled every tick would be noise on the step
 rather than a trait.  The model already has noise on the step, in the
 heading, where it belongs.")
 
+(defconstant +stream-undertake+ 11
+  "The pickup and drop coin flips of necrophoresis.
+
+Its own stream, like everything else that draws per tick, so that adding
+the behaviour does not shift the numbers any other decision would have
+drawn — a shared stream would make turning corpse-carrying on change
+where every ant walked, and no measurement could then be attributed.")
+
 (defconstant +stream-threshold+ 10
   "This ant's bar for taking up foraging — see ANT-RESPONSE-THRESHOLD.
 
@@ -195,6 +203,14 @@ The body slot is deliberately *not* freed: nothing removes a corpse,
 because removal is a behaviour the colony does not have yet."
   (declare (type world w) (type colony c) (type fixnum i))
   (let ((a (world-ants w)))
+    ;; Whatever it was carrying goes down where it fell.  A corpse left
+    ;; flagged carried by an ant that no longer exists would be inert for
+    ;; the rest of the run: invisible to the collision pass, and never
+    ;; picked up again because a carried corpse is not a candidate.
+    (let ((held (aref (the u32v (ants-corpse a)) i)))
+      (unless (= held +no-body+)
+        (bodies-set-carried! (world-bodies w) held nil)
+        (setf (aref (the u32v (ants-corpse a)) i) +no-body+)))
     (bodies-become-corpse! (world-bodies w) (aref (ants-body a) i))
     (ants-free! a i)
     (decf (colony-population c))
@@ -223,6 +239,33 @@ every line that reads a pheromone."
             (setf own v)
             (incf foreign v))))
     (+ own (* *choice-eavesdrop* foreign))))
+
+(declaim (inline repel-factor))
+(defun repel-factor (c x y)
+  "1/(1 + w·R) — what a no-entry mark does to a direction's choice weight.
+
+One at clean ground and falling toward zero where nestmates have marked;
+never zero, because a repellent says *less attractive*, not *impossible*,
+and a colony that could make ground unwalkable could seal itself in.
+
+Applied outside the Deneubourg weight rather than inside it — see
+*repel-weight* for why (k + C − R)^n is not an option."
+  (declare (type colony c) (type f32 x y) (optimize (speed 3) (safety 0)))
+  (let ((w *repel-weight*))
+    (declare (type f32 w))
+    (if (<= w 0.0f0)
+        1.0f0
+        (/ 1.0f0 (+ 1.0f0 (* w (field-at (colony-repel c) x y)))))))
+
+(defun repel-at (w colony-id x y)
+  "The no-entry concentration this colony reads at a point.
+
+Its own colony's only, with no ε term, and that is deliberate: ε is
+eavesdropping, and eavesdropping on a rival's \"do not go here\" would
+hand every colony a free map of where its neighbours have already
+failed.  A repellent is a statement to nestmates."
+  (declare (type world w) (type fixnum colony-id) (type f32 x y))
+  (field-at (colony-repel (nth colony-id (world-colonies w))) x y))
 
 (declaim (inline blocked-factor))
 (defun blocked-factor (f x y avoid)
@@ -479,9 +522,14 @@ switch into and no switching logic to get wrong (§3.5)."
          (bl (blocked-factor fld xl yl avoid))
          (bc (blocked-factor fld xc yc avoid))
          (br (blocked-factor fld xr yr avoid))
-         (wl (* bl (choice-weight (+ k cl) n)))
-         (wc (* bc (choice-weight (+ k cc) n)))
-         (wr (* br (choice-weight (+ k cr) n)))
+         ;; The no-entry field (§3.9, M4), read at the same three points
+         ;; and applied as a divisor on the finished weight.  Costs three
+         ;; array reads when *repel-weight* is 0, which is the price of
+         ;; the mechanism being switchable without a branch per ant.
+         (colo (nth colony-id (world-colonies w)))
+         (wl (* bl (repel-factor colo xl yl) (choice-weight (+ k cl) n)))
+         (wc (* bc (repel-factor colo xc yc) (choice-weight (+ k cc) n)))
+         (wr (* br (repel-factor colo xr yr) (choice-weight (+ k cr) n)))
          ;; All three walled in — a corner.  Fall back to the unweighted
          ;; choice rather than dividing by zero; the collision pass will
          ;; get the ant out, and refusing to choose at all would freeze it.
@@ -490,7 +538,8 @@ switch into and no switching logic to get wrong (§3.5)."
                     (progn (setf wl 1.0f0 wc 1.0f0 wr 1.0f0) 3.0f0)))
          (u (* (rnd01 id tick +stream-choice+ (world-seed w)) total)))
     (declare (type f32 spread off n k hl hr cl cc cr wl wc wr total u
-                      lane lx ly xl yl xc yc xr yr))
+                      lane lx ly xl yl xc yc xr yr)
+             (type colony colo))
     ;; Second value: how strongly this ant can smell a trail at all,
     ;; as C/(k+C) of the best sensor — 0 in clean ground, approaching 1
     ;; on a saturated road.  The caller uses it to decide how *hard* to
@@ -1083,6 +1132,19 @@ switch into and no switching logic to get wrong (§3.5)."
                                  (- 1.0f0
                                     (* *encounter-resolve-gain*
                                        (aref (ants-confidence a) i)))))
+                           ;; It walked out here and found nothing, so it
+                           ;; says so on the way past (§3.9, M4).  Marked
+                           ;; at the point of giving up rather than along
+                           ;; the whole outbound leg: the leg was not
+                           ;; wasted, it was *unrewarded*, and the useful
+                           ;; statement is about the far end of it.
+                           ;;
+                           ;; A packet, like the trail's, so the mark has
+                           ;; the same spatial extent the ants that read
+                           ;; it are calibrated against.
+                           (when (plusp *repel-dead-end*)
+                             (field-deposit-packet!
+                              (colony-repel c) x2 y2 *repel-dead-end*))
                            (setf (aref (ants-state a) i)
                                  +ant-returning+))))
                    ))               ; cond H, let G
@@ -1625,6 +1687,144 @@ stops producing brood, and decays."
            (unless (spawn-ant w c) (return)))
   (values))
 
+(defun corpses-near (b hash x y radius)
+  "How many corpses lie within RADIUS of (X, Y), not counting carried ones.
+
+The f in both of Deneubourg's probabilities.  A count rather than a
+weighted sum: the published model counts items, and a falloff here would
+be a second free parameter doing the same job *midden-radius* already
+does."
+  (declare (type bodies b) (type shash hash) (type f32 x y radius)
+           (optimize (speed 3) (safety 1)))
+  (let ((kinds (bodies-kind b))
+        (carried (bodies-carried b))
+        (xs (bodies-x b)) (ys (bodies-y b))
+        (r2 (* radius radius))
+        (k 0))
+    (declare (type fixnum k) (type f32 r2))
+    (do-shash-neighbours (j hash x y radius)
+      (let ((jj (the fixnum j)))
+        (when (and (= (aref (the u8v kinds) jj) +body-corpse+)
+                   (zerop (aref (the u8v carried) jj)))
+          (let ((dx (- (aref (the f32v xs) jj) x))
+                (dy (- (aref (the f32v ys) jj) y)))
+            (declare (type f32 dx dy))
+            (when (<= (+ (* dx dx) (* dy dy)) r2) (incf k))))))
+    k))
+
+(defun ant-undertaker-step! (w)
+  "Necrophoresis: pick corpses up where they are sparse, put them down
+where they are dense, and never inside the nest (§3.9, M4).
+
+Deneubourg's collective sorting, in three passes, and the passes exist
+for determinism rather than for clarity.  Two ants can reach for the same
+corpse in one tick, and whichever of them gets it must not depend on the
+order the table happens to be walked in — so the wish is recorded first
+as a MIN over ant ids, which commutes, and only then acted on.  The same
+device the shared meal uses in ANT-ENCOUNTER-STEP!.
+
+Nothing here knows where a midden is or that one exists.  An ant asks two
+local questions — how many corpses are around this one, and am I clear of
+my own nest — and the piles are what those questions add up to."
+  (declare (type world w) (optimize (speed 3) (safety 1)))
+  (unless *necrophoresis* (return-from ant-undertaker-step! (values)))
+  (let* ((a (world-ants w))
+         (b (world-bodies w))
+         (hash (bodies-hash b))
+         (kinds (bodies-kind b))
+         (carried (bodies-carried b))
+         (claim (bodies-claim b))
+         (bxs (bodies-x b)) (bys (bodies-y b))
+         (n (ants-n a))
+         (tick (world-tick w))
+         (seed (world-seed w))
+         (colonies (coerce (world-colonies w) 'vector))
+         (range *undertaker-range*)
+         (rate *undertaker-rate*)
+         (k1 *midden-pickup-k*)
+         (k2 *midden-drop-k*))
+    (declare (type fixnum n) (type f32 range rate k1 k2))
+    (fill (the u32v claim) +no-ant+)
+    ;; --- 1. who wants what ------------------------------------------
+    (dotimes (i n)
+      (when (and (ant-live-p a i)
+                 (= (aref (the u32v (ants-corpse a)) i) +no-body+)
+                 ;; an ant with its mandibles full of food has no free
+                 ;; ones for a corpse, and one at a source is busy
+                 (<= (aref (ants-crop a) i) 0.0f0)
+                 (/= (aref (ants-state a) i) +ant-at-food+))
+        (let* ((bi (aref (ants-body a) i))
+               (x (aref (the f32v bxs) bi)) (y (aref (the f32v bys) bi))
+               (best -1) (bestd2 (* range range)))
+          (declare (type f32 x y bestd2) (type fixnum best bi))
+          (do-shash-neighbours (j hash x y range)
+            (let ((jj (the fixnum j)))
+              (when (and (= (aref (the u8v kinds) jj) +body-corpse+)
+                         (zerop (aref (the u8v carried) jj)))
+                (let* ((dx (- (aref (the f32v bxs) jj) x))
+                       (dy (- (aref (the f32v bys) jj) y))
+                       (d2 (+ (* dx dx) (* dy dy))))
+                  (declare (type f32 dx dy d2))
+                  (when (<= d2 bestd2) (setf bestd2 d2 best jj))))))
+          (when (>= best 0)
+            (let* ((f (float (corpses-near b hash
+                                           (aref (the f32v bxs) best)
+                                           (aref (the f32v bys) best)
+                                           *midden-radius*)
+                             1.0f0))
+                   ;; (k1/(k1+f))^2 — keen on a lone corpse, unwilling to
+                   ;; rob a pile
+                   (q (/ k1 (+ k1 f)))
+                   (p (* rate q q)))
+              (declare (type f32 f q p))
+              (when (< (rnd01 (aref (ants-id a) i) tick +stream-undertake+ seed)
+                       p)
+                ;; a wish, not a hold: pass 3 decides
+                (setf (aref (the u32v (ants-corpse a)) i) best)
+                (let ((cur (aref (the u32v claim) best))
+                      (me (aref (ants-id a) i)))
+                  (setf (aref (the u32v claim) best) (min cur me)))))))))
+    ;; --- 2. one corpse, one carrier ---------------------------------
+    (dotimes (i n)
+      (when (ant-live-p a i)
+        (let ((want (aref (the u32v (ants-corpse a)) i)))
+          (unless (= want +no-body+)
+            (when (zerop (aref (the u8v carried) want))
+              (if (= (aref (the u32v claim) want) (aref (ants-id a) i))
+                  (bodies-set-carried! b want t)
+                  ;; someone with a lower id got there first
+                  (setf (aref (the u32v (ants-corpse a)) i) +no-body+)))))))
+    ;; --- 3. carry it, and decide whether to put it down --------------
+    (dotimes (i n)
+      (when (ant-live-p a i)
+        (let ((held (aref (the u32v (ants-corpse a)) i)))
+          (unless (= held +no-body+)
+            (let* ((bi (aref (ants-body a) i))
+                   (x (aref (the f32v bxs) bi))
+                   (y (aref (the f32v bys) bi))
+                   (c (aref colonies (aref (ants-colony a) i)))
+                   (ndx (- x (colony-nest-x c)))
+                   (ndy (- y (colony-nest-y c))))
+              (declare (type f32 x y ndx ndy) (type fixnum bi held))
+              ;; it goes where the ant goes
+              (setf (aref (the f32v bxs) held) x
+                    (aref (the f32v bys) held) y)
+              (when (> (+ (* ndx ndx) (* ndy ndy))
+                       (* *midden-min-distance* *midden-min-distance*))
+                (let* ((f (float (corpses-near b hash x y *midden-radius*)
+                                 1.0f0))
+                       (q (/ f (+ k2 f)))
+                       (p (* rate (+ *midden-base-drop*
+                                     (* (- 1.0f0 *midden-base-drop*)
+                                        (* q q))))))
+                  (declare (type f32 f q p))
+                  (when (< (rnd01 (aref (ants-id a) i) tick
+                                  (+ +stream-undertake+ 1) seed)
+                           p)
+                    (bodies-set-carried! b held nil)
+                    (setf (aref (the u32v (ants-corpse a)) i) +no-body+)))))))))
+    (values)))
+
 (defun world-step! (w)
   "One motion tick, plus whichever slower clocks fall due (§4.3)."
   (declare (type world w))
@@ -1661,6 +1861,10 @@ stops producing brood, and decays."
   ;; this sits; what it must not do is read positions two ants are still
   ;; overlapping at.
   (ant-encounter-step! w)
+  ;; After the encounters and on the same rebuilt hash.  It moves carried
+  ;; corpses, which are out of the collision pass, so nothing downstream
+  ;; has to be resolved again.
+  (ant-undertaker-step! w)
   (path-integration-step! w)
   ;; after the drain, so a meal is measured against what the ant has
   ;; actually spent this tick
@@ -1668,7 +1872,15 @@ stops producing brood, and decays."
   (incf (world-tick w))
   (when (zerop (mod (world-tick w) (world-pheromone-every w)))
     (dolist (c (world-colonies w))
-      (field-step! (colony-field c) *pheromone-dt*)))
+      (field-step! (colony-field c) *pheromone-dt*)
+      ;; The no-entry field is a chemical on the same clock.  Its tau is
+      ;; read from the parameter each step rather than frozen at
+      ;; construction, so rebinding it in a measurement actually takes
+      ;; effect — the same reason the brood ring is sized per tick.
+      (let ((r (colony-repel c)))
+        (setf (field-tau r) (repel-tau)
+              (field-cap r) *repel-cap*)
+        (field-step! r *pheromone-dt*))))
   (when (zerop (mod (world-tick w) (world-colony-every w)))
     (dolist (f (world-foods w))
       (when (plusp (food-renew f))

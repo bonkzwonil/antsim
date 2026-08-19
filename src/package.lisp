@@ -40,6 +40,14 @@
    #:*queen-lay-rate* #:*brood-development-minutes*
    #:*forager-maturity-ticks* #:*age-shade-ticks*
    #:*response-threshold-lo* #:*response-threshold-hi* #:*response-steepness*
+   #:*repel-weight* #:*repel-tau* #:*repel-dead-end* #:*repel-cap*
+   #:colony-repel #:repel-at #:repel-tau #:repel-factor
+   #:*necrophoresis* #:*undertaker-range* #:*midden-radius*
+   #:*midden-pickup-k* #:*midden-drop-k* #:*undertaker-rate*
+   #:*midden-base-drop* #:*midden-min-distance*
+   #:ant-undertaker-step! #:ants-corpse #:+no-body+
+   #:bodies-carried #:bodies-carried-p #:bodies-set-carried!
+   #:kill-ant #:corpses-near
    #:colony-brood-pipe #:colony-brood-head
    #:*trail-lost-threshold* #:*trail-follow-threshold* #:*trail-memory-decay*
    #:*uturn-ticks* #:*uturn-cast-gain*

@@ -687,6 +687,139 @@ pressure at the same instant.  The three together give the population an
 age structure, which is the thing this model has never had: born, then
 developing, then in the nest, then out.")
 
+(defparameter *repel-weight* 1.0f0
+  "How strongly a no-entry mark divides down a direction's choice weight,
+as the w in 1/(1 + w·R) (§3.3, §3.9).  0 disables the field's effect on
+steering entirely, which is what makes every consequence of it measurable
+against the model without it.
+
+**A divisor on the finished Deneubourg weight, not a negative term inside
+it**, and the difference is not cosmetic.  Subtracting inside (k + C − R)^n
+can drive the base negative, which makes the exponentiation complex for
+fractional n and is meaningless besides.  A divisor is bounded, always
+positive, and says the honest thing: a marked direction is less attractive
+by a factor, never impossible.
+
+[lit] Robinson, Jackson, Holcombe & Ratnieks (2005), \"Insect
+communication: no entry signal in ant foraging\", Nature 438:442.
+*Monomorium pharaonis* marks unrewarding branches of a trail network with
+a repellent, and the mark is read as a negative at the branch point.  The
+mechanism matters because it is the colony's only *fast* negative
+feedback — evaporation unlearns a route on the trail's own timescale,
+which is minutes, and a branch that has just been found empty needs
+answering sooner than that.")
+
+(defparameter *repel-tau* 900.0f0
+  "Evaporation time constant of the no-entry field, seconds.  [cal]
+Divided by *trail-decay-scale* exactly as the trail is, so the two
+chemicals stay on comparable clocks and the compression stays one number.
+
+Half the trail's, and the ratio is the point rather than either value.
+The colony has to be able to change its mind about a dead end *faster*
+than it forgets a road, or the first temporary blockage becomes a
+permanent one — an aversive mark that outlives the reason for it is how a
+self-organised system talks itself out of a route that came good.")
+
+(defun repel-tau ()
+  "Effective no-entry evaporation time constant, seconds.  Compressed by
+*trail-decay-scale* exactly as the trail is, so the two chemicals keep
+their ratio however hard the clock is squeezed."
+  (/ *repel-tau* (max 1.0f-3 *trail-decay-scale*)))
+
+(defparameter *repel-dead-end* 1.0f0
+  "No-entry units laid by an ant that walked out, found nothing, and
+turned for home.  [cal] One ant's verdict.
+
+**Flat rather than proportional, and deliberately.**  A dead end is
+categorical — the direction either led to food or it did not — and there
+is no sense in which one empty stretch of ground is emptier than another.
+Inventing a magnitude here would be dressing a boolean up as a
+measurement.
+
+0 switches the marking off while leaving the field's plumbing in place,
+which is what lets the reading and the writing be measured apart.")
+
+(defparameter *repel-cap* 20.0f0
+  "Saturation ceiling on the no-entry field.  [cal] Twenty ants' worth of
+verdict, past which further agreement changes nothing.
+
+A ceiling matters more here than on the trail.  An aversive mark that
+could grow without bound would eventually beat any amount of contrary
+evidence, and the colony could never walk that ground again — the failure
+mode is permanent, where an over-strong trail merely decays.")
+
+(defparameter *necrophoresis* t
+  "Whether workers carry corpses out of the nest and pile them (§3.9, M4).
+
+Until M4 nothing removed a corpse, and the concept doc listed that as a
+known defect rather than a simplification: a run of any length ends with
+the approaches to a busy nest silted up with the colony's own dead, and
+the crowding that causes is an artefact of a missing behaviour.
+
+**The model is Deneubourg's, not a rule about tidiness.**  Deneubourg,
+Goss, Franks, Sendova-Franks, Detrain & Chrétien (1991), \"The dynamics
+of collective sorting\": a worker picks a corpse up with a probability
+that *falls* with the local density of corpses, and puts it down with a
+probability that *rises* with it.  Neither rule mentions a cemetery and
+no ant knows where one is; clusters appear because a corpse is more
+likely to be dropped where corpses already lie, and once a cluster starts
+it is also the place items are least likely to be removed from.  It is
+the same positive feedback the trail runs on, in a different currency,
+which is why it belongs in this project rather than being a housekeeping
+chore bolted on.")
+
+(defparameter *undertaker-range* 0.010f0
+  "How close a corpse has to be to be noticed, in metres.  The antennal
+range (*antennal-range*), and the same value for the same reason: a
+corpse is recognised by contact, not seen.")
+
+(defparameter *midden-radius* 0.030f0
+  "The radius over which local corpse density is felt, in metres.
+
+This sets the *grain* of the sorting and very little else.  Too small and
+every corpse is its own cluster because no ant can tell two of them are
+near each other; too large and the whole arena reads as one density and
+the feedback has no gradient to work on.  Three centimetres is about a
+nest radius, which is the scale a midden is supposed to be separate at.")
+
+(defparameter *midden-pickup-k* 1.0f0
+  "k1 in the pickup probability (k1/(k1+f))^2, where f is the local corpse
+count.  Squared, like every other threshold response in this model, and
+for the same reason: a linear falloff makes an ant merely *less* keen to
+disturb a pile, where what is wanted is that it substantially stops.")
+
+(defparameter *midden-drop-k* 2.0f0
+  "k2 in the drop probability (f/(k2+f))^2.  Larger than *midden-pickup-k*
+on purpose: an ant should need more evidence to add to a pile than to
+leave one alone, or every chance pair of corpses becomes a midden and the
+arena ends up evenly speckled instead of sorted.")
+
+(defparameter *undertaker-rate* 0.08f0
+  "Per-tick scale on both probabilities.  [cal]  It sets how *fast* the
+sorting runs and not what it converges to — the two probabilities are
+ratios, so scaling both leaves the equilibrium alone.")
+
+(defparameter *midden-base-drop* 0.03f0
+  "The floor under the drop probability, so a corpse carried out to empty
+ground is eventually put down.
+
+Deneubourg's rule alone has none, and without one an ant that picks up
+the first corpse in a clean arena carries it for ever: f is zero
+everywhere, so the drop probability is zero everywhere, and no cluster
+can ever be seeded.  The floor is what breaks that symmetry.  Small,
+because it is competing with the density term and a large floor would
+scatter corpses at random — which is the behaviour the whole mechanism
+exists to avoid.")
+
+(defparameter *midden-min-distance* 0.060f0
+  "How far from its own nest an ant will carry a corpse before it will put
+it down at all, in metres.
+
+The one rule here that is not Deneubourg's, and it is what makes this
+*necrophoresis* rather than sorting: real workers carry refuse away, and
+the sorting rules on their own are direction-blind — they would happily
+build a midden across the nest entrance.  Three nest radii.")
+
 (defparameter *response-threshold-lo* 0.0f0
   "Low end of the range individual foraging response thresholds are drawn
 from; see ANT-RESPONSE-THRESHOLD.  Both ends at 0.0 turns the mechanism

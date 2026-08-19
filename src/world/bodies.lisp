@@ -74,6 +74,14 @@ through obstacles."
   (cx nil :type (or null f32v))
   (cy nil :type (or null f32v))
   (hash nil :type (or null shash))
+  ;; 1 where a body is being carried by an ant (necrophoresis, M4).
+  ;; See BODIES-SET-CARRIED! for why this is a flag and not a kind.
+  (carried nil :type (or null u8v))
+  ;; Scratch, body-indexed: the lowest ant id that wants to pick this body
+  ;; up this tick.  MIN commutes, so two ants reaching for the same corpse
+  ;; resolve the same way whatever order they are visited in — the same
+  ;; device the shared-meal record uses (ANT-ENCOUNTER-STEP!).
+  (claim nil :type (or null u32v))
   (free nil :type (or null fixv))       ; free-list stack
   (nfree 0 :type fixnum)
   ;; Largest radius in the table.  The broad-phase query radius has to be
@@ -92,6 +100,8 @@ through obstacles."
             :x (mkf32 capacity) :y (mkf32 capacity) :r (mkf32 capacity)
             :kind (mku8 capacity +body-free+)
             :cx (mkf32 capacity) :cy (mkf32 capacity)
+            :carried (mku8 capacity)
+            :claim (mku32 capacity +no-ant+)
             :free (mkfix capacity)
             :hash (make-shash :cell cell :width width :height height
                               :origin-x origin-x :origin-y origin-y
@@ -114,7 +124,9 @@ caps the population), not an error."
       (setf (aref (bodies-x b) i) x
             (aref (bodies-y b) i) y
             (aref (bodies-r b) i) r
-            (aref (bodies-kind b) i) kind)
+            (aref (bodies-kind b) i) kind
+            ;; a reused slot must not inherit the last tenant's state
+            (aref (the u8v (bodies-carried b)) i) 0)
       ;; Monotone: freeing a body never shrinks this back.  A stale-high
       ;; max only widens the broad-phase query, which costs a little time
       ;; and cannot miss a contact — the direction to be wrong in.
@@ -129,6 +141,22 @@ pure function of the allocation history and nothing else."
         (aref (bodies-r b) i) 0.0f0)
   (setf (aref (bodies-free b) (bodies-nfree b)) i)
   (incf (bodies-nfree b))
+  (values))
+
+(defun bodies-carried-p (b i)
+  (declare (type bodies b) (type fixnum i))
+  (plusp (aref (the u8v (bodies-carried b)) i)))
+
+(defun bodies-set-carried! (b i on)
+  "Mark a body as being carried, which takes it out of the collision pass.
+
+Not a body *kind*, because it is not what the body is — it is a corpse
+either way, and it goes back to lying in the road the moment it is put
+down.  A kind would also have to be given a colour, a blocking rule and a
+place in every case statement that switches on one, for a state that
+lasts a few seconds."
+  (declare (type bodies b) (type fixnum i))
+  (setf (aref (the u8v (bodies-carried b)) i) (if on 1 0))
   (values))
 
 (defun bodies-become-corpse! (b i)
@@ -178,7 +206,12 @@ row measures."
       (fill cys 0.0f0)
       (dotimes (i n)
         (let ((ki (aref kinds i)))
-          (when (body-kind-movable-p ki)
+          ;; A carried corpse is inert: it neither pushes nor is pushed,
+          ;; and terrain does not move it either, because it is being
+          ;; held rather than lying anywhere.  Its position is written by
+          ;; the ant carrying it.
+          (when (and (body-kind-movable-p ki)
+                     (zerop (aref (the u8v (bodies-carried b)) i)))
             (let ((xi (aref xs i)) (yi (aref ys i)) (ri (aref rs i))
                   (dx 0.0f0) (dy 0.0f0) (deepest 0.0f0))
               (declare (type f32 xi yi ri dx dy deepest))

@@ -120,6 +120,16 @@ every existing scenario behaving exactly as it did."
   ;; single colony so ε never fires, but the indirection is free now and
   ;; unaddable later without touching every line that reads a pheromone.
   (field nil :type (or null field))
+  ;; The no-entry field (§3.9, M4).  A second chemical on the same grid
+  ;; abstraction and per-colony for the same reason the trail is: a
+  ;; repellent is a statement to *nestmates*, and nothing in §3.12 makes
+  ;; one colony's verdict binding on another.
+  ;;
+  ;; It is not read through ε either, and that is a decision rather than
+  ;; an omission: ε is eavesdropping, and eavesdropping on a rival's
+  ;; \"do not go here\" would hand every colony a free map of where its
+  ;; neighbours have already failed.
+  (repel nil :type (or null field))
   (stock 0.0f0 :type f32)               ; nest food store
   ;; Gross crop carried in, ever.  STOCK is a *balance* — it nets out
   ;; upkeep, brood and the meals handed to ants in the nest — so two
@@ -285,7 +295,8 @@ which MAKE-COLONY handles by rasterizing what is already there."
   (let ((p (make-polygon coords)))
     (push p (world-obstacles w))
     (dolist (c (world-colonies w))
-      (field-rasterize-polygon! (colony-field c) p))
+      (field-rasterize-polygon! (colony-field c) p)
+      (field-rasterize-polygon! (colony-repel c) p))
     p))
 
 (defun add-food (w x y r amount &key (quality 1.0f0) (renew 0.0f0) density)
@@ -320,6 +331,8 @@ has."
   (let* ((x (float nest-x 1.0f0)) (y (float nest-y 1.0f0))
          (r (float nest-r 1.0f0))
          (f (make-field :width (world-width w) :height (world-height w)))
+         (rf (make-field :width (world-width w) :height (world-height w)
+                         :tau *repel-tau* :cap *repel-cap*))
          (c (%make-colony :id (length (world-colonies w))
                           :name name
                           :nest-x x :nest-y y :nest-r r
@@ -327,13 +340,14 @@ has."
                           ;; colony in (§3.11)
                           :nest-body (bodies-alloc (world-bodies w) x y r
                                                    +body-nest+)
-                          :field f
+                          :field f :repel rf
                           :capacity capacity
                           :stock (float stock 1.0f0)
                           :stock-ref (max 1.0f0 (float stock 1.0f0)))))
-    ;; obstacles already in the world have to be in this field's mask
+    ;; obstacles already in the world have to be in both fields' masks
     (dolist (p (world-obstacles w))
-      (field-rasterize-polygon! f p))
+      (field-rasterize-polygon! f p)
+      (field-rasterize-polygon! rf p))
     (setf (world-colonies w) (append (world-colonies w) (list c)))
     c))
 
