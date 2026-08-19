@@ -187,9 +187,42 @@ jobs:
           $v = $env:SBCL_WINDOWS_VERSION
           $url = "https://downloads.sourceforge.net/project/sbcl/sbcl/$v/sbcl-$v-x86-64-windows-binary.msi"
           Write-Host "downloading $url"
-          Invoke-WebRequest -Uri $url -OutFile sbcl.msi
-          $p = Start-Process msiexec.exe -ArgumentList '/i', 'sbcl.msi', '/qn', '/norestart' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "msiexec failed: $($p.ExitCode)" }
+
+          # curl.exe rather than Invoke-WebRequest, and this is not a
+          # preference.  SourceForge decides what to serve from the user
+          # agent: a browser-shaped one gets the "your download will start
+          # shortly" HTML interstitial, and PowerShell's is browser-shaped.
+          # The HTML lands in sbcl.msi, and msiexec then reports 1620 —
+          # ERROR_INSTALL_PACKAGE_INVALID — which says nothing whatsoever
+          # about a download having gone wrong.  curl.exe ships in
+          # System32 on every supported Windows and gets the file.
+          curl.exe -fsSL --retry 3 --retry-delay 5 -o sbcl.msi $url
+          if ($LASTEXITCODE -ne 0) { throw "download failed: curl exit $LASTEXITCODE" }
+
+          # And prove it is a package before handing it to msiexec, so that
+          # the next time a download silently turns into a web page the
+          # error names that rather than an installer error code.  An MSI is
+          # an OLE compound file: D0 CF 11 E0 A1 B1 1A E1.
+          $msi = (Get-Item sbcl.msi).FullName
+          $len = (Get-Item $msi).Length
+          if ($len -lt 5MB) { throw "sbcl.msi is $len bytes — not a package" }
+          # .FullName, because .NET's idea of the current directory is not
+          # PowerShell's and a relative path here reads from the wrong place.
+          $head = [System.IO.File]::ReadAllBytes($msi)[0..7]
+          $hex = ($head | ForEach-Object { $_.ToString('X2') }) -join ''
+          if ($hex -ne 'D0CF11E0A1B11AE1') {
+            Write-Host "--- first bytes of what was downloaded ---"
+            Get-Content sbcl.msi -TotalCount 5 -ErrorAction SilentlyContinue
+            throw "sbcl.msi is not an MSI (starts $hex, $len bytes)"
+          }
+          Write-Host "sbcl.msi ok ($len bytes)"
+
+          $p = Start-Process msiexec.exe -Wait -PassThru `
+                 -ArgumentList '/i', 'sbcl.msi', '/qn', '/norestart', '/l*v', 'msi.log'
+          if ($p.ExitCode -ne 0) {
+            if (Test-Path msi.log) { Get-Content msi.log -Tail 40 }
+            throw "msiexec failed: $($p.ExitCode)"
+          }
           # The known path first, a search only as a fallback.  The MSI has
           # moved its install directory before, and a hardcoded path fails
           # three steps later as a confusing "sbcl is not recognized" — but
@@ -228,7 +261,18 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $v = $env:GLFW_WINDOWS_VERSION
           $url = "https://github.com/glfw/glfw/releases/download/$v/glfw-$v.bin.WIN64.zip"
-          Invoke-WebRequest -Uri $url -OutFile glfw.zip
+          Write-Host "downloading $url"
+          # curl.exe and a magic-byte check for the same reason as the SBCL
+          # step above.  GitHub does not sniff user agents the way
+          # SourceForge does, so this one is insurance rather than a fix —
+          # but a redirect to a login or error page is exactly the failure
+          # that is cheapest to catch here and most confusing three steps
+          # later.  PK\x03\x04 is a zip.
+          curl.exe -fsSL --retry 3 --retry-delay 5 -o glfw.zip $url
+          if ($LASTEXITCODE -ne 0) { throw "download failed: curl exit $LASTEXITCODE" }
+          $head = [System.IO.File]::ReadAllBytes((Get-Item glfw.zip).FullName)[0..3]
+          $hex = ($head | ForEach-Object { $_.ToString('X2') }) -join ''
+          if ($hex -ne '504B0304') { throw "glfw.zip is not a zip (starts $hex)" }
           Expand-Archive glfw.zip -DestinationPath glfw-bin -Force
           # lib-static-ucrt: the C runtime is linked into the DLL, so the
           # zip we ship depends on nothing a user might not have.  The
@@ -250,7 +294,14 @@ jobs:
         if: steps.ql-cache.outputs.cache-hit != 'true'
         run: |
           $ErrorActionPreference = 'Stop'
-          Invoke-WebRequest -Uri https://beta.quicklisp.org/quicklisp.lisp -OutFile quicklisp.lisp
+          curl.exe -fsSL --retry 3 --retry-delay 5 `
+            -o quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+          if ($LASTEXITCODE -ne 0) { throw "download failed: curl exit $LASTEXITCODE" }
+          # Same principle as the two downloads above: check that what
+          # arrived is the thing, not a page apologising for its absence.
+          if (-not (Select-String -Path quicklisp.lisp -Pattern 'quicklisp-quickstart' -Quiet)) {
+            throw "quicklisp.lisp does not look like Quicklisp"
+          }
           sbcl --non-interactive --load quicklisp.lisp `
                --eval '(quicklisp-quickstart:install)' `
                --eval '(ql-util:without-prompting (ql:add-to-init-file))'
