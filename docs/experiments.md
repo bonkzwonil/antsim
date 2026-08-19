@@ -899,6 +899,95 @@ Worth recording that the *before* column reproduces the M4 entry above
 exactly — 0.918 mean, 0.900 worst — which is what made it safe to read the
 after column as a change in the model rather than in the harness.
 
+### The alarm relay ran away, twice, and density said so (§3.3, M5)
+
+The alarm field is the fourth of §3.3's chemicals and the first released
+by something outside the model — nothing here attacks a nest, so alarm
+exists exactly when a person pokes one.  That makes it M5's rather than
+M4's: the three mechanisms M4 built and could not exercise were waiting
+on preconditions the model does not produce, and this one's precondition
+is the mouse.
+
+The design is an excitable medium.  An ant that smells alarm is alarmed,
+discharges its own, and runs — up the gradient while the concentration is
+moderate and away from it once it is overwhelming, which is §3.3's
+"aggregation then dispersal" out of one threshold rather than a timer.
+The relay is what carries a disturbance across a nest; diffusion is
+deliberately a local smear, because a plume that had to cross a nest by
+diffusing would need eighty sub-steps a tick and would model alarm as
+something happening *to* a colony rather than by it.
+
+**First version: no per-ant state at all.**  An ant was alarmed while it
+could smell alarm, and released while alarmed.  That is a positive
+feedback with no brake, and it behaved like one.  One poke, 400 ants:
+
+    t/s     alarmed   field total   population
+     10          12           856          400
+    100         238        61 870          400
+    200         400       137 738          400
+    350         399       146 303          400
+    400         156       112 856          156   <- 244 dead
+
+Every ant alarmed within three minutes, none of them ever calm, and then
+they starve: a permanently frantic ant never forages and never goes home
+to be fed.  A colony that one poke kills is not a model of alarm.
+
+**Second version: a fixed episode and a refractory period.**  Twenty
+seconds alarmed, then a minute deaf to it — habituation, and the standard
+answer for an excitable medium, because without a refractory phase a wave
+re-enters its own tail.  Nobody died any more and the field stopped
+growing, but the disturbance still never ended: ~300 of 400 ants alarmed
+at t = 400 s, in a self-sustaining oscillation.
+
+Sweeping the release rate found why, and the shape of the answer was more
+useful than the number:
+
+    release per tick   0.6   0.5   0.4   0.3    0.25   0.2   0.01
+    quiet at (s)      never never never never     57    50     45
+
+A cliff between 0.25 and 0.3 — and **it moved with colony size**: 0.3 was
+quiet at 35 s with 150 ants and permanent with 400.  A parameter balanced
+on a bifurcation is not calibrated, it is lucky.
+
+**What was actually wrong** was that release was a *rate*.  An ant
+discharging every tick for a twenty-second episode paints a
+twenty-second line of alarm across the arena while it flees, alarming
+everything it passes — the mechanism was carrying its own source around.
+
+**Third version: one discharge, at the moment of alarm, scaled by the
+dose that caused it.**  Which is also what a gland does; alarm compounds
+sit in a reservoir and are discharged on stimulation, not secreted
+continuously for as long as an ant is frightened.  A relayed burst is
+then strictly weaker than the burst that caused it, so a front damps
+instead of sustaining, and the whole thing is sub-critical by
+construction rather than by tuning:
+
+    discharge          1     2     5    10    20    40
+    quiet at (s)      37    37    39    37    39    42
+    ants reached      26    27    29    30    40    43
+
+Forty-fold in the parameter, six seconds in the outcome.  The same across
+a 100x harder poke (quiet at 51 s), ten repeated pokes (102 s), and three
+times the colony (213 alarmed, quiet at 51 s).  Nobody dies in any of it.
+
+**The refractory period is still load-bearing, and finding out took
+asking at the right size.**  With the discharge fixed, switching it off
+changes nothing at 400 ants — which is exactly why the fast-suite test
+written for it passed with the mechanism defeated, the same sin as the
+route-memory row above.  It appears at a thousand:
+
+    ants   refractory on          off
+     400   peak  40, quiet 39 s   peak   40, quiet 39 s
+    1200   peak 213, quiet 51 s   peak 1136, never
+    2000   peak 333, quiet 63 s   peak 1979, never, 554 dead
+
+And it is not areal density: 300 ants at the same 1200 per square metre
+behave exactly as though the refractory period were absent.  What drives
+it is the *crowd packed around the entrance*, which scales with colony
+size and not with how small the arena is.  So the claim lives in the
+acceptance suite, at 1200 ants, where a run is allowed to be expensive —
+and the fast-suite row was rewritten to say only what it can see.
+
 ## On the list, not yet measured
 
 - **The README's per-seed bridge tables.** Stale since `d6b0035` (see

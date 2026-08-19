@@ -187,6 +187,26 @@
   ;; but that body is marked carried and drops out of the collision pass,
   ;; because a corpse being held is not a corpse in the way.
   (corpse nil :type (or null u32v))
+  ;; The alarm episode (§3.3, M5), as an excitable ant: ALARM-TTL counts
+  ;; down while it is alarmed, and ALARM-COOL counts down afterwards,
+  ;; during which it neither responds to alarm nor releases any.
+  ;;
+  ;; **Both of these are the answer to a measurement, not a refinement.**
+  ;; The first version had no per-ant state at all: an ant was alarmed
+  ;; exactly while it could smell alarm, and released while alarmed.  That
+  ;; is a positive feedback with no brake, and it ran away — 400 of 400
+  ;; ants alarmed within two minutes of one poke, still alarmed three
+  ;; minutes later, the field saturating the whole arena, and 244 of them
+  ;; dead of starvation because a permanently frantic ant never forages
+  ;; and never goes home to be fed.  A colony that a single poke kills is
+  ;; not a model of alarm.
+  ;;
+  ;; A refractory period is the standard answer and the biological one:
+  ;; the response adapts, and an excitable medium without one supports a
+  ;; wave that re-enters its own tail for ever.  With it the wave sweeps
+  ;; out, passes, and ends.
+  (alarm-ttl nil :type (or null u16v))
+  (alarm-cool nil :type (or null u16v))
   ;; Ticks this ant has spent in a systematic search (§3.9, M4).  Zero
   ;; whenever it is not searching, so the number always means "unbroken
   ;; ticks since the home vector ran out" — the spiral's radius is a
@@ -243,6 +263,7 @@ size them alike."
               :fed-by (mku32 capacity +no-ant+)
               :corpse (mku32 capacity +no-body+)
               :search (mku32 capacity)
+              :alarm-ttl (mku16 capacity) :alarm-cool (mku16 capacity)
               :route-x (mkf32 (* capacity (max 1 *route-waypoints*)))
               :route-y (mkf32 (* capacity (max 1 *route-waypoints*)))
               :route-stride (max 1 *route-waypoints*)

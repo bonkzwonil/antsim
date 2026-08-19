@@ -312,7 +312,13 @@ with its own decay constant and deposition rule.
    makes the colony visibly prune dead ends, which is lovely to watch.
 4. **Alarm pheromone** — a fast-diffusing, fast-decaying field released on
    disturbance, triggering aggregation then dispersal. This is the
-   interaction hook: poke the nest, watch it erupt.
+   interaction hook: poke the nest, watch it erupt. **Built, M5**, and
+   the one chemical released by a person rather than by the model —
+   nothing here attacks a nest, so this is the only §3.3 field whose
+   precondition is the mouse. Aggregation and dispersal come out of a
+   single threshold rather than a timer, and what carries the signal
+   across a nest is the ants relaying it, not the plume diffusing: see
+   §7's M5 entry, which is mostly about the two ways that ran away.
 
 **Dynamics per field, each tick of the pheromone clock (1 Hz, not 20 Hz):**
 
@@ -898,7 +904,8 @@ acceptance list*. Everything below passes that test.
 | Per-colony trail fields + ε | **in** | §3.12. M1 runs one colony, so ε never fires — but the indirection is free now and unaddable later. |
 | — | — | — |
 | No-entry field | **built, M4, inert** | A second field per colony, read as a divisor 1/(1 + w·R) on the finished Deneubourg weight — not as a term inside it, which can drive the base negative. Correct, tested, and it does nothing at shipped parameters: the only trigger available marks where an ant *gave up*, and give-ups scatter, so the field peaks at 0.01 against a cap of 20. See `*repel-weight*`. |
-| Alarm and nest-marking fields | *later* | The other two. Neither is needed for §3.8, and each is the same self-contained addition the no-entry field turned out to be. |
+| Alarm field | **built, M5** | The interaction hook of §3.3, and the one mechanism in the model whose precondition is a person. A colony nobody pokes has no alarm field allocated at all, so §3.8 is not merely unaffected by it — it is unreachable from it. |
+| Nest-marking field | *later* | The last of §3.3's four. Not needed for §3.8, and the same self-contained addition the no-entry field turned out to be. |
 | Response thresholds | **built, M4, off** | Bonabeau's fixed-threshold model: every worker carries its own bar, drawn on its id, and answers one colony-wide stimulus through R(S) = S^n/(S^n + θ^n). Nothing counts foragers. Off because the stimulus is bimodal — a colony sits at urgency 0.000, or at 1.000 within minutes of its larder failing, and there is no graded middle to slice. See `*response-threshold-lo*`. |
 | Age polyethism | **built, M2.1, off** | `*forager-maturity-ticks*`. Measured at M4: turning it on damps task reallocation exactly as it should — the share out of doors recovers to 0.79–0.90 of pre-cull instead of 0.97–1.02, and harvest falls about 8% — because callow workers genuinely cannot be conscripted. Correct, and it is why the §3.8 row passes cleanly with it off. |
 | Trophallaxis between ants | **built, M3** | The pairwise coupling, and it really was the only one — but it rides on the encounter event rather than needing machinery of its own, which is why it arrived with M3 rather than M4. The tick stays order-independent because donors accumulate into a buffer instead of writing to each other. Changes sign with range; see `*trophallaxis-rate*`. |
@@ -1592,6 +1599,8 @@ world has to be decided in advance to see it.
 | right-drag | pan |
 | `space` / `+` / `-` | pause, and time compression up/down |
 | left-click an ant | inspect: state, energy, crop, age, home vector, and whether it has the reserve to set out — the ant is marked on the map by a pulsing pink reticle |
+| `o` | drop a 2 cm block of terrain at the cursor; **hold it and move to draw a wall** |
+| `p` | poke the nest under the cursor, and watch the alarm field propagate (§3.3) |
 | `home` | frame the whole world |
 | `h` / `?` | hide or show the key legend |
 | `q` / `escape` | quit |
@@ -2168,9 +2177,68 @@ apart; a large pile could be eaten from for ever without going down
 (§3.8). And ε turned out to need its claim restated rather than merely
 tested, which is the more interesting half of the competition row.
 
-**M5 — interaction.** Click an ant to inspect its state, drop food, place
-obstacles, poke the nest and watch the alarm field propagate. The window
-already exists from M2; this is what you can *do* to a running world.
+**M5 — interaction. In progress.** Click an ant to inspect its state, drop
+food, place obstacles, poke the nest and watch the alarm field propagate.
+The window already exists from M2; this is what you can *do* to a running
+world.
+
+*Delivered.* **Terrain by hand.** `O` drops a 2 cm block at the cursor and
+repeats while held, so a wall is something you draw rather than something
+you stamp. That size is not arbitrary — the scenarios author walls 1.6 cm
+thick, and terrain placed by hand has to be the same order as terrain
+placed by the file or the two cannot be compared. It refuses to cover a
+nest entrance, which is a deliberate asymmetry with food: walling off a
+*source* is allowed and is half the point, because a colony can answer
+that by re-exploring, whereas a sealed nest is not an experiment — every
+ant inside is stuck for the rest of the run and on screen it is
+indistinguishable from foraging having broken.
+
+*Delivered, and it took three attempts.* **The alarm field**, §3.3's
+fourth chemical and the first with a precondition the model does not
+supply: nothing here attacks a nest, so alarm exists exactly when
+somebody presses `P`. That is what makes it M5's and not M4's — the three
+mechanisms M4 built and could not exercise were waiting on preconditions
+that never arrive, and this one waits on the mouse.
+
+It also means a colony nobody pokes must be *untouched* rather than
+merely unaffected, and it is: the field is allocated on first release, so
+with no poke there is no array, no chemistry step, nothing for an ant to
+read, and its own RNG stream so nothing else draws differently. §3.8 is
+not unaffected by alarm, it is unreachable from it.
+
+The design is an excitable medium. An ant that smells alarm is alarmed
+for a fixed episode, discharges once, and runs — towards the source while
+the concentration is moderate, away from it once it is overwhelming,
+which is §3.3's "aggregation then dispersal" out of one threshold instead
+of a timer. Diffusion is deliberately a local smear rather than the
+transport: what carries a disturbance across a nest is ants relaying it,
+which is both the real mechanism and the one worth watching.
+
+**Both of the first two versions ran away, and the second lesson is the
+better one.** With the response tied to the reading, one poke left 400 of
+400 ants permanently alarmed and starved 244 of them. With an episode and
+a refractory period nobody died, but the disturbance still never ended,
+and sweeping the release rate found a cliff between 0.25 and 0.3 units a
+tick that *moved with colony size*. A parameter balanced on a bifurcation
+is not calibrated. The fault was that release was a rate at all: an ant
+discharging every tick paints a twenty-second line of alarm across the
+arena as it flees. One dose-scaled discharge at the moment of alarm — a
+gland, rather than a leak — is sub-critical by construction, and holds
+across a 40× range of the parameter, a 100× harder poke, ten repeated
+pokes and three times the colony.
+
+**And the test written for it did not guard it.** Switching the
+refractory period off changes nothing at 400 ants, so the fast-suite row
+passed with the mechanism defeated — the same failure as M4's route
+memory, met from the other side. The runaway is driven by the crowd
+packed around the entrance, so it needs about a thousand ants and cannot
+be reached by making a small arena denser. The claim moved to the
+acceptance suite at 1200 ants, where it fails without the refractory
+period, and the fast row was rewritten to say only what it can see. The
+numbers are in [docs/experiments.md](experiments.md).
+
+*Still to do.* The rich inspector §5.5 describes, and the nest-marking
+field is explicitly **not** part of this milestone.
 
 **M6 — polish.** Colour, time-lapse capture, the *Formica* parameter set as
 a contrasting species, a gallery document like `docs/M2-renderer.md`.

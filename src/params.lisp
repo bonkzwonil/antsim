@@ -865,6 +865,184 @@ could grow without bound would eventually beat any amount of contrary
 evidence, and the colony could never walk that ground again — the failure
 mode is permanent, where an over-strong trail merely decays.")
 
+;;; --------------------------------------------------------------------
+;;; Alarm (§3.3, M5)
+;;; --------------------------------------------------------------------
+;;;
+;;; The fourth of §3.3's chemicals, and the only one released by something
+;;; outside the model.  Nothing in this simulation attacks a nest — there
+;;; is no predator, no fighting and no colony that raids another — so
+;;; alarm exists exactly when a person pokes one (§5.5).  That is what
+;;; makes it M5's chemical rather than M4's: the three mechanisms M4 built
+;;; and could not exercise were waiting on preconditions the model does
+;;; not produce, and this one's precondition is the mouse.
+;;;
+;;; It follows that a colony nobody pokes must be *untouched*, not merely
+;;; unaffected.  The field is therefore allocated on first release rather
+;;; than at construction: with no alarm there is no array, no chemistry
+;;; step, and nothing for an ant to read.
+
+(defparameter *alarm* t
+  "Whether ants respond to alarm pheromone (§3.3, M5).
+
+NIL leaves the field and its chemistry entirely in place and stops the
+ants reading it, which is what lets the plume be measured apart from the
+response to it — the same switch *repel-weight* 0 gives the no-entry
+field, and for the same reason.")
+
+(defparameter *alarm-tau* 30.0f0
+  "Evaporation time constant of the alarm field, seconds.  [lit]
+
+Sixty times shorter than the trail's, thirty times shorter than the
+no-entry mark's, and the *ratio* is the character of the chemical rather
+than the number.  Alarm substances are small and volatile — they have to
+be, to cross the air to a nestmate in the second that matters — and
+volatility buys speed at the price of persistence.  A trail is a claim
+about where food is and should outlive the ant that laid it.  Alarm is a
+claim about *now*, and one that outlived its cause would leave a colony
+permanently frantic.
+
+Not divided by *trail-decay-scale*.  That constant compresses the
+colony's memory so an experiment fits in a run, and alarm is not memory;
+squeezing it would change what the signal *is* rather than how long the
+watching takes.
+
+[lit] Hölldobler & Wilson, The Ants (1990), on alarm communication:
+active for seconds to a few minutes, and short-lived by design so that a
+colony can stop being alarmed.")
+
+(defparameter *alarm-cap* 20.0f0
+  "Saturation ceiling on the alarm field.  [cal] The same ceiling the
+no-entry field carries, and for a sharper version of the same reason: the
+response is a threshold rule, so without a ceiling a long enough poke
+would drive a cell to a concentration no amount of decay could bring back
+under the panic line inside a run.")
+
+(defparameter *alarm-diffusion* 0.2f0
+  "Fraction of the difference to each neighbouring cell that moves per
+diffusion sub-step.  [cal] Bounded above by 0.25 — see FIELD-DIFFUSE!.
+
+§3.3 lists alarm as the fast-diffusing field, and this is deliberately
+*not* fast enough to be the transport mechanism.  At four sub-steps a
+second the plume smears about a cell and a half per tick, which is 7 mm —
+enough to give the antennae a gradient to read across their 1.2 cm span,
+nowhere near enough to cross a nest.
+
+That is the design, not a compromise.  Making diffusion carry the signal
+needs on the order of eighty sub-steps a tick to reach 10 cm, and it
+would model alarm as a physical process happening *to* a colony.  What
+actually carries alarm through a nest is the ants: one smells it, becomes
+alarmed, and releases its own.  Here that is *alarm-release*, and it
+means the wave front travels at the speed of a crowd relaying a signal
+rather than at the speed of a gas — which is both the real mechanism and
+the one that is worth watching.")
+
+(defparameter *alarm-diffusion-steps* 4
+  "Diffusion sub-steps per pheromone tick.  [cal] See *alarm-diffusion*
+for why this is small.")
+
+(defparameter *alarm-threshold* 1.0f0
+  "Concentration at which an ant becomes alarmed.  [cal]
+
+A threshold rather than a graded response, which is the one place this
+mechanism resembles the response thresholds of §3.9 and gets to keep
+their justification: an ant is alarmed or it is not, and behaviour that
+faded smoothly in would show up as a colony that is slightly agitated all
+the time.")
+
+(defparameter *alarm-panic* 8.0f0
+  "Concentration above which an alarmed ant runs *away* from the alarm
+instead of towards it.  [cal]
+
+This is the whole of §3.3's \"aggregation then dispersal\", and it is one
+rule rather than a timer.  Below the line an alarmed ant runs up the
+gradient — towards whatever is wrong, which is the aggregation — and
+because it releases its own alarm on the way, the concentration where the
+crowd gathers keeps climbing.  Above the line the same ants turn and
+scatter.  Neither phase is scheduled: the sequence comes out of a
+positive feedback running into a threshold, which is the same shape as
+every other decision in this model.")
+
+(defparameter *alarm-ticks* 400
+  "How long an ant stays alarmed once triggered, in motion ticks.  [cal]
+400 at 20 Hz is 20 seconds.
+
+A fixed episode rather than \"for as long as it can smell alarm\", and
+that distinction is the difference between a model and a runaway.  With
+the response tied to the reading, an alarmed ant releases, which keeps
+its own reading up, which keeps it alarmed: measured, one poke took 400
+of 400 ants and held every one of them alarmed indefinitely, saturating
+the arena and starving 244 of them, because a permanently frantic ant
+never forages and never goes home to be fed.
+
+A fixed episode also happens to be the honest description of a startled
+animal: it runs for a while and then stops, rather than sampling the air
+each moment to decide whether to keep running.")
+
+(defparameter *alarm-refractory* 1200
+  "How long an ant ignores alarm after an episode ends, in motion ticks.
+[cal] 1200 at 20 Hz is one minute.
+
+Habituation, and the thing that makes this an excitable medium rather
+than a resonating one.  Without a refractory period a wave re-enters its
+own tail: the ants behind the front become susceptible again while the
+front is still releasing, and the disturbance never finishes.  With one,
+the wave sweeps outwards, passes, and ends — which is what a disturbance
+does.
+
+Three times the episode, so an ant that has just run is done running
+before it can be started again.")
+
+(defparameter *alarm-release* 20.0f0
+  "Alarm units an ant discharges when it becomes alarmed.  [cal]
+
+**A single burst at the moment of alarm, not a rate**, and scaled by the
+dose that triggered it: an ant in a saturated plume discharges all of
+this, one alarmed by a faint relay discharges proportionally less.  Both
+halves came out of measurement, and the second is what makes the
+mechanism work at all.
+
+The first version released every tick for the whole episode.  That makes
+a fleeing ant paint a twenty-second line of alarm across the arena and
+alarm everything it passes, and the result is an epidemic whose
+reproduction number rises with how many ants happen to be standing near
+each other: measured, the boundary between \"dies out in forty seconds\"
+and \"never ends\" sat between 0.25 and 0.3 units a tick, and it *moved
+with colony size* — 0.3 was quiet at 35 s with 150 ants and permanent
+with 400.  A parameter balanced on a bifurcation is not calibrated, it is
+lucky.
+
+One dose-scaled discharge is sub-critical by construction, because a
+relayed burst is strictly weaker than the burst that caused it, so a
+front damps instead of sustaining.  Measured across a 40x range of this
+number and a 5x range of colony size, every run went quiet within 42
+seconds — and the size of the response still tracks how many ants were
+at home, which is the part that should vary.
+
+It is also what a gland does.  Alarm compounds sit in the mandibular
+reservoir and are discharged on stimulation; an ant does not secrete
+continuously for as long as it is frightened.
+
+20 is one *alarm-cap* worth: a discharge that saturates the air the ant
+is standing in and nothing beyond it.
+
+0 leaves the poke and the response in place and switches the relay off,
+which is what makes the two measurable apart.")
+
+(defparameter *alarm-poke* 400.0f0
+  "Alarm units a poke releases (§5.5).  [cal]
+
+Spread over the nest disc rather than a point, because the thing being
+modelled is a disturbance to a nest and not an ant with a syringe.  Large
+against *alarm-cap* on purpose: a poke should put the cells it covers
+straight to saturation, so that what follows is the colony's answer
+rather than a question about whether the poke was hard enough.")
+
+(defparameter *alarm-speed* 1.6f0
+  "Speed multiplier for an alarmed ant.  [cal] Alarm is visible before it
+is legible: the first thing anyone should notice about a poked nest is
+that it is moving faster.")
+
 (defparameter *necrophoresis* t
   "Whether workers carry corpses out of the nest and pile them (§3.9, M4).
 

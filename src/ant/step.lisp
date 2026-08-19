@@ -65,6 +65,16 @@ threshold re-rolled each tick is not a threshold: the individual would
 have no consistent readiness at all, and the reserve pool the mechanism
 exists to create would be a different set of ants every second.")
 
+(defconstant +stream-alarm+ 12
+  "The heading noise of an alarmed ant — see ALARM-STEP!.
+
+Its own stream rather than +STREAM-TURN+, so that a colony nobody pokes
+draws exactly the sequence it drew before alarm existed.  That is the
+guarantee the whole mechanism rests on: alarm is released by a person and
+by nothing in the model, so every published measurement has to be
+untouched by its presence, and sharing a stream would have moved every
+one of them.")
+
 (defconstant +stream-pace+ 8
   "How fast this ant walks relative to its colony — see ANT-PACE.
 
@@ -167,6 +177,11 @@ initial condition rather than merely a convenient one."
                  ;; newborn must not inherit the coarsened spacing of
                  ;; whoever last held its index.
                  (aref (ants-route-step a) i) *route-spacing*
+                 ;; and for exactly the same reason it must not inherit an
+                 ;; alarm episode: a newborn emerging into a slot whose
+                 ;; last occupant died mid-panic would be born running.
+                 (aref (ants-alarm-ttl a) i) 0
+                 (aref (ants-alarm-cool a) i) 0
                  ;; Its own point in the tripod cycle (§5.2).  Zero would
                  ;; work and looks wrong: a cohort emerging together would
                  ;; step in unison, which is a thing ants conspicuously do
@@ -407,6 +422,180 @@ hand every colony a free map of where its neighbours have already
 failed.  A repellent is a statement to nestmates."
   (declare (type world w) (type fixnum colony-id) (type f32 x y))
   (field-at (colony-repel (nth colony-id (world-colonies w))) x y))
+
+(declaim (inline alarm-at))
+(defun alarm-at (c x y)
+  "The alarm concentration this colony reads at a point, and 0 for a
+colony that has never been disturbed — which is every colony in every
+scenario, because nothing in the model releases alarm (§3.3, M5).
+
+Its own field only, with no ε term, for a sharper version of the reason
+REPEL-AT has none.  ε is eavesdropping on a claim about *food*, where
+overhearing a rival is an advantage worth modelling.  Overhearing a
+rival's alarm and joining in is not a behaviour, it is a bug with a
+plausible-sounding name."
+  (declare (type colony c) (type f32 x y) (optimize (speed 3) (safety 0)))
+  (let ((f (colony-alarm c)))
+    (if f (field-at f x y) 0.0f0)))
+
+(defun alarm-grip! (c a i x y)
+  "Is this ant alarmed this tick, and advance its episode.
+
+The excitable-medium bookkeeping of §3.3, in one place so the state
+machine's clause stays a question rather than a procedure.  Three phases,
+and an ant is in exactly one:
+
+  susceptible   both counters zero.  Crossing *alarm-threshold* starts an
+                episode of *alarm-ticks*.
+  alarmed       ALARM-TTL counting down.  Responds and releases for the
+                whole episode, *whatever the reading does* — that is what
+                stops the response feeding itself, and it is also what a
+                startled animal looks like: it runs for a while and then
+                stops, rather than re-deciding every 50 ms.
+  refractory    ALARM-COOL counting down.  Ordinary behaviour, and alarm
+                is not read at all.
+
+Returns true only in the alarmed phase.  A colony that has never been
+disturbed has no alarm field, so the whole thing costs one NIL test."
+  (declare (type colony c) (type ants a) (type fixnum i) (type f32 x y)
+           (optimize (speed 3) (safety 1)))
+  (let ((ttl (the u16v (ants-alarm-ttl a)))
+        (cool (the u16v (ants-alarm-cool a))))
+    (cond
+      ;; alarmed: run the episode down
+      ((plusp (aref ttl i))
+       (when (zerop (decf (aref ttl i)))
+         (setf (aref cool i)
+               (min 65535 (max 0 *alarm-refractory*))))
+       t)
+      ;; refractory: deaf to it
+      ((plusp (aref cool i))
+       (decf (aref cool i))
+       nil)
+      ;; susceptible
+      ((and (colony-alarm c) (>= (alarm-at c x y) *alarm-threshold*))
+       (setf (aref ttl i) (min 65535 (max 1 *alarm-ticks*)))
+       ;; One discharge, here, at the moment of alarm — see *alarm-release*
+       ;; for why this is a burst and not a rate, and why it is scaled by
+       ;; the dose that caused it.
+       (let* ((f (colony-alarm c))
+              (dose (* *alarm-release*
+                       (min 1.0f0 (/ (field-at f x y)
+                                     (max 1.0f-6 *alarm-cap*))))))
+         (declare (type f32 dose))
+         (when (plusp dose) (field-deposit-packet! f x y dose)))
+       t)
+      (t nil))))
+
+(defun alarm-step! (w c a i bi id tick x y)
+  "One tick of an ant that can smell alarm (§3.3, M5).
+
+This runs *instead of* the state machine and is not itself a state.  The
+ant keeps everything it had — where it was going, what it is carrying,
+how far it thinks the nest is — and simply stops acting on any of it
+while the air is telling it something more urgent.  When the plume fades
+below *alarm-threshold* it resumes exactly where it left off, with no
+transition to get wrong and nothing to unwind.  Path integration is
+unaffected, because that runs over actual displacement in its own pass:
+an ant flung across the arena by a panic still knows the way home.
+
+Whether the ant is alarmed at all, and for how long, is ALARM-GRIP!'s
+business: an episode is a fixed *alarm-ticks*, not \"for as long as it
+can smell something\".  What this decides is what an alarmed ant does
+with the tick, and there the reading matters again — two regimes, one
+threshold, and between them they are the whole of §3.3's \"aggregation
+then dispersal\":
+
+  below *alarm-panic*   run *up* the gradient — towards whatever is
+                        wrong.  This is the aggregation, and because the
+                        ant releases its own alarm as it goes, the
+                        concentration where the crowd gathers keeps
+                        climbing.
+
+  at or above           run *down* it.  The same ants scatter.
+
+Neither phase is scheduled.  The sequence is a positive feedback running
+into a threshold, which is the shape of every other decision in this
+model — and the fixed episode is what keeps that feedback from being its
+own input, which measurement showed it needs.
+
+An ant whose episode outlasts the plume reads nothing, turns nowhere in
+particular, and runs on.  That is correct rather than a gap: it is still
+startled, and being startled is not a fresh decision every 50 ms.
+
+The gradient is read through the antennae, at the same three points and
+the same *sensor-offset* the choice function uses, because that is what
+an ant has.  Deterministic argmax rather than the Deneubourg lottery:
+this is a taxis and not a recruitment decision, so there is no
+amplification to build in — the amplification is in the releasing.
+
+The route is not recorded while this runs, which is correct rather than
+convenient: the outward track is a record of a foraging leg, and a run
+across the nest away from something frightening is not one."
+  (declare (type world w) (type colony c) (type ants a)
+           (type fixnum i bi) (type (unsigned-byte 32) id tick)
+           (type f32 x y)
+           (optimize (speed 3) (safety 1)))
+  (let* ((f (colony-alarm c))
+         (b (world-bodies w))
+         (bxs (bodies-x b)) (bys (bodies-y b))
+         (seed (world-seed w))
+         (dt *motion-dt*)
+         (wid (world-width w)) (hei (world-height w))
+         (heading (aref (ants-heading a) i))
+         (off *sensor-offset*)
+         (spread *sensor-spread*)
+         (flee (>= (field-at f x y) *alarm-panic*)))
+    (declare (type f32 dt wid hei heading off spread))
+    ;; An ant that has erupted out of the nest is not resting, whatever
+    ;; its state still says.  Without this a colony poked with
+    ;; *resting-ants-block* off would pour out of the entrance passing
+    ;; straight through one another.
+    (setf (aref (the u8v (bodies-kind b)) bi) +body-ant+)
+    (let* ((hl (- heading spread)) (hr (+ heading spread))
+           (cl (field-at f (+ x (* off (cos hl))) (+ y (* off (sin hl)))))
+           (cc (field-at f (+ x (* off (cos heading)))
+                           (+ y (* off (sin heading)))))
+           (cr (field-at f (+ x (* off (cos hr))) (+ y (* off (sin hr)))))
+           (dir 0.0f0))
+      (declare (type f32 cl cc cr dir))
+      ;; Ties leave the heading alone, which is what carries a fleeing ant
+      ;; out of a plume that has gone flat: with nothing to run from in
+      ;; particular, straight on is away.
+      (if flee
+          (cond ((and (< cl cc) (<= cl cr)) (setf dir -1.0f0))
+                ((and (< cr cc) (< cr cl))  (setf dir 1.0f0)))
+          (cond ((and (> cl cc) (>= cl cr)) (setf dir -1.0f0))
+                ((and (> cr cc) (> cr cl))  (setf dir 1.0f0))))
+      ;; The same turn rate and the same noise as an ordinary step.  Alarm
+      ;; changes what an ant wants, not what its legs can do.
+      (setf heading
+            (wrap-angle (+ heading
+                           (* *turn-rate* dir)
+                           (* *turn-sigma*
+                              (rnd-normal id tick +stream-alarm+ seed)))))
+      (let* ((speed (* (ant-pace id seed)
+                       *alarm-speed*
+                       (if (> (aref (ants-crop a) i) 0.0f0)
+                           *walk-speed-laden* *walk-speed*)))
+             (dx (* speed dt (cos heading)))
+             (dy (* speed dt (sin heading)))
+             (nx (clampf (+ x dx) 0.0f0 wid))
+             (ny (clampf (+ y dy) 0.0f0 hei)))
+        (declare (type f32 speed dx dy nx ny))
+        ;; Reflect off the arena edge, exactly as the ordinary step does —
+        ;; a panicking ant pressed into a corner with a heading that still
+        ;; points into it would stay there for the whole disturbance.
+        (when (/= nx (+ x dx)) (setf heading (wrap-angle (- 3.1415927f0 heading))))
+        (when (/= ny (+ y dy)) (setf heading (wrap-angle (- heading))))
+        (setf (aref (ants-heading a) i) heading)
+        ;; No release here.  An ant discharges once, when it is alarmed,
+        ;; and ALARM-GRIP! does it — see *alarm-release*.  Releasing every
+        ;; tick of the episode is what the first version did, and it made
+        ;; a fleeing ant paint a twenty-second line of alarm across the
+        ;; arena, which alarmed everything it passed.
+        (setf (aref bxs bi) nx (aref bys bi) ny))))
+  (values))
 
 (declaim (inline blocked-factor))
 (defun blocked-factor (f x y avoid)
@@ -761,6 +950,20 @@ switch into and no switching logic to get wrong (§3.5)."
           (setf (aref (ants-energy a) i) energy)
 
           (cond
+            ;; --- ALARMED (§3.3, M5) --------------------------------
+            ;;
+            ;; First, because alarm outranks whatever the ant was doing —
+            ;; that is what alarm *is* — and deliberately not a state, so
+            ;; the ant keeps its errand and picks it up again when the
+            ;; plume fades.  See ALARM-STEP!.
+            ;;
+            ;; The test is two null checks and one array read, and the
+            ;; first of them is NIL for every colony that has never been
+            ;; disturbed: no field is allocated until something releases
+            ;; alarm, so a scenario nobody pokes does not pay for this and
+            ;; cannot be changed by it.
+            ((and *alarm* (alarm-grip! c a i x y))
+             (alarm-step! w c a i bi id tick x y))
             ;; --- IN-NEST -------------------------------------------
             ((= state +ant-in-nest+)
              ;; A resting ant keeps walking in until it is actually at the
@@ -2136,7 +2339,18 @@ my own nest — and the piles are what those questions add up to."
       (let ((r (colony-repel c)))
         (setf (field-tau r) (repel-tau)
               (field-cap r) *repel-cap*)
-        (field-step! r *pheromone-dt*))))
+        (field-step! r *pheromone-dt*))
+      ;; The alarm field, when this colony has one — which is only after
+      ;; something disturbed it (§3.3, M5).  A colony that has never been
+      ;; poked does no work here at all, which is the point: this is the
+      ;; one chemical whose absence has to be exact rather than merely
+      ;; harmless.  Its tau and cap are read per step for the reason the
+      ;; repellent's are.
+      (let ((al (colony-alarm c)))
+        (when al
+          (setf (field-tau al) *alarm-tau*
+                (field-cap al) *alarm-cap*)
+          (field-step! al *pheromone-dt*)))))
   (when (zerop (mod (world-tick w) (world-colony-every w)))
     (dolist (f (world-foods w))
       (when (plusp (food-renew f))

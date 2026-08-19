@@ -520,3 +520,64 @@ that much" seed clump-on clump-off)
           (is (< near-on (* 0.5f0 near-off))
               "seed ~d: ~d corpses were still within 6 cm of the nest, ~
 against ~d with the behaviour off" seed near-on near-off))))))
+
+;;; --------------------------------------------------- a poked colony
+;;;
+;;; Not a §3.8 row — §3.8 is about foraging and this is about a
+;;; disturbance — but it belongs here for the reason the bridges do: it
+;;; is a claim about what a *colony* does over minutes, it needs a colony
+;;; large enough to have the behaviour at all, and a fast run cannot
+;;; stand in for it.
+
+(test a-poked-colony-calms-down-again
+  "One poke, and the colony has to get over it.
+
+The alarm relay is an excitable medium: an ant that smells alarm becomes
+alarmed and discharges its own, which is what carries a disturbance
+through a nest faster than any plume could diffuse.  An excitable medium
+with no refractory phase supports a wave that re-enters its own tail, and
+that is not a subtlety here — it is the difference between a disturbance
+and a colony that never works again.
+
+Measured, with the refractory period switched off: 1136 of 1200 ants
+alarmed and none of them ever calm, and at 2000 ants the same run kills
+554 of them, because an ant that is permanently frantic never forages and
+never goes home to be fed.  With it, the same poke peaks at 213 and is
+over inside a minute.
+
+It takes a thousand ants to show, which is why it is here and not in the
+fast suite: the runaway is driven by the size of the crowd packed around
+the entrance, so it does not appear in a small colony and cannot be
+reached by making a small arena denser — 300 ants at the same 1200 per
+square metre behave exactly as though the refractory period were absent."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0
+                            :capacity 3600 :seed 7))
+         (c (ant:add-colony w :name "poked" :nest-x 0.5f0 :nest-y 0.5f0
+                              :stock 1.0f6)))
+    (ant:world-seed-population! w c 1200)
+    (ant:add-food w 0.8f0 0.8f0 0.03f0 50000.0f0)
+    (ant:world-run! w 2000)                       ; settle
+    (flet ((alarmed ()
+             (let ((a (ant:world-ants w)) (n 0))
+               (dotimes (i (ant:ants-n a) n)
+                 (when (and (ant:ant-live-p a i)
+                            (plusp (aref (ant:ants-alarm-ttl a) i)))
+                   (incf n))))))
+      (is (zerop (alarmed)) "a settled colony is alarmed before anything ~
+                             disturbed it")
+      (ant:poke-nest! w c)
+      ;; it does erupt — a poke nobody notices is not the other failure
+      (let ((peak 0))
+        (dotimes (k 40) (ant:world-run! w 20) (setf peak (max peak (alarmed))))
+        (is (> peak 100)
+            "only ~d ants of 1200 reacted to a poke on the nest" peak))
+      ;; and it is over
+      (ant:world-run! w (* 20 150))
+      (is (zerop (alarmed))
+          "~d ants are still alarmed 190 s after a single poke — the ~
+           relay has become a steady state" (alarmed))
+      (is (< (ant:field-max (ant:colony-alarm c)) ant:*alarm-threshold*)
+          "the plume is still over the threshold at ~,3f"
+          (ant:field-max (ant:colony-alarm c)))
+      (is (zerop (ant:colony-died c))
+          "~d ants died of one poke" (ant:colony-died c)))))

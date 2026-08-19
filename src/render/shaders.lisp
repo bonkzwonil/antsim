@@ -29,6 +29,53 @@ void main() {
 }
 ")
 
+(defparameter *alarm-fragment-glsl* "#version 450 core
+// The alarm field (3.3, M5), drawn over the ground and under the ants.
+//
+// A separate pass rather than a channel of the trail texture, and that is
+// not laziness: a colony usually has no alarm field at all — it is made
+// on the first disturbance and nothing in the model ever causes one — so
+// a pass that is simply skipped costs exactly nothing in every scenario,
+// and the trail's shader, which every render test exercises, is untouched.
+//
+// Hot and transient, per 5.1.  Red through amber to white, which is the
+// one ramp nothing else on screen uses: the field below is blue, the ants
+// are white, cream and orange.  The clash to know about is the red disc
+// of an ant that cannot set out (5.3) — a small solid dot against a broad
+// wash, and the wash is gone in a minute.
+//
+// Alpha is capped well short of opaque and the ants are drawn afterwards,
+// so an eruption never hides the thing it is an eruption of.
+in vec2 v_uv;
+out vec4 frag;
+
+uniform sampler2D u_alarm;
+uniform vec4  u_bounds;        // world rect currently visible
+uniform vec2  u_world;         // world size in metres
+uniform float u_cap;
+uniform float u_threshold;     // below this no ant can act on it
+uniform float u_panic;         // above this an alarmed ant runs away
+
+void main() {
+    vec2 w = mix(u_bounds.xy, u_bounds.zw, v_uv);
+    if (w.x < 0.0 || w.y < 0.0 || w.x > u_world.x || w.y > u_world.y) discard;
+    float c = texture(u_alarm, w / u_world).r;
+    if (c <= 0.0) discard;
+
+    // Drawn below the threshold too, faintly.  Watching a plume arrive
+    // before anything reacts to it is half of what the picture is for —
+    // the lag between the chemistry and the behaviour is the mechanism.
+    float t = clamp(c / max(u_cap, 1e-6), 0.0, 1.0);
+    float hot = clamp((c - u_threshold) / max(u_panic - u_threshold, 1e-6),
+                      0.0, 1.0);
+    vec3 warm = mix(vec3(0.72, 0.10, 0.06), vec3(1.00, 0.55, 0.20), hot);
+    warm = mix(warm, vec3(1.00, 0.95, 0.85), clamp((c - u_panic) /
+                                                   max(u_cap - u_panic, 1e-6),
+                                                   0.0, 1.0));
+    frag = vec4(warm, 0.70 * sqrt(t));
+}
+")
+
 (defparameter *field-fragment-glsl* "#version 450 core
 in vec2 v_uv;
 out vec4 frag;

@@ -94,9 +94,32 @@ business, and no author has written 200.")
 (defvar *live-blocks* 0
   "Blocks dropped by hand so far, against *LIVE-BLOCK-LIMIT*.")
 
-(defvar *live-block-note* nil
-  "The last thing LIVE-DROP-BLOCK had to say, or NIL when it had nothing.
-Held so a repeating key does not repeat its complaint — see there.")
+(defparameter *live-poke-slack* 0.020f0
+  "How far outside a nest disc a poke still counts, metres (§5.5).
+
+A nest entrance is 2 cm across and the view is usually zoomed out far
+enough that 2 cm is a few pixels.  Requiring the click to land inside it
+would make the one interaction §3.3 names hardest to reach, so the target
+is the entrance plus its own radius again.  Generous, and safe: the only
+thing there is to hit by accident is a nest, and poking one is
+reversible in the strongest sense — the colony calms down on its own.")
+
+(defvar *live-note* nil
+  "The last line the window printed about an action, or NIL.  Held so a
+key that repeats while it is held does not repeat itself thirty times a
+second — see LIVE-NOTE.")
+
+(defun live-note (control &rest args)
+  "Say what a key just did, but only when it is not what was said last.
+
+O and P both repeat while they are held — that is what makes a wall
+something you draw and a nest something you keep prodding — so a line
+printed on every call would bury the terminal in copies of one sentence.
+Silence is the right report for \"that worked again\"."
+  (let ((s (and control (apply #'format nil control args))))
+    (unless (equal s *live-note*)
+      (setf *live-note* s)
+      (when s (format t "~&~a~%" s)))))
 
 (defvar *live-selected* nil
   "Slot of the inspected ant, or NIL.  Held with its id so the panel can
@@ -168,6 +191,11 @@ otherwise silently swap the readout for a different individual.")
       ((#\o #\O)
        (destructuring-bind (cx cy) (glfw:get-cursor-position)
          (live-drop-block (float cx 1.0f0) (float cy 1.0f0))))
+      ;; Poke the nest, and watch it erupt (§3.3).  The one thing in this
+      ;; model that releases alarm — see LIVE-POKE-NEST.
+      ((#\p #\P)
+       (destructuring-bind (cx cy) (glfw:get-cursor-position)
+         (live-poke-nest (float cx 1.0f0) (float cy 1.0f0))))
       ((#\n #\N)
        (setf *resting-ants-block* (not *resting-ants-block*))
        (format t "~&resting ants ~:[pass through each other~;collide~]~%"
@@ -285,27 +313,39 @@ half: a colony walks into its own obstruction for as long as the trail
 outlives it."
   (when (and *live-world* *live-view*)
     (multiple-value-bind (wx wy) (view-screen->world *live-view* px py)
-      (let ((note
-              (if (>= *live-blocks* *live-block-limit*)
-                  (format nil "block: ~d is the limit — see *live-block-limit*"
-                          *live-block-limit*)
-                  (multiple-value-bind (poly why)
-                      (add-block *live-world* wx wy *live-block-half*)
-                    (cond
-                      (poly (incf *live-blocks*) nil)
-                      ((eq why :nest)
-                       "block: not over a nest entrance — it would seal the colony in")
-                      ((eq why :outside)
-                       (format nil "block: (~,3f ~,3f) is outside the arena" wx wy))
-                      (t (format nil "block: refused (~a)" why)))))))
-        ;; O repeats while it is held — that is what makes a wall
-        ;; something you draw — so a line printed on every call would bury
-        ;; the terminal in thirty copies a second of the same complaint.
-        ;; Print a note only when it *changes*, which is the moment it
-        ;; carries information, and let silence mean it worked.
-        (unless (equal note *live-block-note*)
-          (setf *live-block-note* note)
-          (when note (format t "~&~a~%" note)))))))
+      (if (>= *live-blocks* *live-block-limit*)
+          (live-note "block: ~d is the limit — see *live-block-limit*"
+                     *live-block-limit*)
+          (multiple-value-bind (poly why)
+              (add-block *live-world* wx wy *live-block-half*)
+            (cond
+              (poly (incf *live-blocks*) (live-note nil))
+              ((eq why :nest)
+               (live-note "block: not over a nest entrance — it would seal ~
+                           the colony in"))
+              ((eq why :outside)
+               (live-note "block: (~,3f ~,3f) is outside the arena" wx wy))
+              (t (live-note "block: refused (~a)" why))))))))
+
+(defun live-poke-nest (px py)
+  "Disturb the nest under the cursor (§3.3, §5.5).
+
+The interaction §3.3 names when it introduces the alarm field — \"poke
+the nest, watch it erupt\" — and the only thing in this model that ever
+releases alarm.  Nothing in the simulation attacks a colony, so without
+this key the fourth chemical would be a mechanism with no precondition,
+which is precisely the trap three of M4's additions fell into.
+
+It touches no ant.  Alarm goes onto the ground over the entrance and
+every part of what follows is ants reading a chemical, which is the only
+reason the eruption is worth watching rather than merely animating."
+  (when (and *live-world* *live-view*)
+    (multiple-value-bind (wx wy) (view-screen->world *live-view* px py)
+      (let ((c (world-nest-at *live-world* wx wy *live-poke-slack*)))
+        (if c
+            (progn (poke-nest! *live-world* c)
+                   (live-note "poked ~a" (colony-name c)))
+            (live-note "poke: no nest at (~,3f ~,3f)" wx wy))))))
 
 (defun live-inspect (px py)
   "Report the ant nearest the click.  §5.5 lists inspection under the
@@ -364,6 +404,7 @@ declining to (§3.5).  So the panel names the second one."
     ("CLICK" "INSPECT")
     ("A"     "ADD FOOD")
     ("O"     "OBSTACLE")
+    ("P"     "POKE NEST")
     ("H"     "HIDE")
     ("N"     "NEST")
     ("C"     "CONTACT")
@@ -689,7 +730,7 @@ Returns the world, so a session can keep poking at it afterwards."
             *live-hud* (make-hud)
             *live-selected* nil
             *live-blocks* 0
-            *live-block-note* nil
+            *live-note* nil
             *live-colony* 0
             *live-view* (view-fit w :vw width :vh height)
             *live-paused* nil)

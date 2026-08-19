@@ -244,3 +244,65 @@ shader that drew them before this milestone."
           small)
       (is (> large 1.4) "at 14 px the ant reaches ~,2f radii — it did not"
           large))))
+
+(test the-alarm-field-is-drawn-and-only-when-there-is-one
+  "§3.3's fourth chemical has to be visible, or poking a nest is a thing
+that happens to a data structure.
+
+Two worlds on one seed, stepped identically, and only one of them poked —
+which controls for the ants exactly, since a frame taken two seconds
+later has its ants in different places whatever the chemistry did.  What
+is left in the difference is the overlay.
+
+The measure is red minus blue summed over the frame, because that is what
+the pass is: the ground and the trail are blue by design (§5.3) and the
+alarm ramp is the one warm thing on screen."
+  (with-gl-or-skip
+    (flet ((build ()
+             (let* ((w (ant:make-world :width 0.4f0 :height 0.4f0
+                                       :capacity 400 :seed 5))
+                    (c (ant:add-colony w :nest-x 0.20f0 :nest-y 0.20f0
+                                         :stock 300.0f0)))
+               (ant:world-seed-population! w c 60)
+               (ant:world-run! w 600)
+               (values w c))))
+      (multiple-value-bind (calm-w calm-c) (build)
+        (multiple-value-bind (hot-w hot-c) (build)
+          (is (null (ant:colony-alarm calm-c))
+              "a colony grew an alarm field with nothing to release any")
+          (ant:poke-nest! hot-w hot-c)
+          (ant:world-run! calm-w 60)
+          (ant:world-run! hot-w 60)
+          (is-true (ant:colony-alarm hot-c) "the poke made no field")
+          (ant:with-headless-gl (ctx :width 256 :height 256)
+            (let ((o (ant:make-offscreen 256 256))
+                  (r (ant:make-renderer
+                      :field-width (ant:field-w (ant:colony-field hot-c))
+                      :field-height (ant:field-h (ant:colony-field hot-c))
+                      :body-capacity 512)))
+              (unwind-protect
+                   (flet ((warmth (w)
+                            (ant:bind-offscreen o)
+                            (gl:clear-color 0.02 0.022 0.025 1.0)
+                            (gl:clear :color-buffer-bit)
+                            (ant:draw-world r w (ant:view-fit w :vw 256 :vh 256))
+                            (gl:finish)
+                            (let ((px (ant:read-offscreen o)) (sum 0))
+                              (dotimes (i (floor (length px) 3) sum)
+                                (incf sum (- (aref px (* i 3))
+                                             (aref px (+ 2 (* i 3)))))))))
+                     (let ((calm (warmth calm-w))
+                           (hot (warmth hot-w)))
+                       (is (> hot calm)
+                           "the poked frame is no warmer than the calm one: ~
+                            ~d against ~d — the alarm pass did not draw"
+                           hot calm)
+                       ;; and by a margin a couple of seconds of ant
+                       ;; movement could not account for
+                       (is (> (- hot calm) 2000)
+                           "the poked frame is warmer by only ~d over ~
+                            65536 pixels, which is within what the ants ~
+                            moving could do on their own"
+                           (- hot calm))))
+                (ant:destroy-renderer r)
+                (ant:destroy-offscreen o)))))))))

@@ -195,6 +195,7 @@ in the window:
   left-click        inspect the ant under the pointer
   a                 drop a food source at the cursor
   o                 drop a block of terrain at the cursor; hold to draw a wall
+  p                 poke the nest under the cursor, and watch it erupt
   n                 resting ants block, or are walked through
   c                 ant-ant contact on or off
   space             pause

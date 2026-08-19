@@ -1815,3 +1815,158 @@ returning ant back along a path it walked before the food moved."
     (is (zerop (aref (ant:ants-route-n a) 0))
         "clearing left ~d points behind" (aref (ant:ants-route-n a) 0))
     (is-false (ant:route-target a 0 0.0f0 0.0f0))))
+
+;;; ------------------------------------------------------------- alarm
+;;;
+;;; §3.3's fourth chemical, and the one released by a person rather than
+;;; by the model (§5.5).  The first test is the one the whole mechanism
+;;; rests on: a colony nobody pokes must be *untouched*, not merely
+;;; unaffected, because every published measurement was taken without it.
+
+(defun %alarm-world (&key (n 24))
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 128))
+         (c (ant:add-colony w :name "poked" :nest-x 0.5f0 :nest-y 0.5f0
+                              :stock 1.0f6)))
+    (ant:world-seed-population! w c n)
+    (values w c)))
+
+(defun %alarmed-count (w)
+  (let ((a (ant:world-ants w)) (n 0))
+    (dotimes (i (ant:ants-n a) n)
+      (when (and (ant:ant-live-p a i) (plusp (aref (ant:ants-alarm-ttl a) i)))
+        (incf n)))))
+
+(test a-colony-nobody-pokes-has-no-alarm-field-at-all
+  "Nothing in this model releases alarm.  There is no predator, no
+fighting and no raiding, so the field exists exactly when a person makes
+it exist — and until then there is no array, no chemistry step and
+nothing for an ant to read.
+
+That is what lets a fourth chemical be added to the tick without
+re-running a milestone's worth of measurements: not a claim that the
+effect is small, but a structure in which there is no effect to have."
+  (multiple-value-bind (w c) (%alarm-world)
+    (ant:world-run! w 400)
+    (is (null (ant:colony-alarm c))
+        "a colony grew an alarm field with nothing to release any")
+    (is (zerop (%alarmed-count w))
+        "an ant is alarmed in a world where no alarm exists")))
+
+(test a-poke-alarms-the-nest-and-the-plume-clears
+  "The interaction hook of §3.3: alarm goes onto the ground, ants standing
+in it are alarmed, and the chemical evaporates on its own.
+
+Note what this row does **not** guard, because it was written believing
+it did.  That a *disturbance ends* — that the relay does not become a
+permanent state — is a claim about a colony large enough to sustain one,
+and this fixture's two dozen ants cannot: with the refractory period
+switched off entirely, every check here still passes.  The runaway is
+driven by the size of the crowd around the entrance, so it does not
+appear until roughly a thousand ants and cannot be reached by making a
+small arena denser (measured: 1200 ants per square metre with 300 ants
+behaves exactly like the refractory period is not there).  That claim
+therefore lives in the acceptance suite, where a run may be expensive —
+see A-POKED-COLONY-CALMS-DOWN-AGAIN."
+  (multiple-value-bind (w c) (%alarm-world :n 24)
+    (ant:world-run! w 600)
+    (ant:poke-nest! w c)
+    (ant:world-run! w 60)
+    (is-true (ant:colony-alarm c) "the poke made no field")
+    (is (plusp (%alarmed-count w))
+        "a poke on the nest alarmed nobody standing in it")
+    ;; and it is over, well inside the run
+    (ant:world-run! w (* 20 200))
+    (is (zerop (%alarmed-count w))
+        "~d ants are still alarmed 200 s after a single poke"
+        (%alarmed-count w))
+    (is (< (ant:field-max (ant:colony-alarm c)) ant:*alarm-threshold*)
+        "the plume is still over the threshold at ~,3f"
+        (ant:field-max (ant:colony-alarm c)))
+    (is (zerop (ant:colony-died c))
+        "~d ants died of a poke" (ant:colony-died c))))
+
+(test an-alarmed-ant-keeps-its-errand
+  "Alarm is not a state, and that is the whole reason it is cheap.  The
+ant keeps where it was going and what it is carrying, stops acting on
+either while it runs, and picks the errand up again unchanged — so there
+is no transition to get wrong and nothing to unwind when the plume
+fades."
+  (multiple-value-bind (w c) (%alarm-world :n 4)
+    ;; Out on the trail, not on the nest.  A returning ant placed on the
+    ;; entrance arrives home and unloads on the very first tick — before
+    ;; the poke has even folded out of the deposit buffer — and the
+    ;; fixture would then be measuring arrival rather than alarm.
+    (%place! w 0 0.2f0 0.2f0 0.0f0 ant:+ant-returning+ :crop 0.8f0)
+    (ant:field-deposit-packet! (ant:ensure-alarm-field w c) 0.2f0 0.2f0
+                               (* 8.0f0 ant:*alarm-cap*) :radius 0.05f0)
+    (ant:world-run! w 60)
+    (let ((a (ant:world-ants w)))
+      (is (plusp (aref (ant:ants-alarm-ttl a) 0))
+          "the fixture ant was not alarmed by a poke it was standing on")
+      (is (= ant:+ant-returning+ (aref (ant:ants-state a) 0))
+          "alarm changed the ant's state")
+      (is (> (aref (ant:ants-crop a) 0) 0.0f0)
+          "alarm made the ant drop its load"))))
+
+(test an-ant-in-its-refractory-period-is-deaf-to-alarm
+  "Habituation, and the thing that stops a wave re-entering its own tail.
+Without it the ants behind a front become susceptible again while the
+front is still discharging, and the disturbance never finishes."
+  (multiple-value-bind (w c) (%alarm-world :n 4)
+    (let ((a (ant:world-ants w)))
+      (%place! w 0 0.5f0 0.5f0 0.0f0 ant:+ant-outbound+)
+      (setf (aref (ant:ants-alarm-cool a) 0) 500)
+      (ant:poke-nest! w c)
+      (ant:world-run! w 60)
+      (is (zerop (aref (ant:ants-alarm-ttl a) 0))
+          "an ant still in its refractory period was alarmed anyway")
+      (is (plusp (aref (ant:ants-alarm-cool a) 0))
+          "the refractory counter is not running down"))))
+
+(test the-relay-is-weaker-than-what-set-it-off
+  "The discharge is scaled by the dose that triggered it, which is what
+makes a relayed front damp rather than sustain.
+
+Without it the mechanism is an epidemic whose reproduction number rises
+with how many ants happen to be near each other: measured, the boundary
+between dying out in forty seconds and never ending sat between 0.25 and
+0.3 units a tick and *moved with colony size*.  A parameter balanced on a
+bifurcation is not calibrated."
+  (flet ((discharge (level)
+           (multiple-value-bind (w c) (%alarm-world :n 2)
+             (let ((f (ant:ensure-alarm-field w c)))
+               (setf (aref (ant:field-c f) (ant:field-index f 0.3f0 0.3f0))
+                     (float level 1.0f0))
+               (let ((before (ant:field-total f)))
+                 (ant::alarm-grip! c (ant:world-ants w) 0 0.3f0 0.3f0)
+                 ;; dt 0, so evaporation takes nothing and the only change
+                 ;; is the discharge folding in out of the buffer
+                 (ant:field-step! f 0.0f0)
+                 (- (ant:field-total f) before))))))
+    (let ((strong (discharge ant:*alarm-cap*))
+          (weak (discharge ant:*alarm-threshold*)))
+      (is (plusp strong) "a saturated plume triggered no discharge at all")
+      (is (plusp weak) "a threshold plume triggered no discharge at all")
+      (is (> strong (* 2.0f0 weak))
+          "the discharge barely tracks the dose: ~,3f at the cap against ~
+           ~,3f at the threshold, a ratio of ~,2f for a ~,1fx difference ~
+           in stimulus"
+          strong weak (/ strong (max 1.0f-6 weak))
+          (/ ant:*alarm-cap* ant:*alarm-threshold*)))))
+
+(test a-newborn-does-not-inherit-a-panic
+  "Slots are recycled through the free list, so an ant born into the slot
+of one that died mid-episode would be born running.  The same hazard the
+route spacing has, met the same way and for the same reason it was worth
+a line there."
+  (multiple-value-bind (w c) (%alarm-world :n 4)
+    (let ((a (ant:world-ants w)))
+      (setf (aref (ant:ants-alarm-ttl a) 0) 300
+            (aref (ant:ants-alarm-cool a) 0) 300)
+      (ant:kill-ant w c 0)
+      (let ((i (ant:spawn-ant w c)))
+        (is (eql 0 i) "the free list did not hand back the slot just freed")
+        (is (zerop (aref (ant:ants-alarm-ttl a) 0))
+            "a newborn inherited an alarm episode")
+        (is (zerop (aref (ant:ants-alarm-cool a) 0))
+            "a newborn inherited a refractory period")))))

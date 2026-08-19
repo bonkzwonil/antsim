@@ -57,6 +57,23 @@ mechanism is defensible.
 | `*trail-follow-threshold*` / `*trail-memory-decay*` | 0.5 / 0.93 | the two-level trigger the U-turn needs; one level fires on any faint mark and cost 28% |
 | `*uturn-ticks*` / `*uturn-cast-gain*` | 40 / 3.0 | how long the casting lasts and how wide it sweeps |
 
+## Alarm (§3.3, M5)
+
+Nothing in the model releases alarm — there is no predator, no fighting
+and no raiding — so a colony has no alarm field at all until a person
+pokes one with `P`. None of this is reachable in a headless run.
+
+| parameter | default | what it does |
+|---|---|---|
+| `*alarm*` | `t` | whether ants read the field. `nil` leaves the chemistry and stops the response, which is what makes the two measurable apart |
+| ⬥ `*alarm-release*` | 20.0 | one discharge at the moment of alarm, scaled by the dose that caused it. **A rate here instead of a burst is what made the mechanism run away** — see experiments |
+| ⬥ `*alarm-ticks*` / `*alarm-refractory*` | 400 / 1200 | twenty seconds alarmed, then a minute deaf to it. The refractory period is what stops a wave re-entering its own tail; without it 1136 of 1200 ants never calm |
+| ⬥ `*alarm-threshold*` / `*alarm-panic*` | 1.0 / 8.0 | run *towards* it below the second, away above. §3.3's "aggregation then dispersal", out of one threshold rather than a timer |
+| `*alarm-tau*` / `*alarm-cap*` | 30.0 / 20.0 | volatile and short-lived: sixty times faster to forget than the trail, because alarm is a claim about *now* |
+| `*alarm-diffusion*` / `*alarm-diffusion-steps*` | 0.2 / 4 | a local smear, not the transport. Ants carry alarm; the plume only gives the antennae a gradient to read |
+| `*alarm-poke*` | 400.0 | what `P` releases over the entrance |
+| `*alarm-speed*` | 1.6 | an alarmed ant moves faster |
+
 ## The walk itself (§3.1, §3.2)
 
 | parameter | default | off | what it does |
@@ -107,6 +124,8 @@ cannot change a result — which is the point of listing them apart.
 | key | does |
 |---|---|
 | `A` | drop a food source at the cursor |
+| `O` | drop a 2 cm block of terrain; **hold it and move to draw a wall** |
+| `P` | poke the nest under the cursor, and watch it erupt (§3.3) |
 | `N` | toggle whether resting ants collide |
 | `H` / `?` | show or hide the key legend |
 | `SPACE` | pause |

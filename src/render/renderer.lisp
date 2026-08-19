@@ -17,6 +17,13 @@
   (body-program 0 :type unsigned-byte)
   (empty-vao 0 :type unsigned-byte)
   (field-tex 0 :type unsigned-byte)
+  ;; The alarm overlay (§3.3, M5), on the same grid as the trail field.
+  ;; Its texture is allocated with everything else, because a GL object is
+  ;; cheap and creating one mid-frame on the first poke is the kind of
+  ;; lazy initialisation that only ever fails on somebody else's driver.
+  ;; The *pass* is what is conditional.
+  (alarm-program 0 :type unsigned-byte)
+  (alarm-tex 0 :type unsigned-byte)
   (field-w 0 :type fixnum)
   (field-h 0 :type fixnum)
   (field-scratch nil :type (or null f32v))
@@ -53,6 +60,9 @@ field grid."
   (let ((r (%make-renderer
             :field-program (link-program *field-vertex-glsl*
                                          *field-fragment-glsl*)
+            ;; same fullscreen triangle, different colouring
+            :alarm-program (link-program *field-vertex-glsl*
+                                         *alarm-fragment-glsl*)
             :poly-program (link-program *poly-vertex-glsl*
                                         *poly-fragment-glsl*)
             :body-program (link-program *body-vertex-glsl*
@@ -78,6 +88,16 @@ field grid."
       (gl:tex-parameter :texture-2d :texture-wrap-s :clamp-to-edge)
       (gl:tex-parameter :texture-2d :texture-wrap-t :clamp-to-edge)
       (setf (renderer-field-tex r) tex))
+    ;; alarm texture — same size, same filtering, same reasons
+    (let ((tex (gl:gen-texture)))
+      (gl:bind-texture :texture-2d tex)
+      (gl:tex-image-2d :texture-2d 0 :r32f field-width field-height 0
+                       :red :float (cffi:null-pointer))
+      (gl:tex-parameter :texture-2d :texture-min-filter :linear)
+      (gl:tex-parameter :texture-2d :texture-mag-filter :linear)
+      (gl:tex-parameter :texture-2d :texture-wrap-s :clamp-to-edge)
+      (gl:tex-parameter :texture-2d :texture-wrap-t :clamp-to-edge)
+      (setf (renderer-alarm-tex r) tex))
     ;; body instance buffer
     (let ((buf (gl:gen-buffer))
           (bytes (* body-capacity 4 4)))     ; vec4 per body
@@ -152,12 +172,13 @@ field grid."
 (defun destroy-renderer (r)
   (declare (type renderer r))
   (gl:delete-program (renderer-field-program r))
+  (gl:delete-program (renderer-alarm-program r))
   (gl:delete-program (renderer-poly-program r))
   (gl:delete-program (renderer-body-program r))
   (gl:delete-program (renderer-ant-program r))
   (gl:delete-vertex-arrays (list (renderer-empty-vao r) (renderer-poly-vao r)
                                  (renderer-ant-vao r)))
-  (gl:delete-textures (list (renderer-field-tex r)))
+  (gl:delete-textures (list (renderer-field-tex r) (renderer-alarm-tex r)))
   (gl:delete-buffers (list (renderer-body-ssbo r) (renderer-poly-vbo r)
                            (renderer-ant-vbo r) (renderer-ant-ebo r)
                            (renderer-ant-ssbo r)))
@@ -167,11 +188,15 @@ field grid."
 ;;; Uploads
 ;;; --------------------------------------------------------------------
 
-(defun upload-field (r field)
-  "Push a colony's trail field to the texture."
+(defun upload-field (r field &optional (tex (renderer-field-tex r)))
+  "Push a field's concentrations to a texture.
+
+TEX so the alarm overlay can reuse this unchanged: the two fields are the
+same shape and the upload has never had anything to do with which
+chemical it is carrying."
   (declare (type renderer r) (type field field))
   (let ((c (field-c field)))
-    (gl:bind-texture :texture-2d (renderer-field-tex r))
+    (gl:bind-texture :texture-2d tex)
     (gl:pixel-store :unpack-alignment 1)
     (cffi:with-foreign-object (buf :float (length c))
       (dotimes (i (length c))
@@ -418,6 +443,36 @@ framebuffer.  Layers back to front, per §5.1."
       (gl:uniformi (gl:get-uniform-location p "u_blocked_shade") 1)
       (gl:bind-vertex-array (renderer-empty-vao r))
       (gl:draw-arrays :triangles 0 3))
+
+    ;; --- alarm (§3.3, M5) --------------------------------------------
+    ;;
+    ;; Skipped entirely for a colony that has never been disturbed, which
+    ;; is every colony in every scenario: the field is made on the first
+    ;; release and nothing in the model releases any (§5.5).  So this is a
+    ;; NIL test per frame in the ordinary case, and the whole reason a
+    ;; fourth chemical could be added without touching the render tests.
+    ;;
+    ;; Over the ground and under the ants.  Under, because an eruption
+    ;; must not hide the thing erupting — the ants are what is worth
+    ;; watching and the plume is why they are doing it.
+    (let* ((c (nth colony (world-colonies w)))
+           (al (and c (colony-alarm c))))
+      (when al
+        (upload-field r al (renderer-alarm-tex r))
+        (let ((p (renderer-alarm-program r)))
+          (gl:use-program p)
+          (gl:active-texture :texture0)
+          (gl:bind-texture :texture-2d (renderer-alarm-tex r))
+          (gl:uniformi (gl:get-uniform-location p "u_alarm") 0)
+          (gl:uniformf (gl:get-uniform-location p "u_bounds") x0 y0 x1 y1)
+          (gl:uniformf (gl:get-uniform-location p "u_world")
+                       (world-width w) (world-height w))
+          (gl:uniformf (gl:get-uniform-location p "u_cap") *alarm-cap*)
+          (gl:uniformf (gl:get-uniform-location p "u_threshold")
+                       *alarm-threshold*)
+          (gl:uniformf (gl:get-uniform-location p "u_panic") *alarm-panic*)
+          (gl:bind-vertex-array (renderer-empty-vao r))
+          (gl:draw-arrays :triangles 0 3))))
 
     ;; --- obstacles ---------------------------------------------------
     (when (world-obstacles w)

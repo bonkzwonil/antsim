@@ -130,6 +130,17 @@ every existing scenario behaving exactly as it did."
   ;; \"do not go here\" would hand every colony a free map of where its
   ;; neighbours have already failed.
   (repel nil :type (or null field))
+  ;; The alarm field (§3.3, M5).  **NIL until something releases alarm**,
+  ;; and nothing in the model ever does — there is no predator here, no
+  ;; fighting and no raiding, so a colony is disturbed exactly when a
+  ;; person disturbs it (§5.5).
+  ;;
+  ;; Allocated on first release rather than at construction, which is not
+  ;; an optimisation.  It is what makes "a colony nobody poked is
+  ;; untouched" structural instead of a claim about parameters: with no
+  ;; field there is no array, no chemistry step, and nothing for an ant to
+  ;; read, so every published measurement is unreachable from here.
+  (alarm nil :type (or null field))
   (stock 0.0f0 :type f32)               ; nest food store
   ;; Gross crop carried in, ever.  STOCK is a *balance* — it nets out
   ;; upkeep, brood and the meals handed to ants in the nest — so two
@@ -296,8 +307,65 @@ which MAKE-COLONY handles by rasterizing what is already there."
     (push p (world-obstacles w))
     (dolist (c (world-colonies w))
       (field-rasterize-polygon! (colony-field c) p)
-      (field-rasterize-polygon! (colony-repel c) p))
+      (field-rasterize-polygon! (colony-repel c) p)
+      ;; And the alarm field, when there is one.  Usually there is not —
+      ;; it exists only for a colony that has been disturbed — but a block
+      ;; dropped into a nest that is already in uproar is exactly the
+      ;; combination the live window makes easy to reach.
+      (let ((al (colony-alarm c)))
+        (when al (field-rasterize-polygon! al p))))
     p))
+
+(defun ensure-alarm-field (w c)
+  "This colony's alarm field, made on first use (§3.3, M5).
+
+Obstacles already in the world are rasterized into it as it is born, for
+the reason ADD-COLONY does the same: a field that missed them would let
+alarm sit inside terrain and, worse, would let it diffuse through a wall
+that every other chemical respects."
+  (declare (type world w) (type colony c))
+  (or (colony-alarm c)
+      (let ((f (make-field :width (world-width w) :height (world-height w)
+                           :tau *alarm-tau* :cap *alarm-cap*
+                           :diffusion *alarm-diffusion*
+                           :diffusion-steps *alarm-diffusion-steps*)))
+        (dolist (p (world-obstacles w))
+          (field-rasterize-polygon! f p))
+        (setf (colony-alarm c) f))))
+
+(defun poke-nest! (w c &key (amount *alarm-poke*))
+  "Disturb a colony: release alarm over its nest entrance (§3.3, §5.5).
+
+The interaction hook §3.3 names, and the only thing in this model that
+ever releases alarm.  It touches no ant.  Nothing is told that anything
+has happened, no state is set, and no ant is made to run — the colony's
+answer is entirely the ants reading a chemical off the ground, which is
+the only reason the eruption is worth watching.
+
+The release goes into the deposit buffer like every other deposit, so it
+lands on the next pheromone tick rather than instantly.  That is up to a
+second of lag at real time, and it is the right kind of lag: a poke that
+wrote straight into the concentration would be the one deposit in the
+model that does not commute with the others (§4.2)."
+  (declare (type world w) (type colony c))
+  (let ((f (ensure-alarm-field w c)))
+    ;; Over the entrance, not at a point: the thing being modelled is a
+    ;; disturbance to a nest, not an ant with a syringe.
+    (field-deposit-packet! f (colony-nest-x c) (colony-nest-y c)
+                           (float amount 1.0f0)
+                           :radius (colony-nest-r c))
+    f))
+
+(defun world-nest-at (w x y &optional (slack 0.0f0))
+  "The colony whose nest disc contains the point, or NIL.  Linear over the
+colonies, of which a scenario has a handful."
+  (declare (type world w) (type f32 x y slack))
+  (dolist (c (world-colonies w) nil)
+    (let* ((dx (- x (colony-nest-x c))) (dy (- y (colony-nest-y c)))
+           (r (+ (colony-nest-r c) slack)))
+      (declare (type f32 dx dy r))
+      (when (<= (+ (* dx dx) (* dy dy)) (* r r))
+        (return c)))))
 
 (defun rect-covers-nest-p (w x0 y0 x1 y1)
   "True when the axis-aligned rectangle reaches any colony's nest disc.

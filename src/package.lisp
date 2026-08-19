@@ -44,9 +44,14 @@
    #:ants-route-x #:ants-route-y #:ants-route-n #:ants-route-i
    #:ants-route-stride #:route-clear! #:route-record! #:route-target
    #:*search-spiral* #:*spiral-turn* #:*spiral-growth* #:*spiral-trigger*
-   #:ants-search
+   #:ants-search #:ants-alarm-ttl #:ants-alarm-cool
    #:*repel-weight* #:*repel-tau* #:*repel-dead-end* #:*repel-cap*
    #:colony-repel #:repel-at #:repel-tau #:repel-factor
+   #:colony-alarm #:alarm-at #:ensure-alarm-field #:poke-nest! #:world-nest-at
+   #:*alarm* #:*alarm-tau* #:*alarm-cap* #:*alarm-diffusion*
+   #:*alarm-diffusion-steps* #:*alarm-threshold* #:*alarm-panic*
+   #:*alarm-release* #:*alarm-poke* #:*alarm-speed*
+   #:*alarm-ticks* #:*alarm-refractory*
    #:*necrophoresis* #:*undertaker-range* #:*midden-radius*
    #:*midden-pickup-k* #:*midden-drop-k* #:*undertaker-rate*
    #:*midden-base-drop* #:*midden-min-distance*
