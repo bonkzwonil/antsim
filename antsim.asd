@@ -12,7 +12,7 @@
   ;; it into the binary, both packaging scripts name their output from it,
   ;; and both release workflows refuse a tag that disagrees with it — see
   ;; docs/shipping.md.
-  :version "1.0.0"        ; M4 — the society: tribes, tasks, middens, routes; first shipped build
+  :version "1.0.1"        ; M4 — the society; route memory now keeps the whole walk
   :depends-on ()                        ; core stays dependency-free (sb-thread only)
   :serial t
   :pathname "src"

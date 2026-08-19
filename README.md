@@ -240,8 +240,13 @@ Three entry points into it:
 
 ## Where it is
 
-**Version 1.0.0 — milestone M4 · 2026-08-19**, and the first build that ships
-as a binary rather than as a checkout ([Getting it](#getting-it)). M0 through
+**Version 1.0.1 — milestone M4 · 2026-08-19**, and the first line that ships
+as a binary rather than as a checkout ([Getting it](#getting-it)). 1.0.1 is
+1.0.0 with route memory repaired: a full waypoint list now halves its
+resolution instead of refusing new points, so it keeps the approach to the
+food rather than the half of the walk a straight bearing could already do —
+which, on a source behind a wall, was the difference between a mechanism that
+helps and one that aims laden ants at the obstacle. M0 through
 M4 are signed off, M2.1 and M2.2 landed their corrections along the way, and
 **all ten of §3.8's in-scope rows now pass** — the last three, quality-driven
 selection, the quality threshold and task reallocation, closed on the
