@@ -2003,3 +2003,64 @@ colony sent the other one running too."
       (is (plusp ours) "the poked colony did not react to its own poke")
       (is (zerop theirs)
           "~d ants of the colony that was *not* poked are alarmed" theirs))))
+
+(test alarmed-ants-break-a-tie-by-their-own-hand
+  "When the two antennae read the same thing, the turn must not always go
+the same way.
+
+This is not a hypothetical failure mode in this codebase.  A fixed
+tie-break is exactly what sent every newborn out of the nest in a line to
+the left (§3.11): ants spawning on the nest centre were all concentric,
+the separation direction was constant, and the bug was invisible until
+there were newborns to see it.  A plume symmetric about an ant's heading
+is not a rare case for alarm either — it is what a poke on a nest makes,
+for every ant facing the entrance.
+
+Isolated by building the tie deliberately: the field is flat except for
+the one cell the *centre* antenna is over, so the two flanks read equal
+and both beat straight ahead.  The turn noise is switched off, so the
+whole change in heading is the turn and nothing else."
+  (let* ((ant:*turn-sigma* 0.0f0)
+         (w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 64))
+         (c (ant:add-colony w :name "tied" :nest-x 0.5f0 :nest-y 0.9f0
+                              :stock 1.0f6)))
+    (ant:world-seed-population! w c 8)
+    (let* ((seed (ant:world-seed w))
+           (a (ant:world-ants w))
+           (f (ant:ensure-alarm-field w c))
+           (x 0.5f0) (y 0.5f0) (heading 0.0f0)
+           ;; two ants that disagree about which way to break a tie
+           (lefty nil) (righty nil))
+      (dotimes (k (ant:ants-n a))
+        (when (ant:ant-live-p a k)
+          (let ((hand (ant::ant-handedness (aref (ant:ants-id a) k) seed)))
+            (if (minusp hand)
+                (unless lefty (setf lefty k))
+                (unless righty (setf righty k))))))
+      (if (not (and lefty righty))
+          (skip "this seed's first eight ants are all one-handed")
+          (progn
+            ;; flat and alarming everywhere, with a dip straight ahead
+            (fill (ant:field-c f) 6.0f0)
+            (setf (aref (ant:field-c f)
+                        (ant:field-index
+                         f (+ x (* ant:*sensor-offset* (cos heading)))
+                           (+ y (* ant:*sensor-offset* (sin heading)))))
+                  1.0f0)
+            (flet ((turn (i)
+                     (%place! w i x y heading ant:+ant-outbound+)
+                     (let ((before (aref (ant:ants-heading a) i))
+                           (bi (aref (ant:ants-body a) i)))
+                       (ant::alarm-step! w c a i bi (aref (ant:ants-id a) i)
+                                         0 x y)
+                       (ant::wrap-angle
+                        (- (aref (ant:ants-heading a) i) before)))))
+              (let ((l (turn lefty)) (r (turn righty)))
+                (is (not (zerop l))
+                    "the left-handed ant did not turn at all — the tie was ~
+                     not built, so this row is measuring nothing")
+                (is (not (zerop r)) "the right-handed ant did not turn")
+                (is (minusp (* l r))
+                    "both ants turned the same way (~,4f and ~,4f): the ~
+                     tie-break is fixed, not per-ant"
+                    l r))))))))

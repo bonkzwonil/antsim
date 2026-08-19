@@ -559,14 +559,28 @@ across the nest away from something frightening is not one."
            (cr (field-at f (+ x (* off (cos hr))) (+ y (* off (sin hr)))))
            (dir 0.0f0))
       (declare (type f32 cl cc cr dir))
-      ;; Ties leave the heading alone, which is what carries a fleeing ant
-      ;; out of a plume that has gone flat: with nothing to run from in
-      ;; particular, straight on is away.
-      (if flee
-          (cond ((and (< cl cc) (<= cl cr)) (setf dir -1.0f0))
-                ((and (< cr cc) (< cr cl))  (setf dir 1.0f0)))
-          (cond ((and (> cl cc) (>= cl cr)) (setf dir -1.0f0))
-                ((and (> cr cc) (> cr cl))  (setf dir 1.0f0))))
+      ;; Pick the better flank, then turn only if it beats going straight.
+      ;; A centre that already wins leaves the heading alone, which is
+      ;; what carries a fleeing ant out of a plume that has gone flat:
+      ;; with nothing to run from in particular, straight on is away.
+      ;;
+      ;; **Equal flanks go to this ant's own handedness**, not to a fixed
+      ;; side.  A constant tie-break is how the newborn separation bug
+      ;; sent every ant out of the nest in a line to the left (§3.11), and
+      ;; alarm has the same exposure: a plume symmetric about an ant's
+      ;; heading is not a rare case here — it is what a poke on a nest
+      ;; makes, for every ant facing the entrance.  Handedness is the
+      ;; per-ant tie-break the model already carries, it costs no storage
+      ;; and no stream, and it makes the turn isotropic across a colony
+      ;; while staying reproducible for the individual.
+      (let* ((hand (ant-handedness id seed))
+             (left-better (if (= cl cr)
+                              (minusp hand)
+                              (if flee (< cl cr) (> cl cr))))
+             (flank (if left-better cl cr)))
+        (declare (type f32 hand flank))
+        (when (if flee (< flank cc) (> flank cc))
+          (setf dir (if left-better -1.0f0 1.0f0))))
       ;; The same turn rate and the same noise as an ordinary step.  Alarm
       ;; changes what an ant wants, not what its legs can do.
       (setf heading
