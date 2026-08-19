@@ -957,11 +957,17 @@ switch into and no switching logic to get wrong (§3.5)."
             ;; the ant keeps its errand and picks it up again when the
             ;; plume fades.  See ALARM-STEP!.
             ;;
-            ;; The test is two null checks and one array read, and the
-            ;; first of them is NIL for every colony that has never been
-            ;; disturbed: no field is allocated until something releases
-            ;; alarm, so a scenario nobody pokes does not pay for this and
-            ;; cannot be changed by it.
+            ;; The test advances the episode as well as asking about it,
+            ;; which is why it is named with a bang — the phases have to
+            ;; run down whether or not this ant is the one that acts, and
+            ;; putting that anywhere else would mean two places that both
+            ;; have to agree about when an episode ends.
+            ;;
+            ;; For a colony that has never been disturbed it costs two
+            ;; array reads and a NIL test, and can do nothing else: there
+            ;; is no field to read until something releases alarm, so a
+            ;; scenario nobody pokes neither pays for this nor can be
+            ;; changed by it.
             ((and *alarm* (alarm-grip! c a i x y))
              (alarm-step! w c a i bi id tick x y))
             ;; --- IN-NEST -------------------------------------------
