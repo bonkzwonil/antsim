@@ -200,20 +200,41 @@ Three entry points into it:
 
 ## Where it is
 
-**Version M3 · 2026-08-16.** M0 and M2 are signed off, M2.1 and M2.2 landed
-their corrections, and **M1's two defining rows pass** — symmetry breaking and
-shortest-path selection, on the apparatus above. Seven of §3.8's ten in-scope
-rows pass; the three that remain — quality-driven selection, no trail below the
-quality threshold, and task reallocation — need a two-source apparatus.
+**Version M4 · 2026-08-19.** M0 through M4 are signed off, M2.1 and M2.2 landed
+their corrections along the way, and **all ten of §3.8's in-scope rows now
+pass** — the last three, quality-driven selection, the quality threshold and
+task reallocation, closed on the two-source apparatus in
+[`src/world/trials.lisp`](src/world/trials.lisp).
 
-**M3 is half done, and the missing half is the interesting one.** The ant is an
-ant now: an articulated vector body on an alternating tripod gait, with antennae
-that sweep the pheromone field they are standing on, at eight floats per ant per
-frame. What is *not* built is the **encounter event** — today the broad phase
-reports overlaps to be resolved and nothing else, so two ants meeting head-on
-push each other apart and neither prefers a side. Turning that into *this ant
-met that ant, at this bearing* is what lane formation and the
-social-information channel of §3.4 both need, and it is next.
+**M3 finished with the encounter event**, and the prediction that justified
+building it held: once the broad phase reports *this ant met that ant, at this
+bearing*, recognition, giving way and trophallaxis are one function between them
+and none is more than a handful of lines. A contact carries evidence about
+*when* and never about *where* — this genus tests negative for tactile transfer
+of direction, so a model that let a contact hand over a bearing would be
+inventing a channel the animal has been shown not to have. **Lanes do not
+form**, which §3.11 expected them to: on a 55 cm trail with 600 ants the mean
+lateral offset between the outbound and returning streams is 1.7 mm with the
+give-way rule and 2.1 mm without. What giving way buys is throughput, which is
+the smaller claim and the one there is evidence for.
+
+**M4 is the society.** Multiple colonies, which needed no change to the tick at
+all — §3.12's per-colony indirection held, and the work was apparatus.
+Necrophoresis on Deneubourg's sorting model, which takes the corpses within 6 cm
+of a nest from 24 to 0. And **route memory**, which closes the oldest open flaw
+in the model: the home vector is a vector and not a path, so a laden ant used to
+drive at whatever stood between it and the nest and slide along it. An ant now
+keeps its own outward track and falls back to it when the bearing home is
+blocked — harvest 888 → 1264 on the word scenario, whose entire geometry is
+concavities, and no change at all on an arena with one small wall, which is the
+right shape of result for a fix aimed at concavities.
+
+Response thresholds, the no-entry field and search spirals also ship, and are
+**inert at shipped parameters** for three different measured reasons. They are
+failure-recovery mechanisms, and the finding is that this model's ants do not
+currently fail in the ways they recover from.
+
+**M5 — interaction — is next**: what you can *do* to a running world.
 
 The full record, including what shipped switched **off** and why, is
 [§7](docs/concept.md#7-milestones).
