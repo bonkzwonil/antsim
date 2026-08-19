@@ -1970,3 +1970,36 @@ a line there."
             "a newborn inherited an alarm episode")
         (is (zerop (aref (ant:ants-alarm-cool a) 0))
             "a newborn inherited a refractory period")))))
+
+(test one-tribes-panic-is-not-another-tribes
+  "Alarm is read from the ant's own colony's field and no other, with no ε
+term (§3.12).
+
+ε is eavesdropping on a claim about *food*, where overhearing a rival is
+an advantage worth modelling.  Overhearing a rival's alarm and joining in
+is not a behaviour, it is a bug with a plausible-sounding name — and in
+`two-tribes`, where two nests sit 50 cm apart, it would mean poking one
+colony sent the other one running too."
+  (let* ((w (ant:make-world :width 1.0f0 :height 1.0f0 :capacity 128))
+         (a (ant:add-colony w :name "west" :nest-x 0.3f0 :nest-y 0.5f0
+                              :stock 1.0f6))
+         (b (ant:add-colony w :name "east" :nest-x 0.7f0 :nest-y 0.5f0
+                              :stock 1.0f6)))
+    (ant:world-seed-population! w a 16)
+    (ant:world-seed-population! w b 16)
+    (ant:world-run! w 200)
+    (ant:poke-nest! w a)
+    (ant:world-run! w 60)
+    (is-true (ant:colony-alarm a) "the poked colony has no field")
+    (is (null (ant:colony-alarm b))
+        "poking one colony built the other one an alarm field")
+    (let ((ants (ant:world-ants w)) (theirs 0) (ours 0))
+      (dotimes (i (ant:ants-n ants))
+        (when (and (ant:ant-live-p ants i)
+                   (plusp (aref (ant:ants-alarm-ttl ants) i)))
+          (if (= (ant:colony-id b) (aref (ant:ants-colony ants) i))
+              (incf theirs)
+              (incf ours))))
+      (is (plusp ours) "the poked colony did not react to its own poke")
+      (is (zerop theirs)
+          "~d ants of the colony that was *not* poked are alarmed" theirs))))
