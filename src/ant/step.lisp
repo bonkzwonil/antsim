@@ -162,6 +162,11 @@ initial condition rather than merely a convenient one."
                  (aref (ants-route-n a) i) 0
                  (aref (ants-route-i a) i) 0
                  (aref (ants-route-d a) i) 0.0f0
+                 ;; Slots are recycled through the free list, so this has
+                 ;; to be reset for the same reason the count does: a
+                 ;; newborn must not inherit the coarsened spacing of
+                 ;; whoever last held its index.
+                 (aref (ants-route-step a) i) *route-spacing*
                  ;; Its own point in the tripod cycle (§5.2).  Zero would
                  ;; work and looks wrong: a cohort emerging together would
                  ;; step in unison, which is a thing ants conspicuously do
@@ -245,40 +250,106 @@ every line that reads a pheromone."
 
 (defun route-clear! (a i)
   "Forget the remembered outward path.  Called when a leg begins, so a
-route is always one journey's worth and never two spliced together."
+route is always one journey's worth and never two spliced together.
+
+The spacing goes back to *route-spacing* with it.  It is per-ant state
+that grows during a journey (ROUTE-DECIMATE!), so leaving it behind would
+start the next leg — and, since ants are recycled through the free list,
+the next *ant* — at whatever coarseness the last long walk ended on."
   (declare (type ants a) (type fixnum i))
   (setf (aref (the u8v (ants-route-n a)) i) 0
         (aref (the u8v (ants-route-i a)) i) 0
-        (aref (the f32v (ants-route-d a)) i) 0.0f0)
+        (aref (the f32v (ants-route-d a)) i) 0.0f0
+        (aref (the f32v (ants-route-step a)) i) *route-spacing*)
   (values))
+
+(defun route-decimate! (a i)
+  "Halve the resolution of a full route in place and double its spacing.
+Returns the new count.
+
+Keeps every second point *counting back from the newest*, so the most
+recent waypoint always survives and the retained points still span the
+whole walk from the nest to here — at twice the spacing.  Choosing the
+parity from the far end rather than from index zero is the entire trick:
+the other parity drops the newest point, which is the one the return leg
+consumes first."
+  (declare (type ants a) (type fixnum i) (optimize (speed 3) (safety 1)))
+  (let* ((cap (ants-route-stride a))
+         (base (* i cap))
+         (rx (the f32v (ants-route-x a)))
+         (ry (the f32v (ants-route-y a)))
+         (m 0))
+    (declare (type fixnum cap base m))
+    (loop for k of-type fixnum from (mod (1- cap) 2) below cap by 2
+          do (setf (aref rx (+ base m)) (aref rx (+ base k))
+                   (aref ry (+ base m)) (aref ry (+ base k)))
+             (incf m))
+    ;; Halving frees a slot at every capacity but one.  Counting the kept
+    ;; points: an even cap keeps cap/2 and an odd one keeps (cap+1)/2, so
+    ;; the result is at most cap-1 — except at cap = 1, where it is 1, and
+    ;; the list comes back from being halved still full.
+    ;;
+    ;; Without this clamp that case does not crash; it quietly stops.  The
+    ;; caller finds n = cap again on the next call, decimates again, and
+    ;; doubles the spacing again — every single tick — so the distance
+    ;; accumulator can never catch the threshold and no point is ever
+    ;; recorded after the first.  An ant with a one-point memory would
+    ;; hold the point it laid on leaving the nest, for ever.
+    ;;
+    ;; Clamped, the same case is a ring of one that holds the newest
+    ;; point, which is what a one-point memory ought to mean.  cap = 1 is
+    ;; reachable: *route-waypoints* is an ordinary parameter and 1 is the
+    ;; obvious value to try when asking what a single point is worth.
+    (setf m (min m (1- cap)))
+    (setf (aref (the u8v (ants-route-n a)) i) m)
+    (setf (aref (the f32v (ants-route-step a)) i)
+          (* 2.0f0 (aref (the f32v (ants-route-step a)) i)))
+    m))
 
 (defun route-record! (a i x y step)
   "Note that the ant has walked STEP metres and reached (X, Y), and lay
 down a waypoint if it is far enough from the last one.
 
-The list is a *stack* and not a ring: once it is full the ant stops
-recording rather than overwriting its earliest points.  Which end to drop
-is the whole design decision here, and dropping the far end is wrong —
-the points nearest the food are the ones that get the ant out of whatever
-it had to work around to reach the food, and they are what it needs
-first on the way back.  Keeping the beginning of the walk and losing the
-end would hand the return leg exactly the part it can already do with a
-straight bearing."
+**When the buffer fills the route coarsens; it does not stop.**  Which
+end to drop is the whole design decision here, and there is a third
+answer better than either end.  Dropping the newest points — which is
+what simply stopping does — hands the return leg exactly the part it can
+already do with a straight bearing, and loses the approach to the food,
+where whatever had to be worked around actually is.  Dropping the oldest,
+as a ring would, keeps that approach but bounds the memory to
+`*route-waypoints*` × `*route-spacing*` of track: a quarter of a metre,
+which is fine on a bridge and useless in the five-metre arena.
+
+So instead the ant halves its resolution and doubles its spacing
+(ROUTE-DECIMATE!).  A fixed budget of points then spans a journey of any
+length, coarsening only when the journey is long enough that fine
+resolution was not buying anything — the waypoints are a bearing to walk,
+not a track to retrace, and at 20 cm apart they still steer round an
+obstacle they were 2 cm apart for.
+
+This was a real bug and not a hypothetical.  Measured in `two-tribes`,
+where the west nest is 41 cm from the contested source: the buffer filled
+24 cm out, recording stopped, and the ant standing *at the food* with the
+way home blocked was handed a waypoint 19 cm behind it, back beside the
+nest and on the far side of the wall it needed to avoid.  Route memory
+was not failing to help, it was aiming the ant at the obstacle."
   (declare (type ants a) (type fixnum i) (type f32 x y step)
            (optimize (speed 3) (safety 1)))
   (let ((n (aref (the u8v (ants-route-n a)) i))
         (cap (ants-route-stride a)))
     (declare (type (unsigned-byte 8) n) (type fixnum cap))
-    (when (< n cap)
-      (incf (aref (the f32v (ants-route-d a)) i) step)
-      (when (or (zerop n)
-                (>= (aref (the f32v (ants-route-d a)) i) *route-spacing*))
-        (let ((k (+ (* i cap) n)))
-          (declare (type fixnum k))
-          (setf (aref (the f32v (ants-route-x a)) k) x
-                (aref (the f32v (ants-route-y a)) k) y
-                (aref (the u8v (ants-route-n a)) i) (1+ n)
-                (aref (the f32v (ants-route-d a)) i) 0.0f0)))))
+    (when (>= n cap)
+      (setf n (route-decimate! a i)))
+    (incf (aref (the f32v (ants-route-d a)) i) step)
+    (when (or (zerop n)
+              (>= (aref (the f32v (ants-route-d a)) i)
+                  (aref (the f32v (ants-route-step a)) i)))
+      (let ((k (+ (* i cap) n)))
+        (declare (type fixnum k))
+        (setf (aref (the f32v (ants-route-x a)) k) x
+              (aref (the f32v (ants-route-y a)) k) y
+              (aref (the u8v (ants-route-n a)) i) (1+ n)
+              (aref (the f32v (ants-route-d a)) i) 0.0f0))))
   (values))
 
 (defun route-target (a i x y)

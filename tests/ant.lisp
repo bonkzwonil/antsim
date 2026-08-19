@@ -1642,26 +1642,123 @@ spacing" n))
       (is (> (abs (- x1 x0)) (* 0.8f0 ant:*route-spacing*))
           "consecutive points are only ~,4f apart" (abs (- x1 x0))))))
 
-(test a-full-route-keeps-the-end-nearest-the-food
-  "Which end to drop is the design decision.  The points near the food are
-the ones that get the ant out of whatever it worked around to reach the
-food, and they are what it needs first on the way back — so a full list
-stops recording rather than overwriting its earliest points."
+(test a-full-route-still-spans-the-whole-walk
+  "Which end to drop is the design decision, and the answer is neither
+end: when the list fills, the ant halves its resolution and doubles its
+spacing, so a fixed budget of points spans a journey of any length.
+
+**This test previously asserted the opposite, and was wrong to.**  It was
+called `a-full-route-keeps-the-end-nearest-the-food` and then checked that
+the last stored point was the last one that *fitted* — which is the end
+nearest the *nest*.  The name stated the design, the assertion pinned the
+bug, and because the code agreed with the assertion the row stayed green
+for a whole milestone.
+
+What that cost, measured in `two-tribes`, where the west nest is 41 cm
+from the contested source: recording stopped 24 cm out, and an ant
+standing at the food with its way home blocked was handed a waypoint 19 cm
+behind it — beside the nest, on the far side of the wall it needed to get
+around.  Route memory was not failing to help; it was aiming laden ants
+into the obstacle and they died against it."
   (let* ((w (%meet-world :n 2))
          (a (ant:world-ants w))
-         (cap (ant:ants-route-stride a)))
+         (cap (ant:ants-route-stride a))
+         (steps (* 4 cap))
+         (end (* ant:*route-spacing* steps)))
     (ant:route-clear! a 0)
     ;; walk far enough to overflow the list several times over
-    (dotimes (k (* 4 cap))
+    (dotimes (k steps)
       (ant:route-record! a 0 (* ant:*route-spacing* (1+ k)) 0.0f0
                          ant:*route-spacing*))
-    (is (= cap (aref (ant:ants-route-n a) 0))
-        "the list holds ~d of ~d points" (aref (ant:ants-route-n a) 0) cap)
-    ;; the last point recorded is the last one that fitted, not the last
-    ;; one walked
-    (let ((last (aref (ant:ants-route-x a) (1- cap))))
-      (is (< last (* ant:*route-spacing* (1+ cap)))
-          "the list overwrote its early points: last x is ~,4f" last))))
+    (let ((n (aref (ant:ants-route-n a) 0))
+          (spacing (aref (ant::ants-route-step a) 0)))
+      (is (<= n cap)
+          "the list holds ~d points, past its capacity of ~d" n cap)
+      (is (plusp n) "a walk of ~,3f m recorded nothing at all" end)
+      ;; The spacing must have coarsened; that is the mechanism.
+      (is (> spacing ant:*route-spacing*)
+          "a walk four times the buffer left the spacing at ~,4f" spacing)
+      ;; The far end is the point of the whole thing: the ant must still
+      ;; hold a waypoint near where it ended up, within one current
+      ;; spacing of it.
+      (let ((last (aref (ant:ants-route-x a) (1- n))))
+        (is (>= last (- end spacing))
+            "the walk ended at ~,4f but the newest waypoint is ~,4f — the ~
+             approach to the food was not kept" end last))
+      ;; ... and it must still span back towards the nest, or it is a ring
+      ;; by another name and no use on a long journey.
+      (let ((first (aref (ant:ants-route-x a) 0)))
+        (is (<= first (* 2.0f0 spacing))
+            "the oldest waypoint is at ~,4f, so the route covers only the ~
+             last ~,4f m of a ~,4f m walk" first (- end first) end)))))
+
+(test a-tiny-route-budget-still-tracks-the-walk
+  "*route-waypoints* is an ordinary parameter and 1 is a legitimate value
+— the obvious thing to try when asking what a single remembered point is
+worth.  It is also the one capacity where halving a full list does not
+free a slot, so it needs its own row.
+
+The failure it guards against is silence, not a crash.  Unclamped, the
+list comes back from being halved still full, so the next tick halves it
+again and doubles the spacing again, every tick, and the distance
+accumulator can never catch the threshold: nothing is ever recorded after
+the first point and the ant's single memory is wherever it left the nest,
+for ever.  Clamped, it is a ring of one holding the newest point.
+
+Asserted as *the point tracks the walk*, which is the property either way
+— an assertion about the clamp itself would be a restatement of the
+implementation, and this file already contains one of those and it cost a
+milestone."
+  (dolist (budget '(1 2 3))
+    (let ((ant:*route-waypoints* budget))
+      (let* ((w (%meet-world :n 3))
+             (a (ant:world-ants w))
+             (cap (ant:ants-route-stride a))
+             (last 0.0f0))
+        (is (= cap budget)
+            "the table was built with stride ~d for a budget of ~d" cap budget)
+        (ant:route-clear! a 0)
+        (dotimes (k 60)
+          (setf last (* 0.01f0 (1+ k)))
+          (ant:route-record! a 0 last 0.0f0 0.01f0))
+        (let ((n (aref (ant:ants-route-n a) 0)))
+          (is (and (plusp n) (<= n cap))
+              "budget ~d: the count is ~d, capacity ~d" budget n cap)
+          ;; The newest waypoint has to have moved with the ant.  At
+          ;; budget 1 the unclamped version leaves it at 0.01 — the point
+          ;; laid on the very first tick, 59 ticks ago.
+          (let ((newest (aref (ant:ants-route-x a) (1- n))))
+            (is (> newest (* 0.5f0 last))
+                "budget ~d: after walking to ~,3f the newest remembered ~
+                 point is still ~,3f — recording stopped"
+                budget last newest)))))))
+
+(test a-long-walk-sends-a-laden-ant-back-the-way-it-came
+  "The regression for what was actually watched happening: ants leaving a
+source on a straight compass bearing, into a wall, and dying there.
+
+Two-tribes geometry, in one dimension — 41 cm out, which is nearly twice
+the 24 cm the buffer used to cover.  Standing at the food, the first
+waypoint offered must be *ahead of the ant on its way back*, near the
+food end of the walk, and not a point beside the nest that happens to lie
+through the obstacle."
+  (let* ((w (%meet-world :n 2))
+         (a (ant:world-ants w))
+         (nest 0.09f0)
+         (food 0.50f0)
+         (step 0.002f0)
+         (n (round (/ (- food nest) step))))
+    (ant:route-clear! a 0)
+    (dotimes (k n)
+      (ant:route-record! a 0 (+ nest (* step (1+ k))) 0.32f0 step))
+    (multiple-value-bind (rx ry) (ant:route-target a 0 food 0.32f0)
+      (declare (ignore ry))
+      (is-true rx "a 41 cm walk offered no waypoint at all")
+      (when rx
+        (is (> rx (* 0.5f0 (+ nest food)))
+            "standing at the food (~,3f), the route sent the ant to ~,3f — ~
+             past the midpoint and back towards the nest, which is the bug"
+            food rx)))))
 
 (test a-route-is-walked-back-from-the-far-end
   "Consumed from the end nearest the food inward, and a point is dropped

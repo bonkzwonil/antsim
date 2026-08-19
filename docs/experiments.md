@@ -827,6 +827,78 @@ undertakers.  Against the moving control, clumping roughly doubles where
 the traffic alone barely moves it, and the nest goes to nothing rather
 than to half.
 
+### Route memory remembered the wrong end of the walk (§3.4)
+
+Found by watching, in `two-tribes`: laden ants leaving the contested
+source on a straight compass bearing, into the central wall, sliding along
+it and dying there — the exact behaviour route memory exists to prevent,
+in a scenario built to need it.
+
+The list filled and **stopped recording**, so it held the 24 cm nearest
+the *nest* and never saw the approach to the food.  The entry above says
+in as many words why that is the wrong half — "keeping the beginning of
+the walk and losing the end would hand the return leg exactly the part it
+can already do with a straight bearing" — and that is what the code did.
+Measured in the geometry above, where the west nest is 41 cm from the
+source:
+
+    standing at        waypoints span      target offered
+    the food (0.500)   0.092 .. 0.312      0.312   19 cm backwards
+                                                   beside the nest, and
+                                                   through the wall
+
+Not a mechanism failing to help.  A mechanism aiming laden ants at the
+obstacle.
+
+**A test asserted this, and that is the part worth not repeating.** The
+row was called `a-full-route-keeps-the-end-nearest-the-food` and then
+checked that the last stored point was the last one that *fitted* — which
+is the nest end.  Name states the design, assertion pins the bug, code
+agrees with the assertion, row green for a whole milestone.  A test that
+restates the implementation cannot fail with it.
+
+**The fix is neither end.**  A ring — drop the oldest — keeps the approach
+but bounds the memory to twelve points at 2 cm, a quarter of a metre:
+right for a bridge, useless in the 5 × 3.6 m arena where journeys are
+metres.  Instead a full list **halves its resolution and doubles its
+spacing**, keeping every second point counted back from the newest, so a
+fixed budget spans a journey of any length and coarsens only when fine
+resolution was not buying anything.  The waypoints are a bearing to walk,
+not a track to retrace; 20 cm apart they still steer round an obstacle
+they were 2 cm apart for.
+
+Counting the parity back from the newest matters and is easy to get
+backwards: the other parity drops the most recent point, which is the one
+the return leg consumes first.
+
+    two-tribes, 41 cm     before          after
+    waypoints span        0.092 .. 0.312  0.112 .. 0.472
+    target from the food  0.312           0.472
+                          19 cm backwards 2.8 cm ahead
+
+§3.8, six seeds, same protocol as the acceptance rows:
+
+    row                          before   after
+    binary, busiest-arm mean      0.918    0.930
+    binary, worst seed            0.900    0.899
+    binary, winners           1 0 1 0 1 1  1 0 1 0 1 1
+    double, short-arm mean        0.913    0.979
+    double, worst seed            0.719    0.962
+
+**Both published rows improved and neither changed in kind.**  The binary
+bridge is unmoved to three figures and picks the same arm on every seed,
+which is what it should do — the fix is about getting home, not about
+choosing.  The double bridge is where it shows: the worst replicate goes
+from 0.719 to 0.962 and the spread across seeds all but collapses.  That
+is the right mechanism for the right reason — an ant that retraces the arm
+it came by completes the round trip sooner than one that drives into the
+corridor wall and slides, so deposition on the short arm gets more
+consistent rather than merely heavier.
+
+Worth recording that the *before* column reproduces the M4 entry above
+exactly — 0.918 mean, 0.900 worst — which is what made it safe to read the
+after column as a change in the model rather than in the harness.
+
 ## On the list, not yet measured
 
 - **The README's per-seed bridge tables.** Stale since `d6b0035` (see

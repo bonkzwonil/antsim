@@ -2132,6 +2132,22 @@ on when the vector cannot be walked, and making it conditional on the
 bearing being blocked is both the correct biology and much the smaller
 change.
 
+*And then it went wrong a second way, which took a scenario M4 did not
+have to expose.* The list filled and **stopped recording**, so it held
+the points nearest the *nest* — the half the return leg can already do
+with a straight bearing — and never saw the approach to the food. On the
+40 cm journeys M4 measured this merely wasted the mechanism; on
+`two-tribes`, where the west nest is 41 cm from a source behind a wall,
+it was worse than nothing, handing an ant standing at the food a waypoint
+19 cm backwards and through the wall it needed to avoid. A full list now
+halves its resolution and doubles its spacing instead, so a fixed budget
+of points spans a journey of any length. Both §3.8 rows *improved* — the
+double bridge's worst replicate went 0.719 to 0.962 — so the sentence
+above is superseded: §3.8 was untouched by route memory as M4 shipped it,
+and is measurably better with it working. The numbers, and the test that
+had been asserting the bug, are in
+[docs/experiments.md](experiments.md).
+
 *Delivered, correct, and inert.* **Response thresholds**, **the no-entry
 field** and **search spirals** are all built, tested, and change nothing
 at shipped parameters, for three different measured reasons set out in
