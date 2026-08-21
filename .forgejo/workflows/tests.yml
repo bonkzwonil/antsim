@@ -129,3 +129,28 @@ jobs:
       # graphics stack.  No window, no GPU.
       - name: Command-line suite
         run: make test-app-bare
+
+  # The gallery's weight, which is a property of the documentation rather
+  # than of the code and so needs neither SBCL nor a graphics stack.
+  #
+  # `make gallery` renders PNG and converts to JPEG with ImageMagick,
+  # because src/render/png.lisp emits stored deflate blocks — a 640x448
+  # frame is 860 kB of raw RGB and the hero was 3 MB.  A picture added by
+  # hand skips that step, and the only symptom is a README that takes a
+  # moment to load, which nobody reports.  So the check is here, where it
+  # is a red cross instead.
+  images:
+    runs-on: docker
+    container:
+      image: node:20-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      # `identify` comes from imagemagick; the script uses it to name the
+      # format and dimensions next to the byte count, so a failure says
+      # what the offending picture is and not merely that it is too big.
+      - name: Install ImageMagick
+        run: apt-get update && apt-get install -y imagemagick
+
+      - name: Gallery is web-sized
+        run: ./scripts/check-images.sh

@@ -31,14 +31,14 @@ read — which makes it, exactly, the correlated random walk. There is no
 trail-following mode to switch on: following and exploring are the same rule in
 two different environments.
 
-![Five seconds: no pheromone at all](images/00-nothing.png)
+![Five seconds: no pheromone at all](images/00-nothing.jpg)
 
 ### The first thread — 40 seconds
 
 At 40 seconds the total is 839 and one faint line runs from the food to the
 nest. That is the first ants home, laying the first pheromone.
 
-![Forty seconds: the first thread](images/01-searching.png)
+![Forty seconds: the first thread](images/01-searching.jpg)
 
 ### Two routes — 5 minutes
 
@@ -46,7 +46,7 @@ By 5 minutes the thread has become a road, and it is not the only one: a second,
 fainter route cuts diagonally from the nest to the source, and a third stub runs
 off to the left. Traffic is on all of them.
 
-![Five minutes: a committed road, and a fainter second route beside it](images/02-forming.png)
+![Five minutes: a committed road, and a fainter second route beside it](images/02-forming.jpg)
 
 The total is 53 840, and the population is still exactly the 150 it started
 with: the colony is feeding itself but has not yet banked enough surplus for the
@@ -60,7 +60,7 @@ By 20 minutes it is running one route, and there is no trace of the others. The
 total is 126 333 and the population has reached 294 — the queen's first brood
 has emerged, paid for by the trail in the picture.
 
-![An established trail between nest and food](images/03-trail.png)
+![An established trail between nest and food](images/03-trail.jpg)
 
 <sub>*The nest is the disc at the bottom, the food source the green disc at the top,
 and the blue field is pheromone the ants laid themselves. The colour turns where
@@ -89,13 +89,13 @@ looks stronger is stronger.
 
 On the surviving road, traffic runs both ways at once.
 
-![Traffic on the route](images/05-traffic.png)
+![Traffic on the route](images/05-traffic.jpg)
 
 <sub>*Outbound ants are pale, laden returners warm orange, and both streams share one
 road. Zoomed to 18 cm — close enough that the level of detail has already handed
 over to the articulated body.*</sub>
 
-![The same road, close enough to see the ants](images/15-vector-ant.png)
+![The same road, close enough to see the ants](images/15-vector-ant.jpg)
 
 <sub>*The same stretch of trail at 4.5 cm. Six legs on an alternating tripod, two
 antennae, mandibles, a swollen crop on the ants carrying one, and the pale blue
@@ -142,7 +142,7 @@ shader that drew it before the ant had legs.
 
 ### The nest
 
-![The nest](images/04-nest.png)
+![The nest](images/04-nest.jpg)
 
 <sub>*The nest disc with its arrival radius as the surrounding ring, and the trail
 coming in from the source. The gold disc inside is the food stored in the nest,
@@ -167,7 +167,7 @@ happens over the next six is the part worth watching.
 At the moment the source empties, the trail is at full strength — 93 890 units —
 and the colony is still pouring ants onto it.
 
-![The source has just run out](images/09-abandoned.png)
+![The source has just run out](images/09-abandoned.jpg)
 
 Following a trail and depositing on one are **separate rules**. An ant follows
 whatever pheromone is in front of it; an ant deposits only when it is carrying
@@ -178,14 +178,14 @@ taking the road out from under the ants still walking it.
 still packed along the line where it was, including a knot where the food used
 to be. Not one of them is orange, because there is nothing left to carry.
 
-![Two minutes on: walking a road that is dissolving](images/10-fading.png)
+![Two minutes on: walking a road that is dissolving](images/10-fading.jpg)
 
 **Six minutes** and it is 252, from 93 890. The structure is simply gone, and
 with it every trace of where the food had been. The colony disperses back into
 the random walk it started with — and the red ants are the ones that no longer
 have the reserve to try again.
 
-![Six minutes on: nothing left](images/11-collapsed.png)
+![Six minutes on: nothing left](images/11-collapsed.jpg)
 
 The population is *rising* through all three frames — 390, 414, 462 — because
 the colony is still converting its stored food into workers while its road
@@ -205,7 +205,7 @@ come home spent. By 60 minutes the population is 0, the stock is 0, and the
 field has evaporated to nothing at all: there is no pheromone left anywhere to
 say a road was ever there.
 
-![After the source ran out](images/06-aftermath.png)
+![After the source ran out](images/06-aftermath.jpg)
 
 <sub>*The corpses are the pale discs, packed into a rosette around the nest entrance
 — they came home to die. Nothing removes them, because nothing in the colony

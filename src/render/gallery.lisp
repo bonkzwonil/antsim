@@ -6,6 +6,13 @@
 ;;;; quietly drift away from what the simulation does.
 ;;;;
 ;;;; Deterministic: same seed, same frames, byte for byte.
+;;;;
+;;;; The frames written here are PNG and are *not* what is committed.
+;;;; PNG.LISP emits stored deflate blocks, so a 640x448 frame is 860 kB of
+;;;; essentially raw RGB; `make gallery` converts each one to JPEG with
+;;;; ImageMagick and deletes the PNG, and the documentation refers to the
+;;;; .jpg.  Determinism is a claim about what is rendered here, which the
+;;;; conversion does not touch.
 
 (in-package #:antsim)
 

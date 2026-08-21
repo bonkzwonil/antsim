@@ -44,6 +44,16 @@ jobs:
             exit 1
           fi
 
+      # Nothing is served twice as slowly as a picture nobody measured.
+      # docs/images is JPEG produced by `make gallery`'s ImageMagick step;
+      # this refuses to publish a directory that has drifted back to raw
+      # PNG or grown past the budget.  Same script the tests workflows run.
+      - name: Install ImageMagick
+        run: sudo apt-get install -y imagemagick
+
+      - name: Gallery is web-sized
+        run: ./scripts/check-images.sh
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

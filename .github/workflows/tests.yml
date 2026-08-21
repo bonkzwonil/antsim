@@ -140,3 +140,26 @@ jobs:
       # smoke test cannot reach.
       - name: Command-line suite
         run: make test-app-bare
+
+  # The gallery's weight — documentation rather than code, so neither SBCL
+  # nor a graphics stack is involved.  The same job as the one in
+  # .forgejo/workflows/tests.yml, calling the same script.
+  #
+  # `make gallery` renders PNG and converts to JPEG with ImageMagick,
+  # because src/render/png.lisp emits stored deflate blocks: a 640x448
+  # frame is 860 kB of raw RGB and the hero was 3 MB.  A picture added by
+  # hand skips that step, and the only symptom is a page that loads slowly
+  # — which nobody reports.  Here it is a red cross instead.
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `identify` comes from imagemagick; the script uses it to name the
+      # format and dimensions next to the byte count, so a failure says
+      # which picture is at fault and what it is.
+      - name: Install ImageMagick
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
+      - name: Gallery is web-sized
+        run: ./scripts/check-images.sh

@@ -3,7 +3,7 @@
 **A 2D ant colony simulation built on real behavioural science, in Common Lisp,
 rendered with OpenGL.**
 
-![The word ANTSIM spelled in solid terrain, with two ant trails threading through the letters](docs/images/15-antsim.png)
+![The word ANTSIM spelled in solid terrain, with two ant trails threading through the letters](docs/images/15-antsim.jpg)
 
 <sub>*The project's own name, spelled in obstacles, run as a scenario. The nest
 is below the word and two food sources sit above it, so every trail has to find
@@ -23,7 +23,7 @@ format cannot express one, and no function exists to paint one.
 
 And close enough, an ant is an ant.
 
-![Ants on a trail at four and a half centimetres, with legs, antennae and carried food visible](docs/images/15-vector-ant.png)
+![Ants on a trail at four and a half centimetres, with legs, antennae and carried food visible](docs/images/15-vector-ant.jpg)
 
 <sub>*A trail at 4.5 cm. Six legs on an alternating tripod, sweeping antennae,
 mandibles, a swollen gaster on the ants carrying a load — one mesh of ninety-odd
@@ -60,7 +60,7 @@ The point of building on real behavioural science is that the results are
 apparatus with published outcomes, and both are in the test suite, with the
 papers' own criteria. `make acceptance` runs them.
 
-![The double bridge: two routes to the same food, one of them shorter](docs/images/14-hero.png)
+![The double bridge: two routes to the same food, one of them shorter](docs/images/14-hero.jpg)
 
 <sub>*Goss's double bridge. Two corridors lead from the nest to the food and one
 is longer. Nothing in the model can measure a distance, compare two routes, or
@@ -75,7 +75,7 @@ commit, six minutes measured:
 | **Deneubourg's binary bridge** (1990) | two *equal* arms — does the colony break the symmetry? | 0.944 | commits every time, **9 / 7** between the arms |
 | **Goss's double bridge** (1989) | one arm 1.73× longer — does it find the short one? | 0.814 | short arm wins **16 / 16** |
 
-![The binary bridge: two identical corridors, and the colony committed to one of them](docs/images/12-binary-bridge.png)
+![The binary bridge: two identical corridors, and the colony committed to one of them](docs/images/12-binary-bridge.jpg)
 
 <sub>*Deneubourg's binary bridge. The two corridors are identical and one of them
 is carrying all the traffic — that asymmetry is the entire result, and which side

@@ -24,6 +24,17 @@ MESA := guix shell mesa -- env LIBGL_ALWAYS_SOFTWARE=1
 # silently expands to nothing.  Hence `sh -c` rather than `env`.
 WIN := guix shell glfw nvda@580 --
 
+# src/render/png.lisp emits *stored* deflate blocks — a valid zlib stream
+# that needs no compressor, which is the right trade for a file a test
+# writes and reads back, and the wrong one for a gallery: a 640x448 frame
+# comes to 860 kB of essentially raw RGB and the hero to 3 MB.  So the
+# gallery renders PNG and is then converted, and only the JPEGs are
+# committed and published.
+#
+# Note the binary is `convert`, not `magick`: this is ImageMagick 6.
+IM := guix shell imagemagick --
+JPEG_QUALITY ?= 90
+
 SMOKE_PNG ?= out/m0-smoke.png
 
 # Make the systems findable without symlinking into ~/quicklisp/local-projects:
@@ -34,7 +45,8 @@ export CL_SOURCE_REGISTRY := $(CURDIR):
 .PHONY: all test acceptance test-app test-app-bare \
         test-render test-render-mesa test-render-ci \
         test-render-bare smoke smoke-mesa live gallery word-scenario \
-        repl page clean binary binary-bare appimage appimage-bare \
+        repl page check-images clean binary binary-bare \
+        appimage appimage-bare \
         icon dist-clean
 
 all: test
@@ -144,10 +156,34 @@ word-scenario:
 ## gallery — regenerate the README's images from a known scenario.  Every
 ## picture in the documentation comes from here rather than a screenshot,
 ## so it cannot drift away from what the simulation actually does.
+##
+## Rendered as PNG and then converted: JPEG at 4:4:4, because these are
+## synthetic frames with hard edges between flat areas and chroma
+## subsampling puts coloured fringes on exactly the trails and port
+## outlines the pictures exist to show.  The PNGs are deleted, so what
+## docs/images holds — and what the README, the concept page and Pages
+## all serve — is the small version.
+##
+## The loop takes every PNG in the directory rather than only the ones
+## RENDER-GALLERY just wrote, so a frame added by hand is converted too
+## and cannot quietly reintroduce a megabyte.
 gallery:
 	$(GPU) $(SBCL) --non-interactive \
 	  --eval '(ql:quickload :antsim/render :silent t)' \
 	  --eval '(ant:render-gallery)'
+	$(IM) sh -c 'for f in docs/images/*.png; do \
+	  convert "$$f" -quality $(JPEG_QUALITY) -sampling-factor 1x1 -strip \
+	          "$${f%.png}.jpg" || exit 1; done'
+	rm -f docs/images/*.png
+	@ls -la docs/images/
+
+## check-images — what CI asks of docs/images: no PNGs left behind, and
+## nothing over the byte budget.  Shares scripts/check-images.sh with both
+## workflows, so the rule cannot mean one thing here and another there.
+##
+##   MAX_IMAGE_BYTES=200000 make check-images
+check-images:
+	$(IM) ./scripts/check-images.sh
 
 ## smoke-mesa — the same frame in software, for comparing the two stacks.
 smoke-mesa:
