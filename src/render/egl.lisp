@@ -27,17 +27,15 @@
 
   (defun make-headless-context (&key (width 1280) (height 800))
     "Create and make current a headless GL 4.1 core context on macOS via GLFW."
-    (unless (glfw:init)
-      (error "glfwInit failed on macOS"))
-    (glfw:window-hint :visible nil)
-    (glfw:window-hint :context-version-major 4)
-    (glfw:window-hint :context-version-minor 1)
-    (glfw:window-hint :opengl-profile :opengl-core-profile)
-    (glfw:window-hint :opengl-forward-compat t)
-    (let ((win (glfw:create-window 16 16 "antsim-headless" (cffi:null-pointer) (cffi:null-pointer))))
-      (when (cffi:null-pointer-p win)
+    (glfw:initialize)
+    (let ((win (glfw:create-window :width 16 :height 16 :title "antsim-headless"
+                                   :visible nil
+                                   :context-version-major 4
+                                   :context-version-minor 1
+                                   :opengl-profile :opengl-core-profile
+                                   :opengl-forward-compat t)))
+      (when (or (null win) (cffi:null-pointer-p win))
         (error "glfwCreateWindow (headless) failed on macOS"))
-      (glfw:make-context-current win)
       (%make-gl-context :window win :width width :height height)))
 
   (defun destroy-gl-context (c)
