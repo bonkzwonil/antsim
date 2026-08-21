@@ -280,7 +280,42 @@ Response thresholds, the no-entry field and search spirals also ship, and are
 failure-recovery mechanisms, and the finding is that this model's ants do not
 currently fail in the ways they recover from.
 
-**M5 — interaction — is next**: what you can *do* to a running world.
+**M5 is interaction** — what you can *do* to a running world. Click an ant
+and the panel says what it is doing and, more usefully, what it is
+*judged against*: energy with the three moving lines on it, and a
+READY/SPENT verdict naming the number. `O` draws terrain by hand and
+refuses to seal a nest entrance, which is a deliberate asymmetry with
+food — walling off a source is half the point, a sealed nest is not an
+experiment. `A` drops a small source. `P` pokes the nest, and the alarm
+field is the one mechanism in the model whose precondition is a person:
+a colony nobody pokes has no alarm array allocated at all. It took three
+attempts, and the lesson from the second is the better one — release had
+to stop being a *rate*, because an ant discharging every tick paints a
+twenty-second line of alarm across the arena as it flees. One dose at the
+moment of alarm is sub-critical by construction.
+
+**M6 is polish, and is where this line is now.** A scenario can name its
+animal: `"species": "formica"` runs *Formica polyctena* — bigger, faster,
+a poor trail follower and a good route follower — against the same arena
+as Lasius, which is the cheapest available test of whether the
+nonlinearity in §3.3 is doing the work it is credited with. A species set
+is the list of values where an animal *differs*, so `lasius-niger` is
+empty by construction and naming it provably changes nothing. Time-lapse
+capture ships as a contact sheet: half an hour of ants on one page, every
+tile captioned with its simulated time. Colour turned out to be built
+already and described as unbuilt in two places, and the renderer turned
+out to be dividing by a hardcoded 960 where it meant the viewport width.
+
+**M7 is movement, and it is specified rather than started.** Ants get
+caught in concavities and die there, and they still do after M4's route
+memory. The first thing that milestone does is withdraw a claim: *"route
+memory closes the pockets"* is not supported by anything measured — the
+only stuck-against-terrain numbers in this repository predate route
+memory by two days and were never repeated. What was measured is harvest
+up 42% and corpses down 15%. The milestone is instrumentation first,
+because nothing in the model can currently see that an ant is stuck, and
+then five ranked candidates — starting with a give-way rule that has no
+terrain veto and runs *after* every terrain veto in the tick.
 
 The full record, including what shipped switched **off** and why, is
 [§7](docs/concept.md#7-milestones).
