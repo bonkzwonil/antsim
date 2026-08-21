@@ -379,7 +379,14 @@ jobs:
 
   macos:
     needs: version
-    runs-on: macos-14
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            arch: arm64
+          - os: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -391,7 +398,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/quicklisp
-          key: quicklisp-release-macos-v1
+          key: quicklisp-release-${{ matrix.os }}-v1
 
       - name: Install Quicklisp
         run: |
@@ -429,7 +436,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-zip
+          name: macos-zip-${{ matrix.arch }}
           path: dist/*.zip
           if-no-files-found: error
 
@@ -477,7 +484,7 @@ jobs:
           cat > notes.raw <<'EOF'
           Standalone builds. None needs SBCL, Quicklisp, or a checkout.
 
-          **macOS** — `antsim-VERSION-macos-arm64.zip`. Unpack it and run `./antsim`,
+          **macOS** — `antsim-VERSION-macos-arm64.zip` (Apple Silicon) and `antsim-VERSION-macos-x86_64.zip` (Intel). Unpack it and run `./antsim`,
           keeping the folder together. Requires GLFW (`brew install glfw`).
 
           **Linux** — `antsim-VERSION-x86_64.AppImage`. `chmod +x` it and run it.
