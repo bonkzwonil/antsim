@@ -113,6 +113,29 @@ under different conditions would make the figure a decoration."
             name (bridge-share b) (bridge-winner b) (colony-population c))
     b))
 
+(defun gallery-species-shot (species name &key (minutes 20.0f0)
+                                              (seed +default-seed+))
+  "One animal, on the gallery's arena, at MINUTES.
+
+The species has to be in force around the *construction* and not only
+around the run: *ANT-RADIUS* is read when a body is allocated, so a world
+built outside WITH-SPECIES and then run inside it is a colony of
+Lasius-sized Formica, and nothing anywhere would complain.
+
+Same world, same seed, same clock for both animals — the picture is a
+comparison or it is nothing, and the only difference the reader is being
+asked to attribute anything to is the parameter set."
+  (with-species (species)
+    (let ((w (gallery-world :seed seed))
+          (*resting-ants-block* t))
+      (world-run! w (round (* 1200.0f0 minutes)))
+      (prog1 (gallery-shot w name)
+        (format t "~&    ~a: ~d ants, trail ~,0f, harvested ~,0f~%"
+                species
+                (colony-population (first (world-colonies w)))
+                (field-total (colony-field (first (world-colonies w))))
+                (colony-harvested (first (world-colonies w))))))))
+
 (defun render-gallery ()
   "Render the README's images.  `make gallery`."
   ;; The foraging pictures are rendered with *RESTING-ANTS-BLOCK* on.
@@ -252,4 +275,16 @@ under different conditions would make the figure a decoration."
         (gallery-shot (bridge-world b) "14-hero"
                       :width 1000 :height 740
                       :cx 0.35f0 :cy 0.30f0 :span 0.70f0))
+      ;; --- the two animals (M6) -------------------------------------
+      ;;
+      ;; Ten minutes, and the choice of moment is not free.  At twenty —
+      ;; where 03-trail is taken — Formica has already stripped the entire
+      ;; pile and its trail has decayed, so the frame shows an aftermath
+      ;; rather than a way of foraging, and the two pictures would be of
+      ;; different situations rather than of different animals.  At ten
+      ;; both colonies are working, both have food left, and the
+      ;; difference on screen is the mechanism.
+      (format t "~&  two animals, same arena~%")
+      (gallery-species-shot "lasius-niger" "17-lasius" :minutes 10.0f0)
+      (gallery-species-shot "formica" "18-formica" :minutes 10.0f0)
       (values))))

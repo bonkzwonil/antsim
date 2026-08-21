@@ -197,7 +197,7 @@
    #:hud #:make-hud #:destroy-hud #:hud-reset #:hud-quad #:hud-text
    #:hud-bar #:hud-bar-tick #:hud-draw #:build-font #:*font-3x5*
    ;; render/gallery — the README images (§7, M2)
-   #:render-gallery #:gallery-world #:gallery-shot #:gallery-traffic-x
+   #:render-gallery #:gallery-world #:gallery-shot #:gallery-traffic-x #:gallery-species-shot
    #:*gallery-directory*
    ;; render/timelapse — a run as a sequence, and as one picture (M6)
    #:*timelapse-directory* #:render-timelapse #:render-timelapse-demo
