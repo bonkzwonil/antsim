@@ -85,7 +85,7 @@ uniform vec4  u_bounds;        // world rect currently visible: x0 y0 x1 y1
 uniform vec2  u_world;         // world size in metres
 uniform float u_k;             // choice-function offset: the map's midpoint
 uniform float u_cap;           // field ceiling
-uniform int   u_blocked_shade; // 1 = darken cells the mask marks blocked
+uniform float u_vw;            // viewport width in pixels
 
 // Ground: a faint grid at 5 cm so motion has a reference frame (5.1),
 // and so zoom level is legible without any HUD.
@@ -132,7 +132,12 @@ vec3 trail_color(float c) {
 void main() {
     vec2 w = mix(u_bounds.xy, u_bounds.zw, v_uv);
     float mpp = (u_bounds.z - u_bounds.x) / max(1.0, float(textureSize(u_field, 0).x));
-    vec3 c = ground(w, (u_bounds.z - u_bounds.x) / 960.0);
+    // Metres per pixel, from the *actual* viewport rather than from a
+    // literal standing in for one.  See the test named for it: a guessed
+    // width is right at exactly one window size and quietly wrong at
+    // every other, and the window has not opened at that size for a
+    // long time.
+    vec3 c = ground(w, (u_bounds.z - u_bounds.x) / max(1.0, u_vw));
 
     // outside the arena the world simply stops
     if (w.x < 0.0 || w.y < 0.0 || w.x > u_world.x || w.y > u_world.y) {
@@ -211,6 +216,7 @@ struct Body { vec4 xyrk; };            // x, y, radius, kind+state packed
 layout(std430, binding = 0) readonly buffer Bodies { Body bodies[]; };
 
 uniform vec4 u_bounds;
+uniform float u_vw;                    // viewport width in pixels
 
 out vec2 v_local;                      // -1..1 across the quad
 flat out float v_kind;
@@ -226,9 +232,10 @@ void main() {
     // never draw a body smaller than a pixel and a half, or a zoomed-out
     // colony vanishes entirely and the view reads as empty
     float r = b.xyrk.z;
-    float min_r = 1.5 * span.x / 960.0;
+    float vw = max(1.0, u_vw);         // the real viewport, not a guess
+    float min_r = 1.5 * span.x / vw;
     r = max(r, min_r);
-    v_radius_px = r / span.x * 960.0;
+    v_radius_px = r / span.x * vw;
 
     vec2 p = b.xyrk.xy + corner * r;
     vec2 t = (p - u_bounds.xy) / span;

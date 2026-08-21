@@ -179,6 +179,9 @@
    #:ant-mesh-under-count #:ant-mesh-body-count
    #:+ant-vertex-floats+ #:*legs*
    #:*ant-vertex-glsl* #:*ant-fragment-glsl* #:build-ant-vertex-glsl
+   ;; the two other programs' sources, exported so a test can assert what
+   ;; is *not* in them — see NO-SHADER-GUESSES-THE-VIEWPORT-WIDTH
+   #:*field-fragment-glsl* #:*body-vertex-glsl*
    ;; render/smoke — the M0 acceptance frame
    #:draw-smoke-frame #:render-smoke-png #:m0-smoke
    ;; render/view — the ortho camera (§5.5)
