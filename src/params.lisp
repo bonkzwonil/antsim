@@ -1,5 +1,11 @@
 ;;;; params.lisp — the Lasius niger parameter set, and the units it fixes.
 ;;;;
+;;;; One animal, and the file says so on purpose.  A second species lives
+;;;; at the bottom of this file as a list of the values where it *differs*
+;;;; from what is above — see the Species section (§3.1) — so that these
+;;;; defaults stay the single description of Lasius niger rather than one
+;;;; of two descriptions that can disagree.
+;;;;
 ;;;; Everything here is a DEFPARAMETER rather than a DEFCONSTANT, because
 ;;;; README §8 lists "literature constants are in units the model does not
 ;;;; use" as a high severity risk and §10 flags most of these as recalled
@@ -1781,6 +1787,135 @@ a queue at a rich source jitters, raise this before changing the scheme.")
 (defparameter *relax-slop* 1.0f-5
   "Overlaps below this are left alone, metres.  [cal] Stops the
 relaxation from chasing floating-point noise forever.")
+
+;;; --------------------------------------------------------------------
+;;; Species (§3.1)
+;;; --------------------------------------------------------------------
+;;;
+;;; Everything above this line is *Lasius niger*.  That is not a figure of
+;;; speech — every default in this file was chosen for one animal — and it
+;;; is why a second species is expressed here as a list of *differences*
+;;; rather than as a second complete set.  Two complete sets side by side
+;;; would bury the dozen lines that matter in a hundred identical ones,
+;;; and would drift apart the first time anybody recalibrated a default.
+;;;
+;;; So: a species set is an alist of (symbol . value); it may only name
+;;; variables that already exist; and `lasius-niger' is empty *by
+;;; construction*.  Naming it in a scenario is therefore a documenting
+;;; act which is provably not a behaviour change, which is the property
+;;; §6 needs from the key it has been reserving since M1.
+;;;
+;;; DEFPARAMETER despite the +...+ name that §3.1 promised: a DEFCONSTANT
+;;; whose value is a list cannot be recompiled without a continuable
+;;; error, and every other tunable in this file is rebindable on
+;;; principle.  The name is kept because the promise was published.
+
+(defparameter +species-lasius-niger+ '()
+  "The black garden ant — the animal the rest of this file describes.
+
+Empty, and it has to be: if naming the default species could change the
+default behaviour, then every scenario that does not name one would be
+running a different model from every scenario that does.")
+
+(defparameter +species-formica+
+  '(;; --- size.  A polyctena worker is 6-9 mm against L. niger's 3-5, so
+    ;; everything the body sets the scale of moves with it.  The three
+    ;; antennal samples must still land in three different cells
+    ;; (*SENSOR-OFFSET*), which scaling the offset *up* can only help.
+    (*ant-radius*              . 0.0040f0)
+    (*sensor-offset*           . 0.019f0)
+    (*antennal-range*          . 0.016f0)
+    (*undertaker-range*        . 0.016f0)
+    (*gait-stride*             . 0.005f0)
+    ;; --- pace.  Wood ants are conspicuously faster than garden ants;
+    ;; the laden ratio is carried over rather than re-guessed.
+    (*walk-speed*              . 0.04f0)
+    (*walk-speed-laden*        . 0.03f0)
+    ;; --- the trail, weakened three ways at once.  §10 asks which of the
+    ;; three is the right model and answers "probably all three, but that
+    ;; is a claim, not a citation"; this set is that claim written down
+    ;; so it can be measured, and experiments.md reports the A/B.
+    ;;
+    ;; *CHOICE-K* is not free: it is in units of *TRAIL-DEPOSIT*, so
+    ;; lowering deposition without lowering k would move the detection
+    ;; threshold to a place no trail can reach, and the colony would
+    ;; simply stop following anything.  0.35 x 20 = 7.
+    (*trail-deposit*           . 0.35f0)
+    (*choice-k*                . 7.0f0)
+    (*choice-n*                . 1.5f0)
+    (*trail-turn-gain*         . 6.0f0)
+    (*trail-noise-suppression* . 0.5f0)
+    (*trail-tau*               . 600.0f0)
+    ;; --- and the route turned up, which is the other half of the same
+    ;; animal: what a wood ant does instead of following a trail is walk
+    ;; a remembered path.  24 waypoints at 3 cm is 72 cm of remembered
+    ;; walk against Lasius's 24.
+    (*route-waypoints*         . 24)
+    (*route-spacing*           . 0.030f0)
+    (*pi-noise*                . 0.01f0)
+    (*nest-exit-scatter*       . 0.25f0)
+    ;; --- unicolonial.  A polyctena supercolony spans many nests without
+    ;; treating their occupants as strangers, so the one M3 term that
+    ;; makes a neighbour worth avoiding goes to 1.0, which is off.
+    (*stranger-avoidance*      . 1.0f0))
+  "*Formica polyctena*, the red wood ant — bigger, faster, a poor trail
+follower and a good route follower.
+
+The contrast is the point.  Lasius niger is the mass recruiter this model
+was built for: a colony of them converts a small difference between two
+routes into a committed trail (§3.8), and it does that through the
+chemistry, collectively, with no individual knowing anything.  Formica
+polyctena is the same problem solved the other way — the trail is weak,
+and what carries a forager to a source is its own remembered route.
+Running both over the same arena is the cheapest available test of
+whether §3.3's nonlinearity is doing the work it is credited with,
+because turning it down should cost the colony the *symmetry breaking*
+and leave the *foraging* standing.
+
+Provenance, honestly: the sizes and the speed are [lit], the ratios
+derived from them are [scale], and every one of the trail and route
+numbers is [cal] — chosen to express a documented qualitative contrast,
+not read off a paper.  The published claim is the *direction*, and the
+measurement in docs/experiments.md is what says it arrived.")
+
+(defparameter *species*
+  '(("lasius-niger" . +species-lasius-niger+)
+    ("formica"      . +species-formica+))
+  "Species name, as a scenario spells it, to the variable holding its set.
+
+The set is held by *symbol* rather than by value so that rebinding
++SPECIES-FORMICA+ — in a test, or at a REPL while calibrating — is seen
+by the loader without rebuilding this table.")
+
+(defun species-names ()
+  "Every species a scenario may name, in the order they are offered."
+  (mapcar #'car *species*))
+
+(defun species-params (name)
+  "The parameter overrides for the species NAME, as a fresh alist of
+(symbol . value), and T.  Two values NIL when there is no such species,
+so a caller can tell `unknown' from `known and changes nothing' — which
+is exactly the distinction `lasius-niger' makes real."
+  (let ((entry (assoc name *species* :test #'string-equal)))
+    (if entry
+        (values (copy-alist (symbol-value (cdr entry))) t)
+        (values nil nil))))
+
+(defmacro with-species ((name) &body body)
+  "Run BODY with the species NAME's parameter set in force.
+
+The Lisp-side counterpart of a scenario's `species' key, and the way a
+test or a trial harness asks for the other animal.  An unknown name is an
+error here rather than a quiet default: a typo that silently ran Lasius
+would invalidate a result rather than fail it."
+  (let ((n (gensym "NAME")) (set (gensym "SET")) (ok (gensym "OK")))
+    `(let ((,n ,name))
+       (multiple-value-bind (,set ,ok) (species-params ,n)
+         (unless ,ok
+           (error "Unknown species ~s; expected one of ~{~a~^, ~}"
+                  ,n (species-names)))
+         (progv (mapcar #'car ,set) (mapcar #'cdr ,set)
+           ,@body)))))
 
 ;;; --------------------------------------------------------------------
 ;;; Types

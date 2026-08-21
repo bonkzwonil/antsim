@@ -274,3 +274,191 @@ a tank in the two files and they stop being comparable."
       (is (< (abs (- (/ ant:*energy-drain-walking* drain) 5.0f0)) 1.0f-3)
           "range scaled by ~,3f but the arena by 5"
           (/ ant:*energy-drain-walking* drain)))))
+
+;;; --------------------------------------------------------------------
+;;; Species (§3.1, M6)
+;;; --------------------------------------------------------------------
+
+(test naming-the-default-species-changes-nothing
+  "§3.1, §6: `lasius-niger` is the empty parameter set, by construction.
+
+This is the property that makes the whole species key safe to add at M6
+rather than at M1.  Every scenario written before species existed named
+none, every measurement in docs/experiments.md was taken with none, and
+if naming the default could change anything then all of those results
+would quietly be about a different model from a scenario that spells its
+species out.  Empty means the key is a *documenting* act: it says which
+animal the file is about and provably does not alter it.
+
+So this test is not about the value of a parameter.  It is about the
+length of a list being zero."
+  (multiple-value-bind (set ok) (ant:species-params "lasius-niger")
+    (is-true ok "lasius-niger is not a species this build knows")
+    (is (null set) "the default species set is not empty: ~s" set))
+  (let ((s (ant:load-scenario-string
+            "{\"species\":\"lasius-niger\",
+              \"world\":{\"width\":0.4,\"height\":0.4},
+              \"colonies\":[{\"nest\":{\"x\":0.2,\"y\":0.2}}]}")))
+    (is (equal "lasius-niger" (ant:scenario-species s))
+        "the scenario did not record which species it named")
+    (is (null (ant:scenario-params s))
+        "naming the default species produced overrides: ~s"
+        (ant:scenario-params s))))
+
+(test the-formica-set-is-bound-around-the-run-and-only-there
+  "§3.1: the second species, and the same discipline as every other
+override — carried on the scenario, bound around the run, gone after.
+
+The body size is the one worth checking by hand rather than trusting the
+list: *ANT-RADIUS* is read by BODIES-ALLOC when an ant is *born*, so a
+species that is in force for loading but not for the run would produce a
+colony of Lasius-sized ants under a Formica parameter set, and nothing
+would complain."
+  (let ((s (ant:load-scenario #p"scenarios/formica.json"))
+        (radius ant:*ant-radius*)
+        (k ant:*choice-k*))
+    (is (equal "formica" (ant:scenario-species s)))
+    (is (= radius ant:*ant-radius*)
+        "loading a scenario changed the global parameter set")
+    (ant:with-scenario-params (s)
+      (is (= 0.004f0 ant:*ant-radius*) "the species body size was not in force")
+      (is (= 0.04f0 ant:*walk-speed*))
+      (is (= 7.0f0 ant:*choice-k*))
+      (is (= 24 ant:*route-waypoints*)))
+    (is (= radius ant:*ant-radius*) "the override outlived its dynamic extent")
+    (is (= k ant:*choice-k*))))
+
+(test the-formica-scenario-differs-from-lasius-only-in-the-species
+  "`scenarios/formica.json` is `scenarios/foraging.json` with one key
+added, and that is the entire point of it: a comparison between two
+animals is worth nothing if the two runs also differ in arena, seed,
+colony size or how much food there is.
+
+Checked here rather than trusted, because the two files are maintained by
+hand and the failure mode — somebody tunes the Formica arena to make it
+look better — is both easy and invisible."
+  (let ((l (ant:load-scenario #p"scenarios/foraging.json"))
+        (f (ant:load-scenario #p"scenarios/formica.json")))
+    (is (null (ant:scenario-species l))
+        "the Lasius scenario has acquired a species key")
+    (is (equal "formica" (ant:scenario-species f)))
+    (is (= (ant:scenario-seed l) (ant:scenario-seed f))
+        "the two scenarios do not run the same seed")
+    (is (= (ant:world-width (ant:scenario-world l))
+           (ant:world-width (ant:scenario-world f)))
+        "the two scenarios are not the same arena")
+    (is (= (ant:world-height (ant:scenario-world l))
+           (ant:world-height (ant:scenario-world f))))
+    (is (= (length (ant:world-obstacles (ant:scenario-world l)))
+           (length (ant:world-obstacles (ant:scenario-world f))))
+        "the two scenarios do not have the same terrain")
+    (is (= (length (ant:scenario-foods l)) (length (ant:scenario-foods f)))
+        "the two scenarios do not offer the same food")
+    ;; and the Lasius file states no parameters at all, so every
+    ;; difference between the two runs is attributable to the species set
+    (is (null (ant:scenario-params l))
+        "the Lasius scenario states parameters of its own: ~s"
+        (ant:scenario-params l))))
+
+(test a-scenario-key-beats-the-species-set
+  "§6's precedence: species underneath, explicit keys on top.
+
+The mechanism matters as much as the outcome.  Both are bound with PROGV,
+and CLHS leaves the value of a symbol that appears *twice* in a PROGV
+implementation-dependent — so the loser has to be removed from the list
+when the list is built, not shadowed by ordering.  This checks the list
+itself and not merely the value, because a duplicate would give the right
+answer on SBCL and a different one somewhere else."
+  (let ((s (ant:load-scenario-string
+            "{\"species\":\"formica\",
+              \"world\":{\"width\":0.4,\"height\":0.4},
+              \"choice\":{\"k\":99.0},
+              \"colonies\":[{\"nest\":{\"x\":0.2,\"y\":0.2}}]}")))
+    (let ((entries (remove 'ant:*choice-k* (ant:scenario-params s)
+                           :key #'car :test-not #'eq)))
+      (is (= 1 (length entries))
+          "*CHOICE-K* appears ~d times in the override list: ~s"
+          (length entries) entries)
+      (is (= 99.0f0 (cdr (first entries)))
+          "the species set beat the scenario's own key"))
+    (ant:with-scenario-params (s)
+      (is (= 99.0f0 ant:*choice-k*))
+      ;; and the rest of the species set is untouched by the one override
+      (is (= 0.35f0 ant:*trail-deposit*)
+          "overriding one key discarded the rest of the species set"))))
+
+(test an-unknown-species-is-an-error-naming-the-path
+  "§6: strict, and it has to be strictest here.  A typo in `choice.k` is
+caught because `choice` is a known block with known keys; a typo in a
+species *name* has no such structure behind it, and the tempting failure
+— fall back to the default — would run the wrong animal and report the
+numbers as if they were the right one."
+  (signals ant:scenario-error
+    (ant:load-scenario-string
+     "{\"species\":\"camponotus\",
+       \"world\":{\"width\":0.4,\"height\":0.4},
+       \"colonies\":[{\"nest\":{\"x\":0.2,\"y\":0.2}}]}"))
+  ;; and the message names both the offending value and the way out
+  (flet ((msg (json)
+           (handler-case (progn (ant:load-scenario-string json) nil)
+             (ant:scenario-error (e) (format nil "~a" e)))))
+    (let ((m (msg "{\"species\":\"camponotus\",
+                    \"world\":{\"width\":0.4,\"height\":0.4},
+                    \"colonies\":[{\"nest\":{\"x\":0.2,\"y\":0.2}}]}")))
+      (is-true (and m (search "species" m))
+               "the error does not name the offending key: ~a" m)
+      (is-true (and m (search "camponotus" m))
+               "the error does not quote the name that was not understood: ~a" m)
+      (is-true (and m (search "formica" m))
+               "the error does not say what the alternatives are: ~a" m)))
+  ;; the same rule through the Lisp door
+  (signals error (ant:with-species ("camponotus") nil)))
+
+(test with-species-binds-the-set-and-restores-it
+  "The Lisp-side counterpart of the scenario key — what a trial harness
+or a REPL session uses.  Same contract as WITH-SCENARIO-PARAMS: in force
+for the extent, gone after, and an unknown name is an error rather than a
+quiet default, because a typo that silently ran Lasius would *invalidate*
+a measurement rather than fail it."
+  (let ((radius ant:*ant-radius*)
+        (waypoints ant:*route-waypoints*))
+    (ant:with-species ("formica")
+      (is (= 0.004f0 ant:*ant-radius*))
+      (is (= 24 ant:*route-waypoints*))
+      (is (= 0.5f0 ant:*trail-noise-suppression*)))
+    (is (= radius ant:*ant-radius*) "the species outlived its dynamic extent")
+    (is (= waypoints ant:*route-waypoints*)))
+  ;; and the empty set is a no-op rather than a special case
+  (let ((radius ant:*ant-radius*))
+    (ant:with-species ("lasius-niger")
+      (is (= radius ant:*ant-radius*)))))
+
+(test every-species-set-names-parameters-that-exist
+  "A species set is a list of symbols and values, which means a rename in
+params.lisp can leave it naming a variable nobody binds any more — and
+PROGV will happily bind a symbol that means nothing, so the set would go
+quietly inert rather than fail.
+
+This walks every set this build offers and checks each symbol is a bound
+special.  It is cheap, it is the only guard against that failure, and it
+is the reason a species set is written as an alist of real symbols rather
+than as strings."
+  (dolist (name (ant:species-names))
+    (multiple-value-bind (set ok) (ant:species-params name)
+      (is-true ok "~a is offered but does not resolve" name)
+      (dolist (entry set)
+        (is-true (boundp (car entry))
+                 "~a names ~s, which is not a bound variable" name (car entry))
+        ;; and it must set it to the same *kind* of value it already
+        ;; holds.  Several of these are declaimed FIXNUM and several F32
+        ;; (params.lisp, Types); a species that put a float where the
+        ;; declaim says fixnum would not fail here, it would fail deep in
+        ;; the tick loop at the first use, blaming the wrong thing.
+        (let ((now (symbol-value (car entry)))
+              (new (cdr entry)))
+          (is-true (or (and (typep now 'single-float)
+                            (typep new 'single-float))
+                       (and (integerp now) (integerp new))
+                       (and (member now '(t nil)) (member new '(t nil))))
+                   "~a sets ~s, which holds ~s, to ~s — a different kind of value"
+                   name (car entry) now new))))))

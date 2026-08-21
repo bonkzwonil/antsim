@@ -50,6 +50,15 @@ guessable, and a window that does not say what it responds to is a window
 most people will only pan around in.")
 (defvar *live-hud* nil)
 
+(defvar *live-species* nil
+  "The species the running scenario named, or NIL if it named none.
+
+Display only.  What the species *does* is bind parameters, and that has
+already happened by the time anything here reads this — so this is a
+label, and it exists because a parameter set is invisible: two runs of
+the same arena that behave nothing alike look, to a watcher, like a bug
+in one of them.")
+
 (defparameter *live-food-amount* 200.0f0
   "How much food the A key drops (§5.5).
 
@@ -489,6 +498,13 @@ most likely to be hunting for the ant they just clicked."
         (setf x (hud-text h (+ x 14) 8
                           (format nil "~:@(~a~)" (if c (colony-name c) "-"))
                           :scale s :r 0.55 :g 0.90 :b 0.68)))
+      ;; The species, when the scenario named one.  Between the colony
+      ;; name and the counters, because it qualifies every number to its
+      ;; right: 400 ants of one animal is not 400 of the other.
+      (when *live-species*
+        (setf x (hud-text h (+ x 14) 8
+                          (format nil "~:@(~a~)" *live-species*)
+                          :scale s :r 0.90 :g 0.66 :b 0.45)))
       (setf x (hud-text h (+ x 14) 8
                         (format nil "ANTS ~D" (if c (colony-population c) 0))
                         :scale s))
@@ -860,14 +876,21 @@ default tau would be a particularly quiet lie."
   ;; starting ants with it.
   (let* ((s (load-scenario path :seed (live-seed seed)))
          (w (scenario-world s)))
-    (format t "~&~a: ~,2f x ~,2f m, ~d colon~:@p, ~d source~:p~%~
+    (format t "~&~a: ~,2f x ~,2f m, ~d colon~:@p, ~d source~:p~@[, ~a~]~%~
                  seed ~d   (repeat this run with SEED=~d)~%"
             (scenario-name s) (world-width w) (world-height w)
             (length (scenario-colonies s)) (length (scenario-foods s))
+            (scenario-species s)
             (world-seed w) (world-seed w))
-    (with-scenario-params (s)
-      (run-live w :width width :height height
-                  :title (format nil "antsim — ~a" (scenario-name s))))))
+    ;; The species goes on the HUD rather than only in the banner, because
+    ;; the banner scrolls away and the question it answers — why is this
+    ;; colony behaving nothing like the last one — gets asked ten minutes
+    ;; in.  NIL for a file that named none, and the row is then absent
+    ;; rather than saying "lasius-niger" at a scenario that did not.
+    (let ((*live-species* (scenario-species s)))
+      (with-scenario-params (s)
+        (run-live w :width width :height height
+                    :title (format nil "antsim — ~a" (scenario-name s)))))))
 
 (defun live-demo (&key (width 1100) (height 800) seed)
   "The scenario the M2 gallery renders, but watchable.  A single colony,

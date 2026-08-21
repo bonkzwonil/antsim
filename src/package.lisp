@@ -17,12 +17,20 @@
    #:hash32 #:rnd-u32 #:rnd01 #:rnd-normal #:+default-seed+
    ;; pool — persistent workers (§4.5)
    #:pool #:make-worker-pool #:pool-run #:pool-shutdown #:pool-n
-   ;; params — the Lasius niger set (§3.1); all rebindable, see params.lisp
+   ;; params — the Lasius niger set (§3.1); all rebindable, see params.lisp.
+   ;; A species is a list of *differences* from that set, never a second
+   ;; copy of it, which is why LASIUS-NIGER is empty.
+   #:+species-lasius-niger+ #:+species-formica+ #:*species*
+   #:species-names #:species-params #:with-species
    #:*cell-size* #:*motion-dt* #:*pheromone-dt* #:*colony-dt*
    #:*ant-radius* #:*walk-speed* #:*walk-speed-laden* #:*turn-sigma*
    #:*speed-spread*
    #:*gait-stride* #:*ant-disc-pixels* #:*ant-detail-pixels*
    #:*sensor-offset* #:*sensor-spread*
+   ;; the two that shape how tightly an ant tracks a gradient.  Exported
+   ;; as of M6 because a species set names them and a test must be able
+   ;; to read what that set did.
+   #:*trail-turn-gain* #:*trail-noise-suppression*
    #:*choice-n* #:*choice-k* #:*choice-eavesdrop*
    #:*trail-tau* #:*trail-cap* #:*trail-deposit* #:*trail-quality-threshold*
    #:*trail-decay-scale* #:trail-tau #:trail-deposit-rate
@@ -127,6 +135,7 @@
    ;; scenario — the JSON format (§6); defined in antsim/scenario
    #:scenario #:scenario-name #:scenario-world #:scenario-colonies
    #:scenario-foods #:scenario-seed #:scenario-duration #:scenario-params
+   #:scenario-species
    #:load-scenario #:load-scenario-string #:with-scenario-params
    #:scenario-error #:scenario-error-path #:scenario-error-detail
    ;; world/bridge — the §3.8 apparatus
