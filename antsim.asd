@@ -74,7 +74,12 @@
                (:file "shaders")
                (:file "renderer")
                (:file "hud")
-               (:file "gallery"))
+               (:file "gallery")
+               ;; After the gallery, and it has to be: the shipped
+               ;; time-lapse runs the gallery's own world, so that a tile
+               ;; of the sheet and a still of the gallery are the same
+               ;; twenty minutes rather than two different colonies.
+               (:file "timelapse"))
   :in-order-to ((test-op (test-op "antsim/render-test"))))
 
 (defsystem "antsim/live"

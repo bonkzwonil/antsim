@@ -33,7 +33,8 @@ export CL_SOURCE_REGISTRY := $(CURDIR):
 
 .PHONY: all test acceptance test-app test-app-bare \
         test-render test-render-mesa test-render-ci \
-        test-render-bare smoke smoke-mesa live gallery word-scenario \
+        test-render-bare smoke smoke-mesa live gallery timelapse \
+        word-scenario \
         repl page clean binary binary-bare appimage appimage-bare \
         icon dist-clean
 
@@ -148,6 +149,18 @@ gallery:
 	$(GPU) $(SBCL) --non-interactive \
 	  --eval '(ql:quickload :antsim/render :silent t)' \
 	  --eval '(ant:render-gallery)'
+
+## timelapse — half an hour of the gallery's scenario as one contact
+## sheet, sampled every ten simulated seconds and captioned with the
+## simulated time.  Writes docs/images/16-timelapse.png.  The individual
+## frames are *not* written by default: png.lisp compresses nothing by
+## design, so a full sequence is ~300 MB of intermediate for one picture.
+## To get them anyway, for ffmpeg:
+##   sbcl ... --eval '(ant:render-timelapse-demo :frames t)'
+timelapse:
+	$(GPU) $(SBCL) --non-interactive \
+	  --eval '(ql:quickload :antsim/render :silent t)' \
+	  --eval '(ant:render-timelapse-demo)'
 
 ## smoke-mesa — the same frame in software, for comparing the two stacks.
 smoke-mesa:

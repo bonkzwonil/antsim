@@ -196,6 +196,10 @@
    ;; render/gallery — the README images (§7, M2)
    #:render-gallery #:gallery-world #:gallery-shot #:gallery-traffic-x
    #:*gallery-directory*
+   ;; render/timelapse — a run as a sequence, and as one picture (M6)
+   #:*timelapse-directory* #:render-timelapse #:render-timelapse-demo
+   #:sheet #:make-sheet #:sheet-add! #:write-sheet
+   #:sheet-width #:sheet-height #:sheet-n
    ;; live/window — the interactive view (§5.5), system antsim/live
    #:run-live #:live-demo #:live-scenario #:live-inspect
    #:*live-speed* #:*live-paused*
