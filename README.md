@@ -112,7 +112,7 @@ two different experiments with the same name.
 ## Getting it
 
 Standalone builds are attached to each
-[release](https://github.com/bonkzwonil/antsim/releases). Neither needs SBCL,
+[release](https://github.com/bonkzwonil/antsim/releases). None needs SBCL,
 Quicklisp, or a checkout.
 
 ```sh
@@ -123,29 +123,24 @@ chmod +x antsim-*-x86_64.AppImage
 ./antsim-*-x86_64.AppImage --help                # options, and the window's keys
 ```
 
+On macOS, unpack the zip and run `./antsim` from Terminal. Requires GLFW (`brew install glfw`).
+
 On Windows, unpack the zip and run `antsim.exe` — keeping the folder together,
 because the program looks for its scenarios beside the executable and Windows
 looks for `glfw3.dll` there too.
 
-Both want a graphics driver providing OpenGL 4.5, which is any GPU driver of
-the last decade. The Linux build is made on Ubuntu 22.04 and so runs on 22.04
+All builds want OpenGL 4.1 Core Profile or higher (built into macOS; standard on Linux/Windows GPU drivers). The Linux build is made on Ubuntu 22.04 and so runs on 22.04
 and anything newer; GLFW is bundled, and OpenGL deliberately is not — it
 belongs to your driver, and shipping a second one is the failure
 [§5.4](docs/concept.md#54-headless-and-the-libgl-trap) is about.
-
-There is no macOS build. macOS caps OpenGL at 4.1 — frozen in 2018, deprecated
-since — which is well below what the renderer's shaders and buffers need, so
-this is a [renderer port](docs/concept.md#7-milestones) waiting to happen
-rather than a missing CI job.
-[docs/shipping.md](docs/shipping.md#why-there-is-no-macos-build) has the count.
 
 How the packages are built, and the things about a saved Lisp image that do not
 survive being moved to another machine: [docs/shipping.md](docs/shipping.md).
 
 ## Running it
 
-From source. Needs SBCL and Quicklisp. The Makefile points `CL_SOURCE_REGISTRY` at the
-checkout, so a clone builds where it stands with no setup. GPU targets wrap the
+From source. Needs SBCL and Quicklisp (and `brew install glfw` on macOS). The Makefile points `CL_SOURCE_REGISTRY` at the
+checkout, so a clone builds where it stands with no setup. On Linux, GPU targets wrap the
 command in a `guix shell`; see
 [§4.6](docs/concept.md#46-building-and-running) for why, and for what to do when
 a render comes back black.
@@ -159,7 +154,8 @@ make test-render       # renderer suite, on the GPU
 make test-render-mesa  # the same suite in software — no GPU needed
 make test-app          # the shipped binary's command line
 make binary            # out/antsim, a standalone executable
-make appimage          # dist/antsim-<version>-x86_64.AppImage
+make appimage          # dist/antsim-<version>-x86_64.AppImage (Linux)
+make macos-zip         # dist/antsim-<version>-macos-<arch>.zip (macOS)
 
 SCENARIO=scenarios/foraging.json make live
 SEED=12345 make live   # repeat an exact run

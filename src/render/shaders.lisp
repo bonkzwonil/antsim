@@ -18,7 +18,7 @@
 ;;; Ground + pheromone field
 ;;; --------------------------------------------------------------------
 
-(defparameter *field-vertex-glsl* "#version 450 core
+(defparameter *field-vertex-glsl* "#version 410 core
 // Fullscreen triangle; the fragment shader maps each pixel back to world
 // space itself, so there is no geometry to keep in step with the camera.
 out vec2 v_uv;
@@ -29,7 +29,7 @@ void main() {
 }
 ")
 
-(defparameter *alarm-fragment-glsl* "#version 450 core
+(defparameter *alarm-fragment-glsl* "#version 410 core
 // The alarm field (3.3, M5), drawn over the ground and under the ants.
 //
 // A separate pass rather than a channel of the trail texture, and that is
@@ -76,7 +76,7 @@ void main() {
 }
 ")
 
-(defparameter *field-fragment-glsl* "#version 450 core
+(defparameter *field-fragment-glsl* "#version 410 core
 in vec2 v_uv;
 out vec4 frag;
 
@@ -177,7 +177,7 @@ void main() {
 ;;; Obstacles
 ;;; --------------------------------------------------------------------
 
-(defparameter *poly-vertex-glsl* "#version 450 core
+(defparameter *poly-vertex-glsl* "#version 410 core
 layout(location = 0) in vec2 a_pos;
 uniform vec4 u_bounds;
 void main() {
@@ -186,7 +186,7 @@ void main() {
 }
 ")
 
-(defparameter *poly-fragment-glsl* "#version 450 core
+(defparameter *poly-fragment-glsl* "#version 410 core
 out vec4 frag;
 uniform vec3 u_color;
 void main() { frag = vec4(u_color, 1.0); }
@@ -203,13 +203,11 @@ void main() { frag = vec4(u_color, 1.0); }
 ;;; levels where legs are noise (the lowest LOD tier of §5.2).  The
 ;;; collision model has not moved and neither has this.
 
-(defparameter *body-vertex-glsl* "#version 450 core
-// One quad per body, built from gl_VertexID; instance data comes from an
-// SSBO so the simulation can write positions straight into a mapped
-// pointer with no GL call in the loop.
-struct Body { vec4 xyrk; };            // x, y, radius, kind+state packed
-layout(std430, binding = 0) readonly buffer Bodies { Body bodies[]; };
-
+(defparameter *body-vertex-glsl* "#version 410 core
+// One quad per body, built from gl_VertexID; instance data comes from a
+// texture buffer object (TBO) so the simulation can write positions straight
+// into a buffer with no per-instance GL call in the loop.
+uniform samplerBuffer u_bodies;         // x, y, radius, kind+state packed in vec4
 uniform vec4 u_bounds;
 
 out vec2 v_local;                      // -1..1 across the quad
@@ -217,20 +215,20 @@ flat out float v_kind;
 flat out float v_radius_px;
 
 void main() {
-    Body b = bodies[gl_InstanceID];
+    vec4 b_xyrk = texelFetch(u_bodies, gl_InstanceID);
     vec2 corner = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2) - 1.0;
     v_local = corner;
-    v_kind = b.xyrk.w;
+    v_kind = b_xyrk.w;
 
     vec2 span = u_bounds.zw - u_bounds.xy;
     // never draw a body smaller than a pixel and a half, or a zoomed-out
     // colony vanishes entirely and the view reads as empty
-    float r = b.xyrk.z;
+    float r = b_xyrk.z;
     float min_r = 1.5 * span.x / 960.0;
     r = max(r, min_r);
     v_radius_px = r / span.x * 960.0;
 
-    vec2 p = b.xyrk.xy + corner * r;
+    vec2 p = b_xyrk.xy + corner * r;
     vec2 t = (p - u_bounds.xy) / span;
     gl_Position = vec4(t * 2.0 - 1.0, 0.0, 1.0);
 }
@@ -281,7 +279,7 @@ not change colour when it crosses an LOD boundary, and two copies of a
 palette are exactly how it would come to.")
 
 (defparameter *body-fragment-glsl*
-  (concatenate 'string "#version 450 core
+  (concatenate 'string "#version 410 core
 in vec2 v_local;
 flat in float v_kind;
 flat in float v_radius_px;
@@ -451,14 +449,13 @@ void main() {
                        ("ANT_PROBE"    . ,*antenna-probe*)))))))
 
 (defun build-ant-vertex-glsl ()
-  (concatenate 'string "#version 450 core
+  (concatenate 'string "#version 410 core
 layout(location = 0) in vec2  a_pos;    // rest position, in ant radii
 layout(location = 1) in vec2  a_uv;     // segment: outward normal.  limb: (t, w)
 layout(location = 2) in float a_part;
 layout(location = 3) in float a_shade;
 
-struct Ant { vec4 p; vec4 q; };
-layout(std430, binding = 1) readonly buffer Ants { Ant ants[]; };
+uniform samplerBuffer u_ants;           // two vec4s per ant: p (x,y,head,phase) and q (radius,state,load,flick)
 
 uniform vec4      u_bounds;
 uniform vec2      u_world;
@@ -512,19 +509,20 @@ vec3 ant_color(float s) {
 }
 
 void main() {
-    Ant A        = ants[gl_InstanceID];
-    vec2  P      = A.p.xy;
-    float head   = A.p.z;
-    float phase  = A.p.w;
-    float radius = A.q.x;
+    vec4 A_p     = texelFetch(u_ants, gl_InstanceID * 2);
+    vec4 A_q     = texelFetch(u_ants, gl_InstanceID * 2 + 1);
+    vec2  P      = A_p.xy;
+    float head   = A_p.z;
+    float phase  = A_p.w;
+    float radius = A_q.x;
     // tribe in the integer part, state in the fraction -- the same
     // packing the disc path uses, one decade lower because this slot
     // carries no kind.  Tribes count from 1, and 0 means leave the
     // ant in its ordinary colours.
-    float tribe = floor(A.q.y);
-    float state = A.q.y - tribe;
-    float load   = A.q.z;
-    float flick  = A.q.w;
+    float tribe = floor(A_q.y);
+    float state = A_q.y - tribe;
+    float load   = A_q.z;
+    float flick  = A_q.w;
 
     float ca = cos(head), sa = sin(head);
     bool dead = (state < 0.05);
@@ -722,7 +720,7 @@ void main() {
 ;;; one another and the silhouette would dissolve.  Edges are antialiased
 ;;; by the multisampled target instead (render/offscreen.lisp), which is
 ;;; the right place for it and fixes the obstacle edges at the same time.
-(defparameter *ant-fragment-glsl* "#version 450 core
+(defparameter *ant-fragment-glsl* "#version 410 core
 in vec3 v_col;
 out vec4 frag;
 void main() { frag = vec4(v_col, 1.0); }

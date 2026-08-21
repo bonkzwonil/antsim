@@ -141,6 +141,13 @@ Installed as an SBCL init hook by scripts/build-binary.lisp."
   (setf *default-pathname-defaults* (uiop:getcwd))
   (setf antsim-gl::*preloaded* nil
         *egl-loaded* nil)
+  #+darwin
+  (progn
+    (pushnew #p"/opt/homebrew/lib/" cffi:*foreign-library-directories* :test #'equal)
+    (pushnew #p"/usr/local/lib/" cffi:*foreign-library-directories* :test #'equal)
+    (let ((exe (executable-directory)))
+      (when exe
+        (pushnew exe cffi:*foreign-library-directories* :test #'equal))))
   ;; The driver first, then everything else: the whole point of the
   ;; preload is to be the GL that is already in the process by the time
   ;; cl-opengl's library is opened (§5.4).  Quiet, because the live
@@ -270,6 +277,7 @@ install rather than a path we guessed."
           (loop for (name . reason) in *missing-libraries*
                 collect name collect reason))
   (format stream "~
+On macOS (Homebrew):       brew install glfw~%~
 On Ubuntu and Debian:      sudo apt install libglfw3 libgl1~%~
 On Fedora:                 sudo dnf install glfw mesa-libGL~%~
 On Guix:                   guix shell glfw mesa -- ~a~%~%~

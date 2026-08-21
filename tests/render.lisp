@@ -173,7 +173,7 @@ later.  It reports at *run* time rather than load time because
        (skip "No GL context available.  `make test-render-mesa` runs this ~
               suite in software (llvmpipe) and needs no GPU.")))
 
-(test gl-context-is-4.5-core
+(test gl-context-is-4.1-core
   (with-gl-or-skip
     (ant:with-headless-gl (c :width 64 :height 64)
       (let ((v (getf (ant:gl-info) :version)))
@@ -185,8 +185,8 @@ later.  It reports at *run* time rather than load time because
         (is-true (and v (>= (length v) 3)))
         (let ((major (digit-char-p (char v 0)))
               (minor (digit-char-p (char v 2))))
-          (is-true (or (> major 4) (and (= major 4) (>= minor 5)))
-                   "GL ~a is older than the 4.5 core context we asked for" v))))))
+          (is-true (or (> major 4) (and (= major 4) (>= minor 1)))
+                   "GL ~a is older than the 4.1 core context we asked for" v))))))
 
 (test gl-clears-to-a-known-colour
   "Clear an FBO and read it back: proves the context, the framebuffer and

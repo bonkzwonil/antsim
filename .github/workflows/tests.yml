@@ -163,3 +163,43 @@ jobs:
 
       - name: Gallery is web-sized
         run: ./scripts/check-images.sh
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SBCL and GLFW
+        run: brew install sbcl glfw
+
+      - name: Cache Quicklisp
+        id: ql-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/quicklisp
+          key: quicklisp-${{ runner.os }}-v1
+
+      - name: Install Quicklisp
+        run: |
+          set -eu
+          if [ ! -f "$HOME/quicklisp/setup.lisp" ]; then
+            curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+            sbcl --non-interactive \
+              --load /tmp/quicklisp.lisp \
+              --eval '(quicklisp-quickstart:install)'
+          fi
+          grep -qs 'quicklisp/setup.lisp' "$HOME/.sbclrc" 2>/dev/null ||
+            echo '(load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))' \
+              >> "$HOME/.sbclrc"
+          sbcl --non-interactive \
+            --eval '(format t "~&quicklisp dist ~a~%" (ql:dist-version "quicklisp"))'
+
+      - name: Core suite
+        run: make test
+
+      - name: Acceptance experiments (§3.8)
+        run: make acceptance
+
+      - name: Command-line suite
+        run: make test-app-bare
+

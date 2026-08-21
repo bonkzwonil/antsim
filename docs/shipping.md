@@ -2,14 +2,15 @@
 
 How a release of antsim is built, what is in it, and why it is in it.
 
-Two artefacts, one tag:
+Three artefacts, one tag:
 
 | | |
 |---|---|
 | **Linux** | `antsim-<version>-x86_64.AppImage` |
 | **Windows** | `antsim-<version>-windows-x86_64.zip` |
+| **macOS** | `antsim-<version>-macos-<arch>.zip` |
 
-Neither needs SBCL, Quicklisp, or a checkout. Both open the live window
+Neither needs SBCL, Quicklisp, or a checkout. All open the live window
 of §5.5 and read the scenario files of §6.
 
 ---
@@ -31,7 +32,7 @@ git push origin v1.0.0
 git push github v1.0.0
 ```
 
-Step 4 builds both platforms and creates a GitHub Release with the two
+Step 4 builds all platforms and creates a GitHub Release with the
 artefacts and a `SHA256SUMS` beside them. A tag with a suffix —
 `v1.0.0-rc1` — is published as a prerelease.
 
@@ -39,7 +40,7 @@ Nothing about this fires on an ordinary push. A release is a deliberate
 act, and there is no useful sense in which every commit on `main` is one.
 
 To test a change to the release machinery *without* spending a tag, run
-the GitHub workflow by hand (`workflow_dispatch`). It builds both
+the GitHub workflow by hand (`workflow_dispatch`). It builds all
 artefacts, stamps them `<version>+<sha>` so they cannot be mistaken for
 the release, and publishes nothing.
 
@@ -50,17 +51,18 @@ the release, and publishes nothing.
 The interesting decisions are all about the boundary between what we ship
 and what the user's machine provides.
 
-**OpenGL is never bundled, on either platform.** It belongs to the
+**OpenGL is never bundled.** It belongs to the
 graphics driver, it has to match the kernel module actually loaded, and
 putting a second GL implementation into the process is precisely the
 failure `src/render/preload.lisp` exists to prevent — README §5.4. On
-Linux the driver's `libGL`/`libEGL` come from the system; on Windows,
+Linux the driver's `libGL`/`libEGL` come from the system; on macOS,
+`OpenGL.framework` is provided by the OS; on Windows,
 `opengl32.dll` is a system library and everything past GL 1.1 is fetched
 through `wglGetProcAddress` against the live context.
 
-**GLFW is bundled, on both.** It is not installed by default on a stock
-Ubuntu desktop and Windows has no package manager to lean on, and "install
-libglfw3 first" is not a way to hand somebody a simulation to look at.
+**GLFW is bundled on Linux and Windows releases.** On macOS, GLFW can either
+be bundled beside the executable (`libglfw.3.dylib`) or installed via Homebrew
+(`brew install glfw`).
 
 **glibc is not bundled and cannot be.** It is forward-compatible and not
 backward-compatible: a binary runs on a newer glibc than it was built
@@ -106,29 +108,37 @@ The `.exe` finds `glfw3.dll` and `scenarios\` because Windows searches the
 executable's own directory first, which is also why there is no AppRun
 equivalent here. Keep the folder together.
 
+### macOS, the zip
+
+```
+antsim
+libglfw.3.dylib  (optional bundled dylib, or resolved from Homebrew)
+scenarios/
+README-macos.txt
+```
+
+The macOS build targets **OpenGL 4.1 Core Profile** using texture buffer
+objects (TBOs) for instance data. Unpack the zip and run `./antsim` directly
+from Terminal.
+
 ---
 
-## Why there is no macOS build
+## The OpenGL 4.1 Architecture and macOS
 
-Because it would not run, and a download that starts and then cannot open
-its window is worse than no download.
+macOS caps OpenGL at **4.1 Core Profile** (`#version 410 core`). It lacks
+OpenGL 4.3 (SSBOs) and OpenGL 4.4 (`glBufferStorage` persistent coherent mapping).
 
-macOS caps OpenGL at **4.1** — frozen in 2018 and deprecated since. The
-renderer needs 4.4: the ants, bodies and HUD are fed to the GPU through a
-persistently-mapped SSBO, which is GL 4.3 for the buffer and 4.4 for the
-mapping. The context creation fails first; if it somehow did not, all
-twelve `#version 450 core` shaders would fail to compile.
+The project uses an OpenGL 4.1 Core Profile Texture Buffer Object (TBO) architecture
+across all platforms:
+- Instance data for bodies, articulated ants, and HUD items are stored in standard
+  texture buffer objects (`samplerBuffer` / `usamplerBuffer`) formatted as `RGBA32F`
+  and `R32UI`.
+- Shaders index instances via `texelFetch(u_sampler, gl_InstanceID)`.
+- Per-frame instance updates stream data via standard `glBufferSubData`.
+- Headless rendering on macOS creates an invisible GLFW context (`:visible nil`)
+  to render to offscreen framebuffers.
 
-None of this is a packaging problem, so no amount of CI fixes it. GitHub
-does offer macOS runners and the build would very likely *succeed* — SBCL
-and GLFW are both a `brew install` away, and SBCL supports arm64 Darwin
-well. The binary would answer `--version` and `--list` perfectly happily
-and fail at the only thing it exists for.
-
-The route to macOS is a GL 4.1 render backend on texture buffer objects,
-scheduled in [§7, Beyond M6](concept.md#7-milestones) along with the
-reasons it is worth doing for Linux and Windows too — and the reasons to
-be wary of doing it only for macOS.
+This architecture runs identically across macOS, Linux, and Windows.
 
 ---
 
@@ -137,6 +147,7 @@ be wary of doing it only for macOS.
 ```sh
 make binary          # out/antsim — under a guix shell, for GLFW
 make appimage        # dist/antsim-<version>-x86_64.AppImage
+make macos-zip       # dist/antsim-<version>-macos-<arch>.zip
 make icon            # regenerate packaging/antsim.png (committed)
 make test-app        # the command line: argv, search path, exit codes
 ```

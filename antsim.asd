@@ -54,12 +54,12 @@
   :components ((:file "load")))
 
 (defsystem "antsim/render"
-  :description "Headless GL 4.5 via EGL, offscreen targets, PNG capture."
+  :description "Headless GL 4.1 via EGL/GLFW, offscreen targets, PNG capture."
   ;; antsim-gl-preload lives in its own .asd and is pulled in here, not in
   ;; :depends-on, because it must load *before* cl-opengl — see
   ;; src/render/preload.lisp.
   :defsystem-depends-on ("antsim-gl-preload")
-  :depends-on ("antsim" "cffi" "cl-opengl")
+  :depends-on ("antsim" "cffi" "cl-opengl" #+darwin "cl-glfw3")
   :serial t
   :pathname "src/render"
   :components ((:file "png")

@@ -18,7 +18,7 @@
 
 (in-package #:antsim)
 
-(defparameter *smoke-vertex-glsl* "#version 450 core
+(defparameter *smoke-vertex-glsl* "#version 410 core
 // Fullscreen triangle from gl_VertexID alone: no vertex buffer, no
 // attributes.  v_uv is 0..1 across the visible region and runs past it
 // on the two clipped corners, which costs nothing and avoids a quad.
@@ -30,7 +30,7 @@ void main() {
 }
 ")
 
-(defparameter *smoke-fragment-glsl* "#version 450 core
+(defparameter *smoke-fragment-glsl* "#version 410 core
 in vec2 v_uv;
 out vec4 frag;
 

@@ -100,11 +100,10 @@ which is both legible at this size and half the glyphs.")
 ;;; Shaders
 ;;; --------------------------------------------------------------------
 
-(defparameter *hud-vertex-glsl* "#version 450 core
+(defparameter *hud-vertex-glsl* "#version 410 core
 // One quad per item, in *pixel* coordinates with the origin top-left.
-struct Item { vec4 rect; vec4 color; vec4 misc; };  // misc.x: glyph or -1
-layout(std430, binding = 1) readonly buffer Items { Item items[]; };
-
+// Each item is 3 vec4s: rect (xy, zw), color (rgba), misc (x: glyph or -1).
+uniform samplerBuffer u_items;
 uniform vec2 u_viewport;
 
 out vec2 v_uv;
@@ -112,27 +111,30 @@ flat out vec4 v_color;
 flat out float v_glyph;
 
 void main() {
-    Item it = items[gl_InstanceID];
+    int base = gl_InstanceID * 3;
+    vec4 rect = texelFetch(u_items, base);
+    vec4 color = texelFetch(u_items, base + 1);
+    vec4 misc = texelFetch(u_items, base + 2);
     vec2 corner = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2) * 0.5;
     v_uv = corner;
-    v_color = it.color;
-    v_glyph = it.misc.x;
+    v_color = color;
+    v_glyph = misc.x;
 
     // pixels, origin top-left, to NDC.  y is flipped once, here.
-    vec2 p = it.rect.xy + corner * it.rect.zw;
+    vec2 p = rect.xy + corner * rect.zw;
     vec2 ndc = vec2(p.x / u_viewport.x * 2.0 - 1.0,
                     1.0 - p.y / u_viewport.y * 2.0);
     gl_Position = vec4(ndc, 0.0, 1.0);
 }
 ")
 
-(defparameter *hud-fragment-glsl* "#version 450 core
+(defparameter *hud-fragment-glsl* "#version 410 core
 in vec2 v_uv;
 flat in vec4 v_color;
 flat in float v_glyph;
 out vec4 frag;
 
-layout(std430, binding = 2) readonly buffer Glyphs { uint glyphs[]; };
+uniform usamplerBuffer u_glyphs;
 
 void main() {
     if (v_glyph < 0.0) {           // solid rectangle
@@ -143,7 +145,7 @@ void main() {
     int row = int(floor(v_uv.y * 5.0));
     col = clamp(col, 0, 2);
     row = clamp(row, 0, 4);
-    uint m = glyphs[int(v_glyph)];
+    uint m = texelFetch(u_glyphs, int(v_glyph)).r;
     if ((m & (1u << uint(row * 3 + col))) == 0u) discard;
     frag = v_color;
 }
@@ -160,43 +162,48 @@ under this, and running out silently truncates rather than crashing.")
 (defstruct (hud (:constructor %make-hud))
   (program 0 :type unsigned-byte)
   (vao 0 :type unsigned-byte)
-  (ssbo 0 :type unsigned-byte)
-  (map (cffi:null-pointer) :type cffi:foreign-pointer)
-  (glyph-ssbo 0 :type unsigned-byte)
+  (item-buf 0 :type unsigned-byte)
+  (item-tex 0 :type unsigned-byte)
+  (item-ptr (cffi:null-pointer) :type cffi:foreign-pointer)
+  (glyph-buf 0 :type unsigned-byte)
+  (glyph-tex 0 :type unsigned-byte)
   (count 0 :type fixnum))
 
 (defun make-hud ()
   (let ((h (%make-hud :program (link-program *hud-vertex-glsl*
                                              *hud-fragment-glsl*)
-                      :vao (gl:gen-vertex-array))))
+                      :vao (gl:gen-vertex-array)
+                      :item-ptr (cffi:foreign-alloc :float :count (* +hud-capacity+ 12)))))
     (let ((buf (gl:gen-buffer))
-          (bytes (* +hud-capacity+ 12 4)))   ; 3 vec4 per item
-      (gl:bind-buffer :shader-storage-buffer buf)
-      (%gl:buffer-storage :shader-storage-buffer bytes (cffi:null-pointer)
-                          (logior +map-write-bit+ +map-persistent-bit+
-                                  +map-coherent-bit+))
-      (let ((ptr (%gl:map-buffer-range :shader-storage-buffer 0 bytes
-                                       (logior +map-write-bit+
-                                               +map-persistent-bit+
-                                               +map-coherent-bit+))))
-        (when (cffi:null-pointer-p ptr)
-          (error "Failed to map the HUD buffer"))
-        (setf (hud-ssbo h) buf (hud-map h) ptr)))
+          (tex (gl:gen-texture)))
+      (gl:bind-buffer :texture-buffer buf)
+      (%gl:buffer-data :texture-buffer (* +hud-capacity+ 12 4) (cffi:null-pointer)
+                       :dynamic-draw)
+      (gl:bind-texture :texture-buffer tex)
+      (%gl:tex-buffer :texture-buffer :rgba32f buf)
+      (setf (hud-item-buf h) buf (hud-item-tex h) tex))
     ;; the font, uploaded once
     (let ((buf (gl:gen-buffer))
+          (tex (gl:gen-texture))
           (n (length *font-bits*)))
-      (gl:bind-buffer :shader-storage-buffer buf)
+      (gl:bind-buffer :texture-buffer buf)
       (cffi:with-foreign-object (tmp :uint32 n)
         (dotimes (i n) (setf (cffi:mem-aref tmp :uint32 i) (aref *font-bits* i)))
-        (%gl:buffer-data :shader-storage-buffer (* n 4) tmp :static-draw))
-      (setf (hud-glyph-ssbo h) buf))
+        (%gl:buffer-data :texture-buffer (* n 4) tmp :static-draw))
+      (gl:bind-texture :texture-buffer tex)
+      (%gl:tex-buffer :texture-buffer :r32ui buf)
+      (setf (hud-glyph-buf h) buf (hud-glyph-tex h) tex))
     h))
 
 (defun destroy-hud (h)
   (declare (type hud h))
   (gl:delete-program (hud-program h))
   (gl:delete-vertex-arrays (list (hud-vao h)))
-  (gl:delete-buffers (list (hud-ssbo h) (hud-glyph-ssbo h)))
+  (gl:delete-textures (list (hud-item-tex h) (hud-glyph-tex h)))
+  (gl:delete-buffers (list (hud-item-buf h) (hud-glyph-buf h)))
+  (unless (cffi:null-pointer-p (hud-item-ptr h))
+    (cffi:foreign-free (hud-item-ptr h))
+    (setf (hud-item-ptr h) (cffi:null-pointer)))
   (values))
 
 (defun hud-reset (h)
@@ -209,7 +216,7 @@ under this, and running out silently truncates rather than crashing.")
   (declare (type hud h))
   (when (< (hud-count h) +hud-capacity+)
     (let ((o (* (hud-count h) 12))
-          (p (hud-map h)))
+          (p (hud-item-ptr h)))
       (setf (cffi:mem-aref p :float (+ o 0)) (float x 1.0f0)
             (cffi:mem-aref p :float (+ o 1)) (float y 1.0f0)
             (cffi:mem-aref p :float (+ o 2)) (float w 1.0f0)
@@ -277,13 +284,20 @@ filled part is still visible."
 scene."
   (declare (type hud h))
   (when (plusp (hud-count h))
+    (gl:bind-buffer :texture-buffer (hud-item-buf h))
+    (%gl:buffer-sub-data :texture-buffer 0 (* (hud-count h) 12 4) (hud-item-ptr h))
+    (gl:bind-buffer :texture-buffer 0)
     (gl:enable :blend)
     (gl:blend-func :src-alpha :one-minus-src-alpha)
     (gl:use-program (hud-program h))
     (gl:uniformf (gl:get-uniform-location (hud-program h) "u_viewport")
                  (float vw 1.0f0) (float vh 1.0f0))
-    (%gl:bind-buffer-base :shader-storage-buffer 1 (hud-ssbo h))
-    (%gl:bind-buffer-base :shader-storage-buffer 2 (hud-glyph-ssbo h))
+    (gl:active-texture :texture0)
+    (gl:bind-texture :texture-buffer (hud-item-tex h))
+    (gl:uniformi (gl:get-uniform-location (hud-program h) "u_items") 0)
+    (gl:active-texture :texture1)
+    (gl:bind-texture :texture-buffer (hud-glyph-tex h))
+    (gl:uniformi (gl:get-uniform-location (hud-program h) "u_glyphs") 1)
     (gl:bind-vertex-array (hud-vao h))
     (%gl:draw-arrays-instanced :triangle-strip 0 4 (hud-count h))
     (gl:bind-vertex-array 0)

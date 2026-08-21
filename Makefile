@@ -247,6 +247,14 @@ appimage: binary
 appimage-bare: binary-bare
 	packaging/build-appimage.sh
 
+## macos-zip — dist/antsim-<version>-macos-<arch>.zip.
+macos-zip: binary
+	packaging/build-macos-zip.sh "" $(BINARY)
+
+## macos-zip-bare — as macos-zip, without the guix shell.  What macOS CI runs.
+macos-zip-bare: binary-bare
+	packaging/build-macos-zip.sh "" $(BINARY)
+
 ## icon — regenerate packaging/antsim.png.  Committed, so this is only
 ## needed when the drawing changes.
 icon:

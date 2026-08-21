@@ -54,8 +54,8 @@
 Both must come from the *same* directory: the failure this file prevents
 is precisely a mismatched pair, so finding one here and one elsewhere is
 not good enough."
-  #+windows nil
-  #-windows
+  #+(or windows darwin) nil
+  #-(or windows darwin)
   (let* ((env (uiop:getenv "GUIX_ENVIRONMENT"))
          (dirs (append (when env (list (concatenate 'string env "/lib/")))
                        *fallback-directories*)))
@@ -76,8 +76,8 @@ touches EGL, so a machine with no libEGL is a perfectly good machine to
 watch a colony on and has no business being warned at.  The headless
 paths still fail loudly, in LOAD-GL-LIBRARIES, where the failure is real."
   (or *preloaded*
-      #+windows nil
-      #-windows
+      #+(or windows darwin) nil
+      #-(or windows darwin)
       (let ((dir (driver-library-directory)))
         (unless dir
           (unless quiet

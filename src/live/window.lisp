@@ -728,7 +728,7 @@ Returns the world, so a session can keep poking at it afterwards."
   (declare (type world w))
   (glfw:with-init-window (:title title :width width :height height
                           :context-version-major 4
-                          :context-version-minor 5
+                          :context-version-minor 1
                           :opengl-profile :opengl-core-profile
                           ;; The window draws into framebuffer 0 and not
                           ;; into the multisampled offscreen target, so it

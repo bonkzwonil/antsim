@@ -7,10 +7,6 @@
 
 (in-package #:antsim)
 
-(defconstant +map-persistent-bit+ #x0040)
-(defconstant +map-coherent-bit+ #x0080)
-(defconstant +map-write-bit+ #x0002)
-
 (defstruct (renderer (:constructor %make-renderer))
   (field-program 0 :type unsigned-byte)
   (poly-program 0 :type unsigned-byte)
@@ -27,30 +23,29 @@
   (field-w 0 :type fixnum)
   (field-h 0 :type fixnum)
   (field-scratch nil :type (or null f32v))
-  ;; Persistent-mapped SSBO: the CPU writes body instances straight into
-  ;; a pointer with no GL call per frame.  Proven at 3000 instances in
-  ;; waldameisen, and the reason the ant count is not a rendering
-  ;; constraint.
-  (body-ssbo 0 :type unsigned-byte)
-  (body-map (cffi:null-pointer) :type cffi:foreign-pointer)
+  ;; Body instances via Texture Buffer Object (TBO, GL 3.1 / 4.1):
+  ;; one large array of vec4s indexed by instance ID in the shader.
+  (body-buf 0 :type unsigned-byte)
+  (body-tex 0 :type unsigned-byte)
+  (body-ptr (cffi:null-pointer) :type cffi:foreign-pointer)
   (body-capacity 0 :type fixnum)
   (poly-vao 0 :type unsigned-byte)
   (poly-vbo 0 :type unsigned-byte)
   (poly-capacity 0 :type fixnum)
-  ;; The articulated ant of §5.2.  One static mesh, one instance buffer,
-  ;; and a second persistent map for the same reason as the first: eight
-  ;; floats per ant per frame and no GL call in the loop.
+  ;; The articulated ant of §5.2.  One static mesh, one TBO instance buffer:
+  ;; eight floats per ant per frame.
   (ant-program 0 :type unsigned-byte)
   (ant-mesh nil :type (or null ant-mesh))
   (ant-vao 0 :type unsigned-byte)
   (ant-vbo 0 :type unsigned-byte)
   (ant-ebo 0 :type unsigned-byte)
-  (ant-ssbo 0 :type unsigned-byte)
-  (ant-map (cffi:null-pointer) :type cffi:foreign-pointer))
+  (ant-buf 0 :type unsigned-byte)
+  (ant-tex 0 :type unsigned-byte)
+  (ant-ptr (cffi:null-pointer) :type cffi:foreign-pointer))
 
 (defconstant +ant-instance-floats+ 8
   "Two vec4s: (x y heading phase) and (radius state load flick).  §5.2's
-per-instance record, and std430 wants the vec4 alignment anyway.")
+per-instance record.")
 
 (defun make-renderer (&key (body-capacity 8192) (poly-capacity 4096)
                            field-width field-height)
@@ -74,6 +69,8 @@ field grid."
             :field-w field-width :field-h field-height
             :field-scratch (mkf32 (* field-width field-height))
             :body-capacity body-capacity
+            :body-ptr (cffi:foreign-alloc :float :count (* body-capacity 4))
+            :ant-ptr (cffi:foreign-alloc :float :count (* body-capacity +ant-instance-floats+))
             :poly-capacity poly-capacity)))
     ;; pheromone texture
     (let ((tex (gl:gen-texture)))
@@ -98,21 +95,16 @@ field grid."
       (gl:tex-parameter :texture-2d :texture-wrap-s :clamp-to-edge)
       (gl:tex-parameter :texture-2d :texture-wrap-t :clamp-to-edge)
       (setf (renderer-alarm-tex r) tex))
-    ;; body instance buffer
+    ;; body instance buffer & TBO
     (let ((buf (gl:gen-buffer))
+          (tex (gl:gen-texture))
           (bytes (* body-capacity 4 4)))     ; vec4 per body
-      (gl:bind-buffer :shader-storage-buffer buf)
-      (%gl:buffer-storage :shader-storage-buffer bytes (cffi:null-pointer)
-                          (logior +map-write-bit+ +map-persistent-bit+
-                                  +map-coherent-bit+))
-      (let ((ptr (%gl:map-buffer-range :shader-storage-buffer 0 bytes
-                                       (logior +map-write-bit+
-                                               +map-persistent-bit+
-                                               +map-coherent-bit+))))
-        (when (cffi:null-pointer-p ptr)
-          (error "Failed to persistently map the body buffer"))
-        (setf (renderer-body-ssbo r) buf
-              (renderer-body-map r) ptr)))
+      (gl:bind-buffer :texture-buffer buf)
+      (%gl:buffer-data :texture-buffer bytes (cffi:null-pointer) :dynamic-draw)
+      (gl:bind-texture :texture-buffer tex)
+      (%gl:tex-buffer :texture-buffer :rgba32f buf)
+      (setf (renderer-body-buf r) buf
+            (renderer-body-tex r) tex))
     ;; obstacle geometry
     (let ((vao (gl:gen-vertex-array))
           (vbo (gl:gen-buffer)))
@@ -152,21 +144,16 @@ field grid."
       (setf (renderer-ant-vao r) vao
             (renderer-ant-vbo r) vbo
             (renderer-ant-ebo r) ebo))
-    ;; ant instance buffer, same persistent map as the body one
+    ;; ant instance buffer & TBO
     (let ((buf (gl:gen-buffer))
+          (tex (gl:gen-texture))
           (bytes (* body-capacity +ant-instance-floats+ 4)))
-      (gl:bind-buffer :shader-storage-buffer buf)
-      (%gl:buffer-storage :shader-storage-buffer bytes (cffi:null-pointer)
-                          (logior +map-write-bit+ +map-persistent-bit+
-                                  +map-coherent-bit+))
-      (let ((ptr (%gl:map-buffer-range :shader-storage-buffer 0 bytes
-                                       (logior +map-write-bit+
-                                               +map-persistent-bit+
-                                               +map-coherent-bit+))))
-        (when (cffi:null-pointer-p ptr)
-          (error "Failed to persistently map the ant buffer"))
-        (setf (renderer-ant-ssbo r) buf
-              (renderer-ant-map r) ptr)))
+      (gl:bind-buffer :texture-buffer buf)
+      (%gl:buffer-data :texture-buffer bytes (cffi:null-pointer) :dynamic-draw)
+      (gl:bind-texture :texture-buffer tex)
+      (%gl:tex-buffer :texture-buffer :rgba32f buf)
+      (setf (renderer-ant-buf r) buf
+            (renderer-ant-tex r) tex))
     r))
 
 (defun destroy-renderer (r)
@@ -178,10 +165,17 @@ field grid."
   (gl:delete-program (renderer-ant-program r))
   (gl:delete-vertex-arrays (list (renderer-empty-vao r) (renderer-poly-vao r)
                                  (renderer-ant-vao r)))
-  (gl:delete-textures (list (renderer-field-tex r) (renderer-alarm-tex r)))
-  (gl:delete-buffers (list (renderer-body-ssbo r) (renderer-poly-vbo r)
+  (gl:delete-textures (list (renderer-field-tex r) (renderer-alarm-tex r)
+                            (renderer-body-tex r) (renderer-ant-tex r)))
+  (gl:delete-buffers (list (renderer-body-buf r) (renderer-poly-vbo r)
                            (renderer-ant-vbo r) (renderer-ant-ebo r)
-                           (renderer-ant-ssbo r)))
+                           (renderer-ant-buf r)))
+  (unless (cffi:null-pointer-p (renderer-body-ptr r))
+    (cffi:foreign-free (renderer-body-ptr r))
+    (setf (renderer-body-ptr r) (cffi:null-pointer)))
+  (unless (cffi:null-pointer-p (renderer-ant-ptr r))
+    (cffi:foreign-free (renderer-ant-ptr r))
+    (setf (renderer-ant-ptr r) (cffi:null-pointer)))
   (values))
 
 ;;; --------------------------------------------------------------------
@@ -271,7 +265,7 @@ about when a deposit happened."
       0.0f0))
 
 (defun upload-bodies (r w &key skip-ants)
-  "Write every body into the mapped instance buffer.  Returns the count.
+  "Write every body into the instance buffer.  Returns the count.
 
 An ant's behavioural state is packed into the fractional part of the kind
 so the fragment shader can tint by it without a second buffer — laden
@@ -285,7 +279,7 @@ there stays exactly one place that knows what a food source looks like."
   (declare (type renderer r) (type world w))
   (let* ((b (world-bodies w))
          (a (world-ants w))
-         (ptr (renderer-body-map r))
+         (ptr (renderer-body-ptr r))
          (n (min (bodies-n b) (renderer-body-capacity r)))
          (xs (bodies-x b)) (ys (bodies-y b)) (rs (bodies-r b))
          (kinds (bodies-kind b))
@@ -353,11 +347,15 @@ there stays exactly one place that knows what a food source looks like."
     ;; Sources need no gauge instance: the body itself shrinks as it is
     ;; eaten (FOOD-CURRENT-RADIUS), so the disc on screen *is* the amount
     ;; left, and it is the same circle the ants are queueing against.
+    (when (plusp count)
+      (gl:bind-buffer :texture-buffer (renderer-body-buf r))
+      (%gl:buffer-sub-data :texture-buffer 0 (* count 4 4) ptr)
+      (gl:bind-buffer :texture-buffer 0))
     count))
 
 (defun upload-ants (r w)
   "Write one §5.2 instance record per ant — and per corpse — into the
-mapped ant buffer.  Returns the count.
+ant buffer.  Returns the count.
 
 Eight floats each, and that is the entire per-frame cost of the
 articulated ant: the gait, the antennal sweep, the swelling crop and the
@@ -366,7 +364,7 @@ a colony rewrites no geometry and issues no GL call in the loop."
   (declare (type renderer r) (type world w))
   (let* ((a (world-ants w))
          (b (world-bodies w))
-         (ptr (renderer-ant-map r))
+         (ptr (renderer-ant-ptr r))
          (cap (renderer-body-capacity r))
          (xs (bodies-x b)) (ys (bodies-y b)) (rs (bodies-r b))
          (kinds (bodies-kind b))
@@ -412,6 +410,10 @@ a colony rewrites no geometry and issues no GL call in the loop."
           (emit (aref xs i) (aref ys i)
                 (* 6.2831855f0 (rnd01 i 0 77 (world-seed w)))
                 0.5f0 (aref rs i) 0.0f0 0.0f0 0.0f0))))
+    (when (plusp count)
+      (gl:bind-buffer :texture-buffer (renderer-ant-buf r))
+      (%gl:buffer-sub-data :texture-buffer 0 (* count +ant-instance-floats+ 4) ptr)
+      (gl:bind-buffer :texture-buffer 0))
     count))
 
 ;;; --------------------------------------------------------------------
@@ -516,7 +518,9 @@ framebuffer.  Layers back to front, per §5.1."
       (when (plusp count)
         (gl:use-program p)
         (gl:uniformf (gl:get-uniform-location p "u_bounds") x0 y0 x1 y1)
-        (%gl:bind-buffer-base :shader-storage-buffer 0 (renderer-body-ssbo r))
+        (gl:active-texture :texture0)
+        (gl:bind-texture :texture-buffer (renderer-body-tex r))
+        (gl:uniformi (gl:get-uniform-location p "u_bodies") 0)
         (gl:bind-vertex-array (renderer-empty-vao r))
         (%gl:draw-arrays-instanced :triangle-strip 0 4 count))
 
@@ -540,14 +544,16 @@ framebuffer.  Layers back to front, per §5.1."
               (gl:active-texture :texture0)
               (gl:bind-texture :texture-2d (renderer-field-tex r))
               (gl:uniformi (gl:get-uniform-location q "u_field") 0)
+              ;; Ant instance buffer on unit 1
+              (gl:active-texture :texture1)
+              (gl:bind-texture :texture-buffer (renderer-ant-tex r))
+              (gl:uniformi (gl:get-uniform-location q "u_ants") 1)
               (gl:uniformf (gl:get-uniform-location q "u_px_per_m") px-per-m)
               (gl:uniformf (gl:get-uniform-location q "u_seconds")
                            (world-seconds w))
               (gl:uniformf (gl:get-uniform-location q "u_stride")
                            (/ *gait-stride* *ant-radius*))
               (gl:uniformf (gl:get-uniform-location q "u_k") *choice-k*)
-              (%gl:bind-buffer-base :shader-storage-buffer 1
-                                    (renderer-ant-ssbo r))
               (gl:bind-vertex-array (renderer-ant-vao r))
               (%gl:draw-elements-instanced :triangles n-index :unsigned-int
                                            (cffi:make-pointer

@@ -2250,72 +2250,26 @@ already produces the contact list this needs (§3.11), which is the only
 reason it is worth naming this far out — the groundwork is a decision made
 in M1, the work itself is not scheduled.
 
-**Beyond M6 — the 4.1 backend, and with it macOS.** Not scheduled, and
-named here because the question was asked and the answer deserves to be
-written down once rather than rediscovered.
+**Beyond M6 — the 4.1 backend, and with it macOS (Completed).**
+Apple froze OpenGL at **4.1** in 2018 and deprecated it; that is the ceiling
+on macOS across both Intel and Apple Silicon.
 
-There is no macOS build and cannot be one as the renderer stands. Apple
-froze OpenGL at **4.1** in 2018 and deprecated it outright; that is the
-ceiling on every Mac, Intel and Apple Silicon alike. What §5 actually
-requires, counted rather than estimated:
+The project migrated the entire render pipeline from OpenGL 4.5/4.4 SSBOs down to
+**OpenGL 4.1 Core Profile Texture Buffer Objects (TBOs)**:
 
-| what | needs | sites |
-|---|---|---|
-| SSBO binds and uploads (`:shader-storage-buffer`) | GL 4.3 | 15 |
-| `layout(std430) buffer` blocks — Ants, Bodies, Items, Glyphs | GL 4.3 | 4 |
-| `glBufferStorage` + persistent coherent mapping | GL 4.4 | 3 |
-| `#version 450 core` | GL 4.5 | 12 |
-| direct state access | GL 4.5 | **0** |
-
-The last row is the interesting one. There is not a single DSA call in the
-renderer, so the 4.5 in the context request is very nearly just the shader
-declaration: **the true floor is 4.4, not 4.5.** That does not rescue
-macOS — 4.4 is still three releases above the ceiling — but it does mean
-the distance to 4.1 is smaller than the version numbers suggest, and it is
-concentrated in one mechanism rather than spread through the code.
-
-That mechanism is how the renderer feeds the GPU. Ants, bodies, HUD items
-and glyphs are all written straight through a persistently-mapped SSBO,
-which is *the* design decision of §5.1 and not an incidental use. Porting
-it means:
-
-1. **SSBO → texture buffer object** (GL 3.1). The natural substitute for
-   "one large array indexed by instance ID". A UBO cannot do it: 64 KB
-   does not hold thousands of ants.
-2. **Persistent coherent map → `glBufferData`/`glMapBufferRange` with an
-   explicit flush** (GL 3.0). Costs a copy per frame, which at these
-   buffer sizes is nothing measurable.
-3. **GLSL 450 → 410**, mechanical once (1) has landed.
-4. **A darwin context request** at 4.1 core forward-compatible, and a
-   darwin branch in `preload.lisp` — which today is `#-windows` and would
-   run the Linux libEGL search on a Mac and find nothing.
-
-The reason to want this is *not* mainly macOS. A 4.1 path is a floor
-reduction on every platform: it widens Linux and Windows to a decade more
-hardware, and it would make the software-rasteriser CI run cheaper. macOS
-comes along for free once the floor is low enough, which is the right way
-round — a port undertaken *for* macOS would be a port with one beneficiary
-and an expiry date.
-
-Because there is an expiry date. Apple deprecated OpenGL rather than
-merely stopping work on it, so a 4.1 backend on macOS is borrowed time and
-the durable answer there is Metal, presumably through MoltenVK. That is a
-much larger project than this one and it is not proposed.
-
-Two practical obstacles to record before anybody starts. Testing needs a
-real Mac: CI macOS runners may not permit a GL context without a window
-server session, and a backend nothing can exercise is a backend that
-rots. And distribution needs a signature — an unsigned binary is
-quarantined by Gatekeeper, and notarisation means a paid Apple developer
-account, which is a recurring cost attached to a platform we cannot
-currently render on.
-
-What *is* cheap, and is the honest first step whenever this is picked up:
-a macOS CI job that builds the core and runs `make test` and
-`make acceptance`. No graphics, no artefact, no claim that antsim runs on
-a Mac — just the standing proof that the simulation compiles and the
-science reproduces on arm64 Darwin, which is exactly the groundwork the
-port would otherwise have to establish first.
+1. **SSBO → Texture Buffer Objects (GL 3.1 / 4.1 Core):** Instance data for
+   bodies, articulated ants (`build-ant-vertex-glsl`), and HUD items/glyphs
+   are allocated as `GL_TEXTURE_BUFFER` targets with `RGBA32F` and `R32UI`
+   internal formats. Shaders index them via `texelFetch(u_sampler, gl_InstanceID)`.
+2. **Buffer Streaming:** Instance updates stream through standard foreign memory
+   buffers via `glBufferSubData`.
+3. **GLSL 410 Core:** All vertex and fragment shaders declare `#version 410 core`.
+4. **Darwin Headless Context:** On macOS (which has no EGL), headless offscreen
+   rendering creates a hidden GLFW forward-compatible 4.1 Core window (`:visible nil`)
+   and renders to offscreen FBOs.
+5. **Universal 4.1 Floor:** The lower floor benefits macOS, Linux, and Windows alike,
+   broadening compatibility across older GPUs and software rasterisers while running
+   identically everywhere.
 
 ## 8. Risks
 

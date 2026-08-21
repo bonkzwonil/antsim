@@ -377,8 +377,64 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
+  macos:
+    needs: version
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SBCL and GLFW
+        run: brew install sbcl glfw
+
+      - name: Cache Quicklisp
+        id: ql-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/quicklisp
+          key: quicklisp-release-macos-v1
+
+      - name: Install Quicklisp
+        run: |
+          set -eu
+          if [ ! -f "$HOME/quicklisp/setup.lisp" ]; then
+            curl -fsSLo /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+            sbcl --non-interactive \
+              --load /tmp/quicklisp.lisp \
+              --eval '(quicklisp-quickstart:install)'
+          fi
+          grep -qs 'quicklisp/setup.lisp' "$HOME/.sbclrc" 2>/dev/null ||
+            echo '(load (merge-pathnames "quicklisp/setup.lisp" (user-homedir-pathname)))' \
+              >> "$HOME/.sbclrc"
+          sbcl --non-interactive \
+            --eval '(format t "~&quicklisp dist ~a~%" (ql:dist-version "quicklisp"))'
+
+      - name: Save the binary
+        env:
+          ANTSIM_VERSION: ${{ needs.version.outputs.version }}
+          HEAP: ${{ env.SHIP_HEAP }}
+        run: |
+          make binary-bare
+
+      - name: Smoke-test the binary
+        run: |
+          ./out/antsim --version
+          ./out/antsim --help > /dev/null
+          mkdir -p out/scenarios
+          cp scenarios/*.json out/scenarios/
+          (cd out && ./antsim --list)
+
+      - name: Build the zip
+        run: |
+          packaging/build-macos-zip.sh "${{ needs.version.outputs.version }}" out/antsim
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-zip
+          path: dist/*.zip
+          if-no-files-found: error
+
   publish:
-    needs: [version, linux, windows]
+    needs: [version, linux, windows, macos]
     if: needs.version.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -419,7 +475,10 @@ jobs:
           # shell starts at column zero and the four-space indent below is
           # the one markdown will read as a code block — which is the point.
           cat > notes.raw <<'EOF'
-          Standalone builds. Neither needs SBCL, Quicklisp, or a checkout.
+          Standalone builds. None needs SBCL, Quicklisp, or a checkout.
+
+          **macOS** — `antsim-VERSION-macos-arm64.zip`. Unpack it and run `./antsim`,
+          keeping the folder together. Requires GLFW (`brew install glfw`).
 
           **Linux** — `antsim-VERSION-x86_64.AppImage`. `chmod +x` it and run it.
           Built on Ubuntu 22.04, so it runs on 22.04 and anything later. GLFW is
@@ -428,8 +487,7 @@ jobs:
           **Windows** — `antsim-VERSION-windows-x86_64.zip`. Unpack it and run
           `antsim.exe`, keeping the folder together.
 
-          Both want a driver with OpenGL 4.5, which is any GPU driver of the last
-          decade.
+          All want OpenGL 4.1 or higher (built-in on macOS; standard on Linux/Windows).
 
               antsim --help     the options, and the keys the window responds to
               antsim --list     the scenarios in the package
