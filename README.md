@@ -138,8 +138,9 @@ Quicklisp, or a checkout.
 ```sh
 chmod +x antsim-*-x86_64.AppImage
 ./antsim-*-x86_64.AppImage                       # the demo
+./antsim-*-x86_64.AppImage --tui                 # the ascii tui version
 ./antsim-*-x86_64.AppImage --list                # what else is in there
-./antsim-*-x86_64.AppImage goss-double-bridge
+./antsim-*-x86_64.AppImage goss-double-bridge    # load a scenario
 ./antsim-*-x86_64.AppImage --help                # options, and the window's keys
 ```
 
@@ -152,6 +153,9 @@ the last decade. The Linux build is made on Ubuntu 22.04 and so runs on 22.04
 and anything newer; GLFW is bundled, and OpenGL deliberately is not — it
 belongs to your driver, and shipping a second one is the failure
 [§5.4](docs/concept.md#54-headless-and-the-libgl-trap) is about.
+
+Note that the windooze version comes without ascii tui, as windows sbcl has no
+ioctl support.
 
 There is no macOS build. macOS caps OpenGL at 4.1 — frozen in 2018, deprecated
 since — which is well below what the renderer's shaders and buffers need, so
