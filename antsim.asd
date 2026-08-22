@@ -95,6 +95,41 @@
   :pathname "src/live"
   :components ((:file "window")))
 
+(defsystem "antsim/tui"
+  :description "The terminal view (§5.6): ANSI escapes, no GL, no curses."
+  ;; A leaf, and deliberately one: nothing else in the tree depends on
+  ;; this, so it can never drag a terminal into a path that wanted a
+  ;; window.  It sits on the core and the scenario format and stops
+  ;; there — never antsim/render, never antsim/live, because the whole
+  ;; point is a machine with no graphics stack, and cl-glfw3 opens
+  ;; libglfw when it is *loaded* (see the antsim/app-test note below).
+  ;;
+  ;; sb-posix is a REQUIRE rather than a dependency because it ships with
+  ;; SBCL.  That is what keeps the promise this system makes: raw mode,
+  ;; the window size and the resize signal all come out of the
+  ;; implementation, so the terminal view adds no external library at all
+  ;; and needs nothing bundled into a package (docs/shipping.md).  A
+  ;; curses binding would have meant libncurses, and libncurses would
+  ;; have meant a new paragraph in the bundling rationale.
+  :depends-on ("antsim" "antsim/scenario" (:require "sb-posix"))
+  :serial t
+  :pathname "src/tui"
+  :components ((:file "camera")
+               (:file "canvas")
+               ;; Before `draw`, and it has to be: TUI-FRAME composes the
+               ;; status line into the same canvas it draws the world
+               ;; into, so the line has to exist before the frame does.
+               (:file "status")
+               (:file "draw")
+               ;; Pure, and separate from `term` for that reason: the
+               ;; escape-sequence decoder is the fiddliest thing here and
+               ;; the one most worth testing, and a test should not have
+               ;; to own a terminal to run it.
+               (:file "keys")
+               (:file "term")
+               (:file "live"))
+  :in-order-to ((test-op (test-op "antsim/test"))))
+
 (defsystem "antsim/app"
   :description "The shipped program: argv, usage, exit codes (see docs/shipping.md)."
   ;; The only system that knows a *program* exists.  Everything below it
@@ -111,7 +146,13 @@
   ;; antsim/scenario, not just antsim: the shipped bridge scenarios must be
   ;; checked against the Lisp constructors, and a test that cannot read the
   ;; files cannot do that.  The *core* still has no parser (§4.1).
-  :depends-on ("antsim" "antsim/scenario" "fiveam")
+  ;; antsim/tui too, and it costs the suite nothing: the terminal view
+  ;; depends on the core and on sb-posix and on nothing else, so a
+  ;; machine that can run these tests can already load it.  The renderer
+  ;; is a pure function from a world to a grid of characters, so it is
+  ;; tested here rather than in a system of its own — no tty required,
+  ;; and `make test` covers it.
+  :depends-on ("antsim" "antsim/scenario" "antsim/tui" "fiveam")
   :serial t
   :pathname "tests"
   :components ((:file "suite")
@@ -119,6 +160,7 @@
                (:file "bodies")
                (:file "ant")
                (:file "scenario")
+               (:file "tui")
                ;; Its own FiveAM suite, not part of `antsim`: these are
                ;; colony runs over several seeds and they are slow, so
                ;; `make test` stays fast and `make acceptance` is what

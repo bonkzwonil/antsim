@@ -206,6 +206,30 @@
    ;; live/window — the interactive view (§5.5), system antsim/live
    #:run-live #:live-demo #:live-scenario #:live-inspect
    #:*live-speed* #:*live-paused*
+   ;; tui/camera — the terminal camera (§5.6), system antsim/tui
+   #:tui-camera #:make-tui-camera #:tcam-cx #:tcam-cy #:tcam-mpc #:tcam-mpr
+   #:tui-fit #:tui-world->cell #:tui-cell->world
+   #:tui-pan! #:tui-zoom! #:tui-clamp! #:tui-visible-span
+   #:*tui-cell-aspect*
+   ;; tui/canvas — a character grid, and the difference between two
+   #:tui-canvas #:make-tui-canvas #:tcv-cols #:tcv-rows
+   #:tui-clear! #:tui-put! #:tui-at #:tui-write!
+   #:tui-canvas-string #:tui-canvas-diff #:tui-canvas-copy!
+   #:+tui-default+
+   ;; tui/status — the line across the top
+   #:tui-status #:tui-status-fields #:tui-truncate #:tui-speed-string
+   #:*tui-keys* #:tui-help-lines
+   ;; tui/draw — one world, one canvas
+   #:tui-frame #:tui-draw-world! #:tui-ant-glyph #:tui-ant-colour
+   #:*tui-field-ramp* #:*tui-ant-glyphs-ascii* #:*tui-ant-glyphs-unicode*
+   ;; tui/keys — what a terminal sends when a key goes down
+   #:tui-decode-keys #:+tui-esc+
+   ;; tui/term — the only file that touches the operating system
+   #:tui-terminal-size #:tui-tty-p #:tui-raw-on #:tui-raw-off
+   #:with-terminal #:tui-emit-diff #:tui-read-available #:*tui-resized*
+   ;; tui/live — the loop
+   #:run-tui #:tui-demo #:tui-scenario #:*tui-speed* #:*tui-paused*
+   #:*tui-target-fps*
    ;; app/main — the shipped binary's command line, system antsim/app
    #:main #:parse-command-line #:run-cli #:usage #:usage-error
    #:image-restart-init #:*reopen-libraries*
