@@ -224,6 +224,10 @@ and a result are different things.
 - **[docs/DIARY.md](docs/DIARY.md)** — what a run actually looks like, frame by
   frame, and the eight failures that were caught by watching rather than by
   counting.
+- **[docs/M6-gallery.md](docs/M6-gallery.md)** — half an hour of one colony
+  on a single page, and the same arena run with a different animal in it. What
+  a trail's collapse looks like when nothing decides it, and which number in a
+  two-species comparison is not the one it appears to be.
 - **[docs/WHYLISP.md](docs/WHYLISP.md)** — why Common Lisp and SBCL are the
   right tools for this, argued against the code rather than in the abstract.
 - **[docs/config.md](docs/config.md)** — every switch, its default, and where to
