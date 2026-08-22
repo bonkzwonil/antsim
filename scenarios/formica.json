@@ -1,0 +1,35 @@
+{
+  "name": "formica",
+
+  "_comment": "The other animal, on the same arena. Every number below the",
+  "_comment2": "species key is copied verbatim from foraging.json — same",
+  "_comment3": "world, same obstacle, same nest, same source, same seed —",
+  "_comment4": "so that the only difference between the two runs is the one",
+  "_comment5": "the species key makes. Watch them side by side: Lasius lays",
+  "_comment6": "a road and commits to it, Formica keeps a scatter of private",
+  "_comment7": "routes and never quite agrees with itself.",
+
+  "species": "formica",
+
+  "world": { "width": 0.60, "height": 0.60, "capacity": 8000 },
+
+  "obstacles": [
+    { "rect": { "x0": 0.12, "y0": 0.20, "x1": 0.30, "y1": 0.235 } }
+  ],
+
+  "colonies": [
+    { "id": "home",
+      "nest": { "x": 0.30, "y": 0.08, "r": 0.02 },
+      "capacity": 3000,
+      "start": 150,
+      "stock": 500.0 }
+  ],
+
+  "food": [
+    { "x": 0.34, "y": 0.43, "amount": 2500.0, "quality": 1.0,
+      "density": 884000.0 }
+  ],
+
+  "seed": 2166136261,
+  "duration_s": 3600
+}

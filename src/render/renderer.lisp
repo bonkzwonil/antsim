@@ -440,7 +440,12 @@ framebuffer.  Layers back to front, per §5.1."
                    (world-width w) (world-height w))
       (gl:uniformf (gl:get-uniform-location p "u_k") *choice-k*)
       (gl:uniformf (gl:get-uniform-location p "u_cap") *trail-cap*)
-      (gl:uniformi (gl:get-uniform-location p "u_blocked_shade") 1)
+      ;; The viewport, so the ground grid fades at the rate the *actual*
+      ;; window is drawn at.  Both this and the disc program used to hold
+      ;; a literal 960; nothing has been 960 wide since the window began
+      ;; opening at 1100.
+      (gl:uniformf (gl:get-uniform-location p "u_vw")
+                   (float (view-vw v) 1.0f0))
       (gl:bind-vertex-array (renderer-empty-vao r))
       (gl:draw-arrays :triangles 0 3))
 
@@ -516,6 +521,15 @@ framebuffer.  Layers back to front, per §5.1."
       (when (plusp count)
         (gl:use-program p)
         (gl:uniformf (gl:get-uniform-location p "u_bounds") x0 y0 x1 y1)
+        ;; Same fix as the field pass, and it matters more here: this is
+        ;; the "never smaller than a pixel and a half" floor, so at a
+        ;; window wider than 960 every zoomed-out body was drawn *larger*
+        ;; than that floor intends and at a narrower one it vanished
+        ;; early.  PX-PER-M above already reads the real viewport, so the
+        ;; LOD switch and the disc size had been disagreeing about the
+        ;; same number.
+        (gl:uniformf (gl:get-uniform-location p "u_vw")
+                     (float (view-vw v) 1.0f0))
         (%gl:bind-buffer-base :shader-storage-buffer 0 (renderer-body-ssbo r))
         (gl:bind-vertex-array (renderer-empty-vao r))
         (%gl:draw-arrays-instanced :triangle-strip 0 4 count))

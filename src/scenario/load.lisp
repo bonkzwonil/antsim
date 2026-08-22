@@ -82,7 +82,6 @@
 
 (defparameter *deferred-keys*
   '(("clock" . "the multi-rate clocks are fixed at M1's rates (§4.3)")
-    ("species" . "only the Lasius niger set exists (§3.1)")
     ("bodies" . "ant radius and relaxation are global parameters for now")
     ("brood_per_stock" . "colony growth constants are global, not per colony")
     ("max_age_s" . "colony growth constants are global, not per colony"))
@@ -130,6 +129,13 @@ for it is that a silently-defaulted typo costs an afternoon."
   (foods '() :type list)
   (seed +default-seed+ :type (unsigned-byte 32))
   (duration 0.0f0 :type f32)            ; seconds; 0 means "unbounded"
+  ;; The species named by the file, or NIL for "did not say".  Carried
+  ;; separately from PARAMS even though it contributes to them, because
+  ;; the two answer different questions: PARAMS is what to bind, and this
+  ;; is what to *tell the person watching*.  Naming `lasius-niger'
+  ;; contributes nothing to PARAMS by construction, and a scenario that
+  ;; named it would otherwise be indistinguishable from one that did not.
+  (species nil :type (or null string))
   ;; Parameter overrides, as (symbol . value).  Kept rather than applied,
   ;; because they have to be in force for the *run* and not only for the
   ;; construction — a scenario that sets tau and then runs under the
@@ -224,9 +230,29 @@ to mean one thing in a scenario file and another in an acceptance run."
 ;;; --------------------------------------------------------------------
 
 (defun collect-param-overrides (root)
-  "Parameter overrides, as (symbol . value), from `choice` and
-`pheromones.trail`."
-  (let ((out '()))
+  "Parameter overrides, as (symbol . value), from `species` and the four
+blocks that may then override it.
+
+The precedence §6 promises — species set beneath, explicit keys on top —
+is resolved *here*, when the list is built, and not by PROGV: a symbol
+that appears twice in a PROGV has an implementation-dependent value, so
+a duplicate would not be a subtle bug, it would be a silent one that
+changed between Lisps.  The list this returns has no duplicates at all."
+  (let ((out '())
+        (species '())
+        (species-name nil))
+    ;; Read first so an unknown name fails before anything else in the
+    ;; file is judged: a scenario that names a species this build does
+    ;; not have is not a scenario with a bad `choice` block, and saying
+    ;; so in that order is what makes the message useful.
+    (let ((sp (jget root "species" "")))
+      (unless (eq sp :missing)
+        (let ((name (jstring sp "species")))
+          (multiple-value-bind (set ok) (species-params name)
+            (unless ok
+              (serr "species" "unknown species ~s; expected one of ~{~a~^, ~}"
+                    name (species-names)))
+            (setf species set species-name name)))))
     (let ((choice (jget root "choice" "")))
       (unless (eq choice :missing)
         (let ((c (jobject choice "choice")))
@@ -336,7 +362,12 @@ to mean one thing in a scenario file and another in an acceptance run."
             (put-int "max_age_ticks" '*max-age-ticks*)
             (put "forager_expendability" '*forager-expendability*)
             (put-bool "resting_ants_block" '*resting-ants-block*)))))
-    (nreverse out)))
+    ;; Explicit keys win, and they win by *removing* the species entry
+    ;; rather than by shadowing it — see the docstring.
+    (let ((explicit (nreverse out)))
+      (values (append (remove-if (lambda (e) (assoc (car e) explicit)) species)
+                      explicit)
+              species-name))))
 
 (defun parse-scenario (root &key source seed)
   "Build a SCENARIO from a parsed JSON object.
@@ -349,15 +380,19 @@ and the starting population is placed with it."
                      (when (and source (null (scenario-error-source c)))
                        (setf (slot-value c 'source) source)))))
     (let ((r (jobject root "")))
-      (check-keys r '("name" "world" "seed" "duration_s" "choice" "pheromones"
-                      "colonies" "food" "obstacles" "colony_rules" "ant")
+      (check-keys r '("name" "world" "seed" "duration_s" "species" "choice"
+                      "pheromones" "colonies" "food" "obstacles"
+                      "colony_rules" "ant")
                   "")
       (let* ((name (jopt r "name" "" #'jstring "scenario"))
              (seed (or seed (jopt r "seed" "" #'jinteger +default-seed+)))
              (duration (jopt r "duration_s" "" #'jnumber 0.0f0))
              (wp "world")
              (wobj (jobject (jreq r "world" "" (lambda (v p) v)) wp))
-             (overrides (collect-param-overrides r)))
+             (species nil)
+             (overrides (multiple-value-bind (o n) (collect-param-overrides r)
+                          (setf species n)
+                          o)))
         (check-keys wobj '("width" "height" "capacity") wp)
         (let ((width (jreq wobj "width" wp #'jnumber))
               (height (jreq wobj "height" wp #'jnumber))
@@ -392,6 +427,7 @@ and the starting population is placed with it."
                               :colonies (nreverse colonies)
                               :foods (nreverse foods)
                               :seed seed :duration duration
+                              :species species
                               :params overrides))))))))
 
 (defun load-colony (w spec path)

@@ -279,3 +279,66 @@ shader reads a clock, and nothing may start to."
         (let ((a (ant:read-offscreen o)))
           (ant:draw-smoke-frame o)
           (is (equalp a (ant:read-offscreen o))))))))
+
+;;; --------------------------------------------------------------------
+;;; Colour and scale (§5.1, §5.3, M6)
+;;; --------------------------------------------------------------------
+
+(test no-shader-guesses-the-viewport-width
+  "Two shaders used to divide by the literal 960.0 where they meant the
+viewport width — the field pass for the rate its ground grid fades, and
+the disc pass for the 'never smaller than a pixel and a half' floor.
+
+Nothing has been 960 wide since the window started opening at 1100, so
+both were wrong at every size but one, and wrong in a way that could not
+be seen: the grid simply faded at the wrong zoom, and a zoomed-out ant
+was drawn a little too large.  The renderer even had the right number to
+hand — PX-PER-M in DRAW-WORLD reads VIEW-VW — so the LOD switch and the
+disc size were computed from two different widths for the same frame.
+
+Guarded as a string search because that is the shape of the bug: it does
+not fail, it does not warn, and it comes back the moment anybody needs a
+pixel size in a shader and has no uniform for one."
+  (dolist (entry (list (cons "field" ant:*field-fragment-glsl*)
+                       (cons "body"  ant:*body-vertex-glsl*)))
+    (let ((name (car entry)) (src (cdr entry)))
+      (is (search "u_vw" src)
+          "the ~a program does not take a viewport width" name)
+      (is (not (search "960" src))
+          "the ~a program still has a hardcoded viewport width" name))))
+
+(test the-viewport-reaches-the-shaders-that-need-it
+  "And that the uniform is actually *set*, which the string search above
+cannot tell — a shader may declare a uniform nobody writes, and GL will
+hand it a zero rather than complain.
+
+That is not hypothetical here.  The field program declared
+`u_blocked_shade` and never read it, so GL stripped the uniform,
+GL:GET-UNIFORM-LOCATION returned -1, and the GL:UNIFORMI that set it had
+been a silent no-op for as long as it had existed.  It was removed with
+this fix; this row is what would have caught it.
+
+Rendered at two widths rather than one, because a viewport width read
+correctly and a viewport width that happens to equal the literal it
+replaced are the same picture at exactly one size."
+  (with-gl-or-skip
+    (let ((w (ant:make-world :width 0.2f0 :height 0.2f0 :capacity 64)))
+      (ant:add-colony w :name "home" :nest-x 0.1f0 :nest-y 0.1f0
+                        :nest-r 0.02f0 :capacity 64 :stock 10.0f0)
+      (dolist (vw '(320 960))
+        (ant:with-headless-gl (c :width vw :height 240)
+          (let* ((f (ant:colony-field (first (ant:world-colonies w))))
+                 (r (ant:make-renderer :field-width (ant:field-w f)
+                                       :field-height (ant:field-h f)
+                                       :body-capacity 64)))
+            (unwind-protect
+                 (progn
+                   (is (/= -1 (gl:get-uniform-location
+                               (ant::renderer-field-program r) "u_vw"))
+                       "the field program's u_vw was optimised away at ~d px"
+                       vw)
+                   (is (/= -1 (gl:get-uniform-location
+                               (ant::renderer-body-program r) "u_vw"))
+                       "the disc program's u_vw was optimised away at ~d px"
+                       vw))
+              (ant:destroy-renderer r))))))))

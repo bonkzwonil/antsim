@@ -179,10 +179,15 @@ delivers it.  WRITE-PNG's :flip turns that the right way up."
     ;; every row to a multiple of four bytes, which is invisible at
     ;; typical widths and corrupts the image at, say, 7 px wide.
     (gl:pixel-store :pack-alignment 1)
-    (cffi:with-foreign-object (buf :unsigned-char n)
+    ;; Straight into the Lisp vector, pinned for the call, rather than
+    ;; into a foreign buffer and then out of it a byte at a time.  The
+    ;; byte-at-a-time version was fine for a gallery of seventeen stills
+    ;; and is not fine for a time-lapse: at 640x448 it is 860 160 CFFI
+    ;; calls per *frame*, and a half-hour run at one frame per ten
+    ;; simulated seconds is 181 of them.
+    (cffi:with-pointer-to-vector-data (buf out)
       (%gl:read-pixels 0 0 w h (ecase channels (3 :rgb) (4 :rgba))
-                       :unsigned-byte buf)
-      (dotimes (i n) (setf (aref out i) (cffi:mem-aref buf :unsigned-char i))))
+                       :unsigned-byte buf))
     out))
 
 (defun capture-offscreen (o path &key (channels 3))

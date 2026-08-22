@@ -13,6 +13,7 @@ There are three ways to change one:
 |---|---|---|
 | `src/params.lisp` | everything | it *is* the default |
 | scenario JSON | the subset marked ⬥ below | the run |
+| a species set | the values where that animal differs (§3.1) | the run |
 | the live window | two keys | until you press them again |
 
 **Anything not marked ⬥ can only be changed in source or by rebinding it in
@@ -25,6 +26,122 @@ Arena size is the thing a scene can change that the ant's own calibration
 cannot absorb — a forager's tank was sized against a 1 m arena — so a
 scenario measured in metres has to be able to restate its range or its
 colony starves in sight of the food. See the `ant` block below.
+
+## Species (§3.1)
+
+`src/params.lisp` is not a neutral list of knobs — it is one animal.
+Every default in it was chosen for **Lasius niger**, and the file says so
+on its first line. A second species is therefore expressed as the list of
+values where that animal *differs*, never as a second copy of the file:
+two full sets side by side would bury the dozen lines that matter in a
+hundred identical ones, and would drift apart the first time anybody
+recalibrated a default.
+
+Which makes the default species set **empty**:
+
+```lisp
+(species-names)                 ; => ("lasius-niger" "formica")
+(species-params "lasius-niger") ; => NIL, T
+```
+
+That is load-bearing rather than cute. Every scenario written before M6
+names no species and every measurement in [experiments.md](experiments.md)
+was taken that way, so if naming the default could change anything, all of
+it would silently be about a different model. Naming `lasius-niger` is a
+*documenting* act and provably not a behaviour change.
+
+**In a scenario** ⬥, and in Lisp:
+
+```json
+{ "species": "formica" }
+```
+
+```lisp
+(with-species ("formica")
+  (world-run! w 12000))
+```
+
+An unrecognised name is an error that quotes it and lists the
+alternatives, in both doors. Falling back to the default would run the
+wrong animal and report the numbers as if they were the right one.
+
+### What Formica changes
+
+*Formica polyctena*, the red wood ant: bigger, faster, a poor trail
+follower and a good route follower. Lasius is the mass recruiter this
+model was built for — a colony converts a small difference between two
+routes into a committed trail, collectively, with no individual knowing
+anything. Formica is the same problem solved the other way: the trail is
+weak, and what carries a forager to a source is its own remembered route.
+
+| parameter | Lasius | Formica | why |
+|---|---|---|---|
+| `*ant-radius*` | 0.0025 | 0.0040 | a polyctena worker is 6-9 mm against 3-5 |
+| `*sensor-offset*` | 0.012 | 0.019 | scales with the body; the three antennal samples must still land in three different cells, which scaling *up* can only help |
+| `*antennal-range*` | 0.010 | 0.016 | scales with the body |
+| `*undertaker-range*` | 0.010 | 0.016 | scales with the body |
+| `*gait-stride*` | 0.003 | 0.005 | display; the drawn gait is a ratio to the radius |
+| `*walk-speed*` | 0.02 | 0.04 | wood ants are conspicuously faster |
+| `*walk-speed-laden*` | 0.015 | 0.03 | the laden *ratio* is carried over, not re-guessed |
+| `*trail-deposit*` | 1.0 | 0.35 | the trail, weakened — deposition |
+| `*choice-k*` | 20.0 | 7.0 | **not free**: k is in units of `*trail-deposit*`, so it must move with it |
+| `*choice-n*` | 2.0 | 1.5 | the trail, weakened — less nonlinear commitment |
+| `*trail-turn-gain*` | 14.0 | 6.0 | the trail, weakened — following fidelity |
+| `*trail-noise-suppression*` | 0.85 | 0.5 | the trail, weakened — follows less tightly |
+| `*trail-tau*` | 1800 | 600 | the trail, weakened — a shorter-lived mark |
+| `*route-waypoints*` | 12 | 24 | the route, turned up |
+| `*route-spacing*` | 0.020 | 0.030 | 24 × 3 cm is 72 cm of remembered walk against 24 cm |
+| `*pi-noise*` | 0.02 | 0.01 | the route, turned up |
+| `*nest-exit-scatter*` | 0.5 | 0.25 | individual route fidelity: leaves closer to its remembered bearing |
+| `*stranger-avoidance*` | 2.0 | 1.0 | off. A polyctena supercolony spans many nests without treating their occupants as strangers |
+
+**`*choice-k*` is the one to be careful with.** It is in units of
+`*trail-deposit*`, so a species that lowers deposition and leaves `k`
+alone puts the detection threshold where no trail can ever reach it, and
+its colony stops following anything at all. That looks like a modelling
+result and is an arithmetic error. 0.35 × 20 = 7.
+
+Provenance, honestly: the sizes and the speed are `[lit]`, the ratios
+derived from them are `[scale]`, and **every one of the trail and route
+numbers is `[cal]`** — chosen to express a documented qualitative
+contrast, not read off a paper. The published claim is the *direction*.
+
+### Precedence
+
+Species underneath, explicit scenario keys on top:
+
+```json
+{ "species": "formica",
+  "choice": { "k": 12.0 } }
+```
+
+runs Formica with `k` at 12. The merge happens when the override list is
+built and not by binding one over the other — a symbol bound twice in one
+`progv` has an implementation-dependent value, so the loser is *removed*
+rather than shadowed. A duplicate would give the right answer on SBCL and
+possibly a different one elsewhere, which is the worst available failure
+for a file format whose whole point is reproducibility.
+
+### Scenarios
+
+`scenarios/formica.json` is `scenarios/foraging.json` with the species key
+added and nothing else — same arena, same obstacle, same nest, same
+source, same seed. A test asserts that, because a comparison between two
+animals is worth nothing if the two runs also differ in arena, colony size
+or food, and the failure mode (somebody tunes the Formica arena to make it
+look better) is both easy and invisible.
+
+Run them side by side:
+
+```sh
+make live SCENARIO=scenarios/foraging.json
+make live SCENARIO=scenarios/formica.json
+```
+
+The HUD names the species when a scenario states one, between the colony
+name and the counters — a parameter set is otherwise invisible, and two
+runs of the same arena that behave nothing alike look, to a watcher, like
+a bug in one of them.
 
 ## Why so many are off
 
@@ -146,9 +263,11 @@ tests, acceptance, gallery — are unaffected and stay deterministic.
 
 ## Scenario JSON
 
-The ⬥ parameters are settable per run, in three blocks:
+The ⬥ parameters are settable per run: one key, and four blocks that
+override it.
 
 ```json
+"species":    "formica",
 "choice":     { "n": 2.0, "k": 20.0 },
 "pheromones": { "trail": { "decay_scale": 20.0, "max": 600.0 } },
 "ant": {
@@ -166,6 +285,11 @@ The ⬥ parameters are settable per run, in three blocks:
   "resting_ants_block": false
 }
 ```
+
+`species` comes first because it is *underneath* the rest: it seeds the
+override list and any block above may then overwrite an entry of it. See
+[Species](#species-31) for the set itself and for why a duplicate is
+removed from the list rather than shadowed in it.
 
 The `ant` block is there for one reason: **arena size is the thing a scene
 can change that the ant's own calibration cannot absorb.** A forager

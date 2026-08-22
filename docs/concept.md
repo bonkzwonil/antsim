@@ -106,6 +106,16 @@ So: *Lasius niger* first, `+species-formica+` as a later parameter set that
 turns down trail fidelity and turns up route memory. That contrast is
 scientifically interesting in its own right and is a good later scenario.
 
+**Built at M6, and the shape of it is worth stating here rather than only
+in §7.** `+species-formica+` is a list of the values where the animal
+differs from `params.lisp`, and `+species-lasius-niger+` is therefore
+**empty** — this file is the Lasius set, so naming it in a scenario says
+which animal the file is about and provably changes nothing. Formica
+turns the trail down three ways (deposition, following fidelity, and
+tau), turns the route up, and is bigger and faster; `scenarios/formica.json`
+is `foraging.json` with that one key added, so the two are comparable by
+construction.
+
 This sets the spatial scale:
 
 | quantity | value | note |
@@ -462,8 +472,17 @@ navigation systems in parallel and weights them by confidence:
      The ant chooses a direction from where it stands with no memory of
      where it has been, so a concavity that needs a long detour is still a
      trap: it walks out, the bearing comes clear, it turns back into the
-     pocket. That case needs the route memory below, and the honest
-     statement is that the model does not have it yet.
+     pocket. That case needs the route memory below, which **M4 built** —
+     and this paragraph said "the model does not have it yet" for two
+     milestones after it arrived.
+
+     It is still a trap, though, and for a reason the route was not
+     designed to cover. The route is read only while the bearing home is
+     blocked, tested as a single sample 12 mm ahead; an ant standing at
+     the mouth of a pocket has a clear probe, so it is back on the vector
+     and back inside. What M4 measured is that harvest rises and corpses
+     fall by 15%, not that the trap is gone. **M7 is that trap**, and §7
+     lists the ranked candidates.
 2. **Trail following.** §3.3. Used when trail concentration exceeds the
    detection threshold.
 3. **Landmark / route memory.** A learned association between a remembered
@@ -546,16 +565,31 @@ Weighting these is where personality comes from. An ant with a strong home
 vector and a weak trail ignores the trail. This is observed and it is what
 prevents a colony from being trivially hijacked by a single strong trail.
 
-**Shading ants by age — wanted, not built.** The body instance packs one
-float as `kind + state`, so that channel is entirely spent on behaviour and
-age has nowhere to go. Doing it properly means a second attribute in the
-instance buffer, with hue carrying state and lightness carrying age, so
-both read at once; the alternative — a toggle that swaps the whole
-colouring over to age — is cheaper but shows one or the other. Worth
-doing once the population actually *has* an age structure to look at,
-which is new as of the brood rules in §3.10. The callow tint is the
-special case of it that pays for itself immediately: a nest that is mostly
-pink has just bred hard and cannot forage on it yet.
+**Shading ants by age — built, and not the way this paragraph used to
+plan it.** The body instance packs one float as `kind + state`, and the
+plan was a second attribute in the instance buffer carrying age, with hue
+on state and lightness on age so both read at once.
+
+What shipped instead is age *inside* the state channel: the four
+behavioural states occupy the bottom of the range and everything above it
+is a ramp from the callow pink to the adult grey, so an ant that has
+nothing more urgent to report reports its age. The callow tint is the
+part that pays immediately — a nest that is mostly pink has just bred
+hard and cannot forage on it yet — and it is a special case of the ramp
+rather than a flag.
+
+Two corrections to the original plan, both worth keeping visible. The
+premise was wrong: there is no instance vertex buffer and no attribute
+divisor in this renderer at all, because instancing is `gl_InstanceID`
+into an SSBO, so a second quantity per ant is a second `vec4` in a struct
+and involves no VAO work. And the constraint is elsewhere. Hue is spent
+on **tribe** as of M4 — the head and mesosoma carry it — so "hue on
+state" is no longer available across half the animal, and lightness is
+already carrying the age ramp *and* the Lambert term *and* the per-part
+multipliers. The single float is a real limit, though: with five tribes
+packed at `100 × tribe`, a float32 leaves about 2.4e-5 of quantisation on
+the recovered age, which is fine for a five-band decode and is the actual
+argument for a second `vec4` if anyone ever wants a third quantity.
 
 ### 3.5 Internal state and the foraging cycle
 
@@ -1289,7 +1323,9 @@ src/render/smoke.lisp   the M0 acceptance frame — deleted at M2
 src/render/shaders.lisp GLSL: field, geometry, instanced ants
 src/render/antmesh.lisp the 2D ant vector model + gait rig
 src/render/view.lisp    ortho camera, layers, the frame
-src/render/capture.lisp headless frame → PNG, contact sheets
+src/render/png.lisp     PNG writer, no dependency (stored deflate)
+src/render/gallery.lisp the documentation stills, from a fixed seed
+src/render/timelapse.lisp a run as a frame sequence and as a contact sheet
 tests/                  FiveAM suites, incl. the §3.8 acceptance tests
 scenarios/*.json        the scenes, including the bridge experiments
 ```
@@ -1551,7 +1587,24 @@ against both. The waldameisen lesson applies: a *diverging* map keyed on a
 meaningful midpoint reads without a legend, whereas a sequential ramp needs
 one. Here the meaningful midpoint is the trail-following detection
 threshold `k` — below it the ants ignore the pheromone, above it they
-commit — so that is where the colour map should turn.
+commit — so that is where the colour map turns, and it does: the shader
+divides the concentration by `u_k` and switches ramps at 1.0. Below the
+turn the colour runs from the ground to a dim slate, above it from that
+slate to a bright cyan, the upper half spanning `k` to the field ceiling.
+
+So the picture answers the only question anyone asks of a pheromone
+layer — *is that enough to commit to* — without a legend and without a
+number. It also means the map moves when the model does: a scenario or a
+species that changes `k` changes where the colour turns, because both
+read the same parameter rather than a constant chosen to look right
+against it.
+
+The palette is complementary by decision. The trail is blue and the ants
+are pale, amber and pink, so the brightest thing on screen and the thing
+that has to be seen against it never compete for the same hue. Tribe (M4)
+takes hue on the head and mesosoma and rebrightens it to the base's
+luminance, which keeps *value* free for state and age everywhere on the
+animal — see §3.4.
 
 ### 5.4 Headless, and the libGL trap
 
@@ -1599,8 +1652,12 @@ world has to be decided in advance to see it.
 | right-drag | pan |
 | `space` / `+` / `-` | pause, and time compression up/down |
 | left-click an ant | inspect: state, energy, crop, age, home vector, and whether it has the reserve to set out — the ant is marked on the map by a pulsing pink reticle |
-| `o` | drop a 2 cm block of terrain at the cursor; **hold it and move to draw a wall** |
+| `a` | drop a small food source at the cursor — 200 units rather than a scenario's 2500, so a colony can be watched *finding* it and stripping it inside a minute or two |
+| `o` | drop a 2 cm block of terrain at the cursor; **hold it and move to draw a wall**. It refuses to cover a nest entrance, which is a deliberate asymmetry with food: walling off a *source* is half the point, a sealed nest is not an experiment |
 | `p` | poke the nest under the cursor, and watch the alarm field propagate (§3.3) |
+| `t` | step to the next colony — whose trail field is drawn, and whose counters the HUD shows. The ants are always all drawn, in their own tribe's colours: who is on screen is not the question, whose *chemistry* is |
+| `n` | resting ants collide with each other, or pass through |
+| `c` | ant-ant contact on or off. Terrain, food and corpses still block, so this isolates the crowd from the navigation — a diagnostic, and not a species variant |
 | `home` | frame the whole world |
 | `h` / `?` | hide or show the key legend |
 | `q` / `escape` | quit |
@@ -1692,7 +1749,17 @@ Everything a scenario does not specify falls back to the species parameter
 set, and everything the species set does not specify falls back to a
 documented default. Validation is strict and errors name the offending
 path — a silently-defaulted typo in a scenario is a bug that costs an
-afternoon.
+afternoon, and an unrecognised *species* is refused outright rather than
+defaulted, because falling back would run the wrong animal and report the
+numbers as if they were the right one.
+
+That precedence is resolved when the override list is built and not by
+binding the species and then the scenario over the top of it: a symbol
+bound twice in one `progv` has an implementation-dependent value, so the
+loser is removed from the list rather than shadowed in it. A duplicate
+would give the right answer on one Lisp and a different one elsewhere,
+which is the worst available failure for a file format whose whole
+purpose is that two people running it get the same result.
 
 The bridge experiments ship as scenarios, which means the acceptance tests
 of §3.8 are *literally the published experiments run as data files*.
@@ -1742,9 +1809,10 @@ is a mistake in the file, and a deferred key is a mistake in the author's
 expectations of the program. Telling them apart is most of what makes an
 error message worth reading.
 
-Deferred so far: `clock`, `species`, `bodies`, and the per-colony
+Deferred so far: `clock`, `bodies`, and the per-colony
 `brood_per_stock` / `max_age_s`, all of which are global parameters at
-M1's cut.
+M1's cut. `species` was on this list until M6 and is now implemented
+(§3.1, §7).
 
 ### 6.3 The `ant` block, and why arena size needs one
 
@@ -2237,20 +2305,196 @@ acceptance suite at 1200 ants, where it fails without the refractory
 period, and the fast row was rewritten to say only what it can see. The
 numbers are in [docs/experiments.md](experiments.md).
 
-*Still to do.* The rich inspector §5.5 describes, and the nest-marking
-field is explicitly **not** part of this milestone.
+*Delivered, and the entry above was wrong about it for a while.* **The
+rich inspector.** §5.5 asks for state, energy, crop, age, the home vector
+and whether the ant has the reserve to set out; the panel carries all six
+and rather more — the three moving lines energy is judged against, what
+nestmates have told it lately, its lifelong pace and handedness, its last
+meal and who it was with, and a READY/SPENT verdict stating the number it
+was reached against. That last one is not decoration: reading the energy
+bar without knowing where the departure line sits is exactly what made a
+nest full of exhausted ants look like a nest full of ants refusing to
+leave (§3.5). This entry read *"still to do"* through the whole of M5
+after the work had landed, which is a small instance of the failure §7 is
+supposed to prevent, and it is left visible here rather than quietly
+corrected.
 
-**M6 — polish.** Colour, time-lapse capture, the *Formica* parameter set as
-a contrasting species, a gallery document like `docs/M2-renderer.md`.
+*Not in this milestone, deliberately.* The nest-marking field.
 
-**Beyond M6 — the contact layer.** Ant-to-ant touch as a communication
+**M6 — polish. In progress.**
+
+*Already there when the milestone opened.* **Colour.** Both halves of
+§5.3 and of §3.4's "shading ants by age" turned out to be built, and the
+prose describing them as wanted was two milestones stale. The trail map
+is diverging about the detection threshold `k` — the shader divides the
+concentration by `u_k` and turns the ramp at 1.0, so the colour says
+*this is or is not enough pheromone to commit to* without a legend, which
+is the whole argument of §5.3. Ants carry age as lightness with a pink
+callow tint, so a nest that has just bred hard reads as pink and visibly
+cannot forage on it yet.
+
+What was *not* built was the claim that the second attribute needed for
+it had nowhere to go. There is no instance vertex buffer and no attribute
+divisor anywhere in this renderer — instancing is `gl_InstanceID` into an
+SSBO — so a second quantity per ant is a second `vec4` in a struct, not a
+VAO change. The real constraint is different and worth recording: hue is
+spent on tribe across the head and mesosoma (M4), and lightness is
+already carrying age *and* the Lambert term *and* the per-part
+multipliers, which is why age is packed into the state channel rather
+than given a channel of its own.
+
+*Delivered.* **The species key**, which §6 has documented and the loader
+has refused since M1. A species set is the list of values where an animal
+differs from `params.lisp`, never a second copy of it — and therefore
+`lasius-niger` is the **empty** set. That is the load-bearing property
+rather than a curiosity: every scenario written before M6 names no
+species and every measurement in `experiments.md` was taken that way, so
+if naming the default could change anything then all of it would silently
+be about a different model. There is a test whose entire assertion is
+that a list has length zero.
+
+*Formica polyctena* is the contrast the milestone asked for: bigger,
+faster, a poor trail follower and a good route follower. The trail is
+weakened three ways at once and the route memory turned up, because that
+is the same foraging problem solved the other way round.
+
+*And the milestone's own reasoning about it was wrong, which is the more
+useful half of the record.* Running the two animals over one arena was
+offered — here, in `params.lisp`, and in the README — as the cheapest
+available test of whether §3.3's nonlinearity does the work it is
+credited with. It is not that test. Formica *does* fail to break
+symmetry on the binary bridge (commitment 0.52 against Lasius's 0.92,
+0 of 9 replicates committed against 9 of 9), and the reading that
+invites is that the trail knobs cost it. They do not: apply all three on
+their own and the colony still commits at 0.85, 9 of 9. **What breaks it
+is the body.** Formica is a 4 mm ant walking at 4 cm/s on a bridge whose
+branch width was set for a 2 mm ant at 2, and size and pace alone —
+trail untouched — reproduce the failure exactly (0.51, 0 of 9). Thin the
+Formica colony until traffic matches and commitment comes back to 0.78:
+still below Lasius, so there *is* a trail effect, and it is worth about
+0.15 of the 0.41 the naive comparison appears to show.
+
+That is the general hazard in a species set stated concretely. Two
+animals differing in eighteen parameters cannot isolate any one of them,
+and a comparison that changes the *animal* also changes the *experiment*
+— the bridge has a density window, and the second animal walked outside
+it. The isolation is in
+[docs/experiments.md](experiments.md#two-animals-on-one-arena-31-m6), and
+§10's question, which this set was meant to answer, turned out to be two
+questions with different answers.
+
+One number in it is not free. `k` is in units of `*trail-deposit*`, so a
+species that lowers deposition without lowering `k` puts the detection
+threshold where no trail can reach it, and its colony stops following
+anything at all — which would look like a modelling result and would be
+an arithmetic error.
+
+*Delivered.* **Time-lapse capture**, as a contact sheet rather than as a
+sequence. The frames are sampled in *simulated* seconds and the camera is
+fitted once before the first tick: a headless run has no wall clock worth
+sampling, and a camera refitted per frame shows itself moving rather than
+the ants. The committed artefact is one image because `png.lisp`
+compresses nothing by design (§4.1 — the one place a dependency would be
+hardest to justify), so a sequence is some 300 MB of intermediate for one
+picture. Each tile carries its simulated time, sized after the downscale
+rather than before it. §4.1's file map has been promising contact sheets
+since M1.
+
+*Found while doing the colour work.* **Two shaders were dividing by the
+literal 960 where they meant the viewport width** — the ground grid's
+fade rate, and the floor that stops a zoomed-out body from vanishing.
+Nothing has been 960 wide since the window began opening at 1100, so both
+were wrong at every size but one, invisibly: no error, no warning, just a
+picture that is not the specified picture. `DRAW-WORLD` had the right
+number three lines above and was already using it to pick the ant LOD, so
+the LOD switch and the disc size were being decided from two different
+widths for the same frame. A dead `u_blocked_shade` uniform went with it:
+declared, never read, therefore stripped, therefore its `gl:uniform` call
+had been a silent no-op for its whole life.
+
+*Still to do.* A gallery document, and the published page catching up.
+
+**M7 — movement. Specified, not started.** The one milestone in this list
+that exists because of something *observed* rather than something
+planned: ants get caught in pockets and die there, and they still do
+after M4.
+
+The claim that needs withdrawing first is this document's own.
+`experiments.md` says of route memory that it *"closes the pockets"*, and
+that is not supported by anything measured. What route memory demonstrably
+bought is harvest, 888 to 1264 on the word scenario, and corpses 140 to
+119 — a 15% reduction, not a closure. The only measurements of ants
+*stuck against terrain* in this repository (197 stuck, 171 of them
+against terrain) were taken two days **before** route memory landed and
+have never been repeated. Harvest can rise while the same ants die, if
+the survivors deliver faster. So the honest position is that the
+mechanism helped and was never shown to have fixed anything.
+
+The milestone is therefore instrumentation first, and the ranked
+candidates second.
+
+*Instrumentation, which must land before any fix.* Nothing in the model
+can currently see that an ant is stuck — there is no time-since-progress,
+no pinned counter, no death cause. `colony-died` is a single integer, so
+"why did four hundred ants die" has no answer available from inside a
+run. The stall sensor this needs was built once, at M3, and parked on
+`navigation-experiments` when the branch was closed; it comes back as a
+sensor with an exact off switch and no behaviour change, and the stuck
+census that both published sweeps used — displacement under 3 cm in 400
+ticks — becomes a function in `trials.lisp` rather than a number nobody
+can reproduce.
+
+*The candidates, ranked, each with a code site.*
+
+1. **A stale route target.** The route is consulted only while the bearing
+   home is blocked, and consumed only while consulted — so a returning ant
+   crossing 30 cm of open ground consumes nothing, and the waypoint it is
+   finally offered at the obstacle is the one nearest the *food*, behind
+   it. It turns back, the probe clears, the home vector takes over, and it
+   drives at the wall again. A limit cycle in front of every obstacle, and
+   a different bug from the one 1.0.1 fixed.
+2. **The give-way turn has no terrain veto, and runs after every veto in
+   the tick.** The comment at the site admits the failure — *"in a pocket
+   every ant has rock on one side and a nestmate on the other, so the
+   whole crowd yields into the rock"* — and points at a single veto in
+   `ANT-MOTION-STEP!` that **does not exist**. The encounter pass writes
+   the heading last.
+3. **An outbound ant has no escape at all.** The route is written while
+   outbound and read only while returning. As its energy falls its homing
+   urge rises, so it starts driving at the bearing while still outbound
+   and without route access; at the give-up threshold it becomes
+   returning, the urge goes to maximum, and it is now pinned to the
+   bearing. Running low on energy converts a wandering ant into a
+   wall-pressing one.
+4. **The relaxation can leave an ant inside terrain** where obstacles are
+   a union of abutting polygons — which is exactly what the word scenario
+   is. An inside point is pushed toward its nearest boundary, and for two
+   abutting rectangles that is the shared edge, i.e. into the neighbour.
+   Inside terrain, all three antennae read blocked, and the fallback is a
+   uniform random direction.
+5. **Three ways the route's walkability invariant is false.** A waypoint
+   is recorded from the position written *before* the collision pass, not
+   after it, though the docstring claims otherwise; decimation leaves
+   consecutive waypoints 8 or 16 cm apart with no guarantee the straight
+   line between them is clear; and nothing is recorded while alarmed.
+
+*What the suite cannot currently catch.* No test puts an ant in a
+concavity — the only obstacle test is a straight bar with an open end. No
+test reaches route memory through the tick at all: the wall test's ant
+never goes outbound, so its route is empty and the test would pass with
+the mechanism switched off. That is the same failure as M4's route memory
+and M5's refractory period, met a third time, and the rule it keeps
+teaching is that a new row has to be shown to **fail** with the mechanism
+off before it is worth anything.
+
+**Beyond M7 — the contact layer.** Ant-to-ant touch as a communication
 channel: trophallaxis between individuals, antennation, tactile
 recruitment, nestmate recognition, contact-borne alarm. The collision pass
 already produces the contact list this needs (§3.11), which is the only
 reason it is worth naming this far out — the groundwork is a decision made
 in M1, the work itself is not scheduled.
 
-**Beyond M6 — the 4.1 backend, and with it macOS.** Not scheduled, and
+**Beyond M7 — the 4.1 backend, and with it macOS.** Not scheduled, and
 named here because the question was asked and the answer deserves to be
 written down once rather than rediscovered.
 
@@ -2329,7 +2573,7 @@ port would otherwise have to establish first.
 | Scope — the science is deep enough to never ship | **high** | The §3.9 cut is the answer: M1 builds a named subset, §3.8's table is the definition of done, and everything else is explicitly scheduled rather than argued about again |
 | Non-overlap relaxation does not converge in a dense crowd | medium | Jacobi with a fixed 2–3 iterations is a *soft* constraint — residual overlap is bounded, not zero. If a queue at a rich source jitters or squeezes, raise iterations before changing the scheme; the acceptance row in §3.8 measures it rather than assuming it |
 | Corpses accumulate until they choke a nest | **closed, M4** | Necrophoresis, §3.9. Worth recording that the control was not "nothing happens": ant traffic bulldozes corpses whether or not anyone carries them, and that alone shifted half of them off the nest, so only a run with the behaviour switched off was an honest baseline |
-| The renderer's GL floor excludes whole platforms | low, accepted | The persistently-mapped SSBO path needs GL 4.4, which puts macOS (capped at 4.1 since 2018, and deprecated) permanently out of reach and rules out older hardware everywhere else. Accepted deliberately: §5.1's design is worth more than the platforms it costs, and the count is reassuring — 15 SSBO sites, 3 buffer-storage sites, and **zero** direct-state-access calls, so the exposure is one mechanism rather than a pervasive assumption. The way out, if it is ever wanted, is a 4.1 backend on texture buffer objects — see *Beyond M6* |
+| The renderer's GL floor excludes whole platforms | low, accepted | The persistently-mapped SSBO path needs GL 4.4, which puts macOS (capped at 4.1 since 2018, and deprecated) permanently out of reach and rules out older hardware everywhere else. Accepted deliberately: §5.1's design is worth more than the platforms it costs, and the count is reassuring — 15 SSBO sites, 3 buffer-storage sites, and **zero** direct-state-access calls, so the exposure is one mechanism rather than a pervasive assumption. The way out, if it is ever wanted, is a 4.1 backend on texture buffer objects — see *Beyond M7* |
 | Failure-recovery mechanisms cannot be evaluated, because the model does not fail that way | medium | Named at M4, when three of them landed inert for three different measured reasons. It is not a defect in any of the three — each is correct and each fires when its precondition is met — but it does mean their value is currently unmeasurable, and that route memory and the parked stall detection are what would make them testable |
 
 ## 9. Open decisions
@@ -2495,9 +2739,25 @@ and one the acceptance suite is now making on every run.
   parameters in the model.
 - Walking speeds, crop capacity, and the sucrose threshold for trail laying
   — all quoted approximately above and all needing a source.
-- Whether *Formica polyctena*'s weak trail-following is best modelled as a
+- ~~Whether *Formica polyctena*'s weak trail-following is best modelled as a
   low deposition rate, a low following fidelity, or a shorter τ. Probably
-  all three, but that is a claim, not a citation.
+  all three, but that is a claim, not a citation.~~ **Measured at M6, and
+  it is two questions, not one.** For the *mass* of pheromone on the
+  ground the three act independently and very nearly multiplicatively, and
+  the answer is genuinely all three, and near-perfectly multiplicatively:
+  the product of the three separate reductions predicts the combined one
+  to within 9% across a tenfold total. For the *collective choice* the
+  trail is supposed to produce, they are not interchangeable at all.
+  Deposition is **exactly** inert — `k` is denominated in units of
+  `*trail-deposit*`, so halving both moves the threshold with the signal
+  and the choice function cannot tell. τ is worth 0.02 of commitment.
+  Following fidelity is the whole of the effect — and, unexpectedly, not
+  because of the exponent: cutting `*choice-n*` from 2.0 to 1.5 alone
+  still commits 9 of 9 at 0.90, while the *steering* gains alone cost
+  more. §3.3's nonlinearity decides correctly and the body is what fails
+  to act on it. So "which knob" depends on which observable, and the
+  citation is still owed for the animal itself.
+  See [experiments.md](experiments.md#two-animals-on-one-arena-31-m6).
 
 A `docs/calibration.md` should hold these, each with the fit it came from
 and the date, in the waldameisen style.

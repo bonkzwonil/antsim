@@ -44,7 +44,8 @@ export CL_SOURCE_REGISTRY := $(CURDIR):
 
 .PHONY: all test acceptance test-app test-app-bare \
         test-render test-render-mesa test-render-ci \
-        test-render-bare smoke smoke-mesa live gallery word-scenario \
+        test-render-bare smoke smoke-mesa live gallery timelapse \
+        word-scenario \
         repl page check-images clean binary binary-bare \
         appimage appimage-bare \
         icon dist-clean
@@ -184,6 +185,27 @@ gallery:
 ##   MAX_IMAGE_BYTES=200000 make check-images
 check-images:
 	$(IM) ./scripts/check-images.sh
+
+## timelapse — half an hour of the gallery's scenario as one contact
+## sheet, sampled every twenty simulated seconds and captioned with the
+## simulated time.  Writes docs/images/16-timelapse.jpg.  The individual
+## frames are *not* written by default: png.lisp compresses nothing by
+## design, so a full sequence is ~300 MB of intermediate for one picture.
+## To get them anyway, for ffmpeg:
+##   sbcl ... --eval '(ant:render-timelapse-demo :frames t)'
+##
+## Converted and the PNG deleted for the same reason `gallery` is, and by
+## the same rule: the sheet is the largest picture in the directory, so it
+## is the one a PNG would cost most on.
+timelapse:
+	$(GPU) $(SBCL) --non-interactive \
+	  --eval '(ql:quickload :antsim/render :silent t)' \
+	  --eval '(ant:render-timelapse-demo)'
+	$(IM) sh -c 'for f in docs/images/*.png; do \
+	  convert "$$f" -quality $(JPEG_QUALITY) -sampling-factor 1x1 -strip \
+	          "$${f%.png}.jpg" || exit 1; done'
+	rm -f docs/images/*.png
+	@ls -la docs/images/
 
 ## smoke-mesa — the same frame in software, for comparing the two stacks.
 smoke-mesa:

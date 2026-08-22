@@ -561,6 +561,9 @@ Edit that file, then `make page`. -->
       <li><a href="https://github.com/bonkzwonil/antsim/blob/main/docs/DIARY.md">
         <b>DIARY.md →</b>
         <span>A run frame by frame, and the bugs only watching caught.</span></a></li>
+      <li><a href="https://github.com/bonkzwonil/antsim/blob/main/docs/M6-gallery.md">
+        <b>M6-gallery.md →</b>
+        <span>Half an hour of one colony on a page, and a second animal beside it.</span></a></li>
       <li><a href="https://github.com/bonkzwonil/antsim/blob/main/docs/config.md">
         <b>config.md →</b>
         <span>Every switch in the model, its default, and where to set it.</span></a></li>
@@ -725,6 +728,17 @@ Edit that file, then `make page`. -->
             fidelity, and their “trunk trails” are largely cleared physical paths
             rather than chemical gradients. Building the pheromone core around
             Formica would mean building it around the species that uses it least.</p>
+          <p><strong>Built at M6.</strong> A species set is the list of values where
+            an animal <em>differs</em> from the parameter file, so
+            <code>lasius-niger</code> is the <em>empty</em> set — this file is the
+            <em>Lasius</em> set, and naming it in a scenario says which animal the
+            file is about and provably changes nothing.
+            <code>+species-formica+</code> turns the trail down three ways
+            (deposition, following fidelity, τ), turns the route up, and is bigger and
+            faster; <code>scenarios/formica.json</code> is <code>foraging.json</code>
+            with that one key added, so the two are comparable by construction. Read
+            §7 before drawing a conclusion from the pair — the first one drawn from it
+            was wrong.</p>
         </div>
 
         <div class="tw">
@@ -1290,7 +1304,7 @@ C ← min(C, C_max)      <span class="c">; saturation — a real trail is not un
           applied to a list the physics is computing anyway.
         </p>
         <p>
-          This is a <strong>long way out — after M6</strong>, and is noted only
+          This is a <strong>long way out — after M7</strong>, and is noted only
           because it argues for keeping the contact list rather than discarding it
           once positions are corrected. Cheap to retain, expensive to reconstruct.
         </p>
@@ -2053,19 +2067,75 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
             falls back to it when the bearing home is blocked — harvest 888 → 1264 on
             the word scenario, whose entire geometry is concavities, and no change at
             all on an arena with one small wall, which is the right shape of result
-            for a fix aimed at concavities. Response thresholds, the no-entry field
+            for a fix aimed at concavities. It does not, however, <em>close</em> the
+            pockets: ants still get caught in concavities and die there, nobody
+            counted them with the mechanism on, and M7 begins by measuring it. Response thresholds, the no-entry field
             and search spirals ship too, and are <em>inert</em> at shipped parameters
             for three different measured reasons: this model's ants do not currently
             fail in the ways they recover from.</div></li>
-          <li><span class="tag">M5</span><div><b>Interaction. <span class="state open">partly built — current</span></b>
+          <li><span class="tag done">M5</span><div><b>Interaction, and an excitable medium that had to be talked down twice. <span class="state">done</span></b>
             Click an ant to inspect it, drop food, place obstacles, poke the nest and
-            watch the alarm field propagate. The window already exists from M2; this is
-            what you can <em>do</em> to a running world.</div></li>
-          <li><span class="tag">M6</span><div><b>Polish. <span class="state later">later</span></b>
-            Colour, time-lapse capture, the <em>Formica</em> parameter set as a
-            contrasting species, a gallery document like
-            <code>docs/M2-renderer.md</code>.</div></li>
-          <li><span class="tag far">→</span><div><b>Beyond M6 — the contact layer.</b>
+            watch the alarm field propagate. The window existed from M2; this is what
+            you can <em>do</em> to a running world, and the interesting half is the
+            alarm field, because it is the one mechanism in the model whose
+            precondition is a <em>person</em> — nothing here attacks a nest, so a
+            colony nobody pokes has no alarm array allocated at all. It took three
+            attempts. The first had no per-ant state, which is a positive feedback
+            with no brake: every ant of 400 alarmed within three minutes, none of them
+            ever calm, and 244 starved because a permanently frantic ant neither
+            forages nor goes home to be fed. The second added a fixed episode and a
+            refractory period, stopped the dying, and still never ended — ~300 of 400
+            alarmed at seven minutes, in a self-sustaining oscillation, with a
+            release-rate cliff that <em>moved with colony size</em>. A parameter
+            balanced on a bifurcation is not calibrated, it is lucky. What was
+            actually wrong is that release was a <em>rate</em>: an ant discharging
+            every tick paints a twenty-second line of alarm across the arena as it
+            flees, so the mechanism was carrying its own source around. One discharge
+            at the moment of alarm, scaled by the dose that caused it, is
+            sub-critical by construction — forty-fold in the parameter, six seconds
+            in the outcome — and is also what a gland does.</div></li>
+          <li><span class="tag done">M6</span><div><b>Polish — and a published claim withdrawn. <span class="state">done</span></b>
+            A scenario can name its animal: <code>"species": "formica"</code> runs
+            <em>Formica polyctena</em> over the same arena as <em>Lasius</em>. A
+            species set is the list of values where an animal <em>differs</em>, never
+            a second copy of the parameter file, so <code>lasius-niger</code> is the
+            <strong>empty</strong> set and naming it provably changes nothing — which
+            matters, because every measurement in <code>experiments.md</code> was
+            taken without naming a species. Time-lapse capture ships as a contact
+            sheet: ninety-one frames of half an hour on one page, each captioned with
+            its own simulated clock. Colour turned out to be <em>built already</em>
+            and documented as unbuilt in two places, two milestones stale. And the
+            renderer turned out to be dividing by a hardcoded <code>960</code> in two
+            shaders where it meant the viewport width.
+            <p style="margin-top:.7em">The species pair was published with a claim
+            attached — that running two animals over one arena is the cheapest
+            available test of whether §3.3's nonlinearity does the work it is
+            credited with. <strong>It is not that test.</strong> The prediction came
+            out right for a different mechanism. <em>Formica</em> does fail to break
+            symmetry on the binary bridge (0.52 against <em>Lasius</em>'s 0.92, 0 of 9
+            replicates against 9 of 9), but apply all three trail knobs to a
+            <em>Lasius</em> colony and it still commits at 0.85, 9 of 9. What breaks
+            it is the <em>body</em>: a 4 mm ant walking at 4 cm/s congests a branch
+            whose width was chosen for a 2 mm ant at 2, and size and pace alone
+            reproduce the collapse with the trail untouched. Thin the colony until
+            the traffic matches and commitment returns to 0.78 — still below
+            <em>Lasius</em>, so there is a real trail effect, worth about a third of
+            what the naive comparison shows. <strong>A species set is not an
+            A/B.</strong> Eighteen parameters move at once, and changing the animal
+            changed the experiment.</p></div></li>
+          <li><span class="tag">M7</span><div><b>Movement. <span class="state later">specified, not started</span></b>
+            Ants get caught in concavities and die there, and they still do after M4's
+            route memory. The first thing this milestone does is withdraw a claim:
+            <em>“route memory closes the pockets”</em> is not supported by anything
+            measured — the only stuck-against-terrain counts in the repository predate
+            the mechanism by two days and were never repeated. What <em>was</em>
+            measured is harvest up 42% and corpses down 15% on the word scenario, and
+            that stands. So the milestone is instrumentation first: nothing in the
+            model can currently see that an ant is stuck, which is why a mechanism
+            aimed at it could ship without a number. Then the candidates, ranked —
+            and a fix is only allowed in if it is shown to fail with the mechanism
+            off, on a scenario whose whole geometry is the failure.</div></li>
+          <li><span class="tag far">→</span><div><b>Beyond M7 — the contact layer.</b>
             Ant-to-ant touch as a communication channel: trophallaxis between
             individuals, antennation, tactile recruitment, nestmate recognition,
             contact-borne alarm. The collision pass already produces the contact list
@@ -2266,7 +2336,7 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
         <h3>Settled</h3>
         <ol class="decisions">
           <li><b>Reference species — <em>Lasius niger</em></b>
-            <div class="alt">Best trail literature, a true mass recruiter. <em>Formica polyctena</em> becomes a contrasting parameter set at M6.</div></li>
+            <div class="alt">Best trail literature, a true mass recruiter. <em>Formica polyctena</em> is a contrasting parameter set, built at M6.</div></li>
           <li><b>Complexity is capped at the §3.9 cut</b>
             <div class="alt">M1 builds that subset and nothing past it. Everything deferred is scheduled, not deleted, and each deferred item is addable without changing the tick's shape.</div></li>
           <li><b>Trails are never authored</b>
@@ -2351,7 +2421,21 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
             M1 (§3.10) rather than a later refinement.</li>
           <li>Whether <em>Formica polyctena</em>'s weak trail-following is best
             modelled as a low deposition rate, a low following fidelity, or a shorter
-            τ. Probably all three — but that is a claim, not a citation.</li>
+            τ. <s>Probably all three — but that is a claim, not a citation.</s>
+            <strong>Measured at M6, and it is two questions with different
+            answers.</strong> For the <em>mass</em> of pheromone on the ground it is
+            genuinely all three, and near-perfectly multiplicatively: the product of
+            the three separate reductions predicts the combined one to within 9%
+            across a tenfold total. For the <em>collective choice</em> the trail is
+            supposed to produce they are not interchangeable at all. Deposition is
+            <em>exactly</em> inert — <code>k</code> is denominated in units of
+            deposition, so halving both moves the detection threshold with the signal
+            and the choice function cannot tell. τ is worth 0.02 of commitment.
+            Following fidelity is the whole effect, and not via the exponent:
+            cutting <code>n</code> from 2.0 to 1.5 alone still commits 9 of 9 at
+            0.90, while the <em>steering</em> gains alone cost more. The nonlinearity
+            decides correctly and the body fails to act on it. The citation is still
+            owed for the animal.</li>
         </ul>
         <p>
           A <code>docs/calibration.md</code> should hold these, each with the fit it
