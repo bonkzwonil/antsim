@@ -53,7 +53,12 @@ a number before the world exists."
   (help nil)
   (fps 0.0f0 :type f32)
   (quit nil)
-  (step-once nil))
+  (step-once nil)
+  ;; A size the caller insisted on, which then survives SIGWINCH: if
+  ;; --cols was given, a terminal that changes shape does not get to
+  ;; overrule it.  NIL means "ask the terminal", which is the normal case.
+  (forced-cols nil)
+  (forced-rows nil))
 
 (defun tui-resize! (s w)
   "Take the terminal's current size and rebuild everything that depended
@@ -67,16 +72,16 @@ the window manager twitched.
 The front canvas is dropped rather than resized, which forces a full
 repaint: after a size change nothing is where it was, so a diff against
 the old screen is not merely useless but wrong."
-  (multiple-value-bind (rows cols) (tui-terminal-size)
-    (let ((rows (max 1 (or rows 24)))
-          (cols (max 1 (or cols 80))))
-      (setf (tses-rows s) rows
-            (tses-cols s) cols
-            (tses-back s) (make-tui-canvas cols rows)
-            (tses-front s) nil)
-      (if (tses-camera s)
-          (tui-clamp! (tses-camera s) w cols (max 1 (1- rows)))
-          (setf (tses-camera s) (tui-fit w cols (max 1 (1- rows)))))))
+  (let* ((size (tui-size))
+         (rows (max 1 (or (tses-forced-rows s) (car size) 24)))
+         (cols (max 1 (or (tses-forced-cols s) (cdr size) 80))))
+    (setf (tses-rows s) rows
+          (tses-cols s) cols
+          (tses-back s) (make-tui-canvas cols rows)
+          (tses-front s) nil)
+    (if (tses-camera s)
+        (tui-clamp! (tses-camera s) w cols (max 1 (1- rows)))
+        (setf (tses-camera s) (tui-fit w cols (max 1 (1- rows))))))
   s)
 
 (defun tui-handle-key (s key w)
@@ -151,8 +156,14 @@ is in the way, and screen in a terminal is the scarcest thing there is."
           do (tui-write! cv (+ col 1) (+ row r) line +tui-white+))
     cv))
 
-(defun run-tui (w &key (colony 0) (charset :unicode) (colour t) seed)
+(defun run-tui (w &key (colony 0) (charset :unicode) (colour t) seed cols rows)
   "Watch W in the terminal.  Returns a process exit code.
+
+COLS and ROWS override what the terminal reports, and go on overriding
+it: a size given on the command line is a decision, and a window manager
+twitching is not grounds to overturn it.  With neither — the normal case
+— the size is whatever the terminal currently is, and changes when it
+does.
 
 SEED is not used to build the world — by the time a world is here its
 seed is fixed — and is accepted only so the caller can print it."
@@ -173,7 +184,8 @@ seed is fixed — and is accepted only so the caller can print it."
             "~&antsim: standard output is not a terminal, so there is nothing ~
              to draw on.~%Run it from a terminal, or use the window instead.~%")
     (return-from run-tui 2))
-  (let ((s (make-tui-session :colony colony :charset charset :colour colour))
+  (let ((s (make-tui-session :colony colony :charset charset :colour colour
+                             :forced-cols cols :forced-rows rows))
         (pending "")
         (carry 0.0d0)
         (last (/ (float (get-internal-real-time) 1.0d0)
@@ -251,7 +263,7 @@ seed is fixed — and is accepted only so the caller can print it."
 
 ;;; --- ways in -----------------------------------------------------------
 
-(defun tui-demo (&key seed (colony 0) (charset :unicode) (colour t))
+(defun tui-demo (&key seed (colony 0) (charset :unicode) (colour t) cols rows)
   "The world the M2 gallery renders, in a terminal.  One colony, one food
 source, one obstacle — enough to watch a trail form and thicken."
   (let* ((sd (tui-seed seed))
@@ -263,9 +275,11 @@ source, one obstacle — enough to watch a trail form and thicken."
     (world-seed-population! w c 150)
     (format t "~&seed ~d   (repeat this run with --seed ~d)~%" sd sd)
     (finish-output)
-    (run-tui w :colony colony :charset charset :colour colour)))
+    (run-tui w :colony colony :charset charset :colour colour
+               :cols cols :rows rows)))
 
-(defun tui-scenario (path &key seed (colony 0) (charset :unicode) (colour t))
+(defun tui-scenario (path &key seed (colony 0) (charset :unicode) (colour t)
+                               cols rows)
   "Watch a scenario file (§6) in a terminal.
 
 The scenario's parameter overrides are bound around the whole run and not
@@ -280,4 +294,5 @@ default tau would be a particularly quiet lie."
             (scenario-species s) (world-seed w) (world-seed w))
     (finish-output)
     (with-scenario-params (s)
-      (run-tui w :colony colony :charset charset :colour colour))))
+      (run-tui w :colony colony :charset charset :colour colour
+               :cols cols :rows rows))))

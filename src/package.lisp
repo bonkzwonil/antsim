@@ -225,7 +225,8 @@
    ;; tui/keys — what a terminal sends when a key goes down
    #:tui-decode-keys #:+tui-esc+
    ;; tui/term — the only file that touches the operating system
-   #:tui-terminal-size #:tui-tty-p #:tui-raw-on #:tui-raw-off
+   #:tui-terminal-size #:tui-size #:tui-tty-p #:tui-raw-on #:tui-raw-off
+   #:tui-size-by-report #:tui-parse-cursor-report
    #:with-terminal #:tui-emit-diff #:tui-read-available #:*tui-resized*
    ;; tui/live — the loop
    #:run-tui #:tui-demo #:tui-scenario #:*tui-speed* #:*tui-paused*

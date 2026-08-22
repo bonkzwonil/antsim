@@ -136,7 +136,12 @@
   ;; is a library, and stays one: nothing in antsim/live may depend on
   ;; this, or the window could no longer be opened from a REPL without
   ;; dragging a command-line parser in with it.
-  :depends-on ("antsim/live")
+  ;; antsim/tui as well as antsim/live, because --tui is one of the
+  ;; things the program can be asked to do.  It costs the binary nothing
+  ;; — the terminal view has no external dependency — and it does not
+  ;; weaken the split: antsim/tui still knows nothing about a program,
+  ;; and still loads on its own on a machine with no graphics stack.
+  :depends-on ("antsim/live" "antsim/tui")
   :serial t
   :pathname "src/app"
   :components ((:file "main")))

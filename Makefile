@@ -46,7 +46,7 @@ export CL_SOURCE_REGISTRY := $(CURDIR):
         test-render test-render-mesa test-render-ci \
         test-render-bare smoke smoke-mesa live gallery timelapse \
         word-scenario \
-        repl page check-images clean binary binary-bare \
+        repl page check-images clean binary binary-bare tui \
         appimage appimage-bare \
         icon dist-clean
 
@@ -135,6 +135,27 @@ live:
 	  --eval "(ql:quickload :antsim/live :silent t)" \
 	  --eval "$(if $(SCENARIO),(ant:live-scenario \"$(SCENARIO)\" $(LIVE_ARGS)),(ant:live-demo $(LIVE_ARGS)))" \
 	  --quit'
+
+## tui — the same colony, in this terminal, drawn in characters (§5.6).
+## No guix shell, no LD_LIBRARY_PATH, no GPU and no graphics stack of any
+## kind: this loads antsim/tui, which sits on the core and the scenario
+## format and on nothing else.  That is the whole point of the target —
+## it is the path that works on a box where `make live` cannot, and if it
+## ever needs a wrapper the layering has been broken somewhere.
+##
+##   arrows or hjkl pan · z/Z zoom · space pause · . single tick
+##   +/- time compression · f frame all · a ascii/arrows · ? keys · q quit
+##   SCENARIO=scenarios/goss-double-bridge.json make tui   opens a file
+##   SEED=12345 make tui                                   repeats a run
+##
+## The terminal's size is asked for, not assumed, and it is re-asked on
+## every resize — so making the window bigger mid-run simply shows more.
+TUI_ARGS := $(if $(SEED),:seed $(SEED),)
+tui:
+	@$(SBCL) \
+	  --eval '(ql:quickload :antsim/tui :silent t)' \
+	  --eval '$(if $(SCENARIO),(ant:tui-scenario "$(SCENARIO)" $(TUI_ARGS)),(ant:tui-demo $(TUI_ARGS)))' \
+	  --quit
 
 ## word-scenario — regenerate both word scenarios: the project's name
 ## spelled in obstacles, in the same 3x5 font the HUD draws with.  Built

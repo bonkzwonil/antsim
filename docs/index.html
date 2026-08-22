@@ -1907,6 +1907,138 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
           never a fork of it — which is what keeps the tested path and the watched
           path the same path.
         </p>
+
+        <h3>5.6 &ensp;The terminal view, and the rule it had to answer to</h3>
+        <p>
+          <code>antsim --tui</code>, or <code>make tui</code>: the same colony drawn in
+          characters, with a status line across the top and the arrow keys to pan. It
+          exists for the machine that cannot open a window — a server over SSH, a
+          container, a box with no graphics stack at all — which is a large fraction of
+          the machines this is likely to be run on, and none of the ones §5.5 was
+          written for.
+        </p>
+        <div class="callout rule">
+          <p><strong>The rule it had to answer to is the sentence directly above.</strong>
+            A terminal view is a second renderer, so “never a fork of it” would forbid
+            the whole feature. The resolution is that the rule is about the
+            <em>frame</em>, and the terminal view consumes no frame — it is a second
+            consumer of the <strong>world</strong>. It shares the thing that matters
+            (one simulation, one tick, one set of tables) and shares none of the
+            pipeline, there being no pipeline to share: no context, no shader, no
+            vertex buffer, no pixel. The invariant that replaces it:
+            <strong>the terminal view and the window view are two readings of one
+            world, never two worlds.</strong></p>
+        </div>
+        <p>
+          <strong>No external dependency, and that is the decision rather than the
+          accident.</strong> Everything needed is already in SBCL:
+          <code>sb-posix</code> carries a complete <code>termios</code>, the size comes
+          from the <code>TIOCGWINSZ</code> ioctl, resizes arrive as
+          <code>SIGWINCH</code>, and <code>vmin</code>/<code>vtime</code> of zero make
+          a read non-blocking — so the loop needs no second thread and no
+          <code>select</code>. A curses binding would have meant
+          <code>libncurses</code>, which nothing bundles, to buy things a character
+          grid does not need. Every system call is confined to
+          <code>src/tui/term.lisp</code>, so preferring a portable library later is a
+          one-file change. It is POSIX only, and said so rather than papered over.
+        </p>
+        <div class="callout">
+          <p>Since escape sequences can report the size, is the ioctl — and with it
+            <code>sb-posix</code> — needed at all? <strong>The size, yes; raw mode,
+            no.</strong> Canonical mode and echo are settings of the kernel’s tty
+            discipline, not of the terminal emulator, and no escape sequence turns them
+            off; the only sequence-free alternative is spawning <code>stty</code>, which
+            is a process and not a sequence. <code>termios</code> is not avoidable, and
+            the ioctl was never the reason for the dependency.</p>
+        </div>
+        <p>
+          <strong>A cell is not square</strong>, and this is the one piece of
+          arithmetic that cannot be got a little bit wrong. A terminal cell is about
+          twice as tall as it is wide, so a row spans twice the world distance a column
+          does; pretend otherwise and every circle renders as an ellipse and every
+          distance read off vertically is wrong by a factor of two.
+        </p>
+        <div class="callout">
+          <p><strong>The bearing glyph is indexed in screen space</strong>, not world
+            space — world y is up and terminal rows go down, so the table is indexed by
+            the <em>negated</em> heading. Indexed raw, the picture is wrong in exactly
+            half of itself: the ants above the nest point correctly and the ants below
+            it point at their own reflection, which reads as two columns of traffic
+            going the same way. A rosette of sixteen ants pointing outward is the
+            cheapest way to see it, and a test draws one.</p>
+        </div>
+        <div class="tw">
+          <table>
+            <caption>Two character sets, and they are not equivalent</caption>
+            <thead><tr><th style="width:30%">Set</th><th>Glyphs</th><th>Distinct shapes for eight headings</th></tr></thead>
+            <tbody>
+              <tr><td class="num-col">Unicode (default)</td><td><code>→ ↘ ↓ ↙ ← ↖ ↑ ↗</code></td><td>eight</td></tr>
+              <tr><td class="num-col">ASCII (<code>--ascii</code>)</td><td><code>-</code> <code>\</code> <code>|</code> <code>/</code></td><td>four</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A stroke has no arrowhead, so <code>\</code> is both north-west and
+          south-east: what the ASCII set preserves is the <em>axis</em> of travel, not
+          the direction along it. That is a real loss, and why Unicode is the default —
+          but an axis is still most of what the eye reads when it looks at a trail, and
+          it is what a terminal that cannot do better can honestly show.
+        </p>
+        <p>
+          <strong>The terminal’s size is asked for, never assumed.</strong>
+          <code>$COLUMNS</code> is set by a shell for itself and not exported, so a
+          program that reads the environment gets nothing and falls back to whatever it
+          guessed — which is how a program comes to believe every terminal is eighty by
+          twenty-four. Three ways to ask, cheapest first: the <code>TIOCGWINSZ</code>
+          ioctl, then <code>stty size</code> down <code>/dev/tty</code>, then the
+          terminal itself in its own language — park the cursor at
+          <code>ESC[999;999H</code>, ask where it landed with <code>ESC[6n</code>, and
+          read <code>ESC[rows;colsR</code> back, since it cannot go past the last row
+          and column. <code>SIGWINCH</code> says when the answer changed. On a resize the camera keeps its centre and its scale and simply
+          shows more or less of the world; re-fitting would throw away the user’s zoom
+          every time a window manager twitched.
+        </p>
+        <p>
+          <strong>Only the cells that changed are written</strong>, each preceded by a
+          cursor placement, with adjacent cells of one colour sharing a placement and a
+          colour set. A full repaint of a 200×60 terminal is twelve thousand cells a
+          frame and looks like it.
+        </p>
+        <div class="tw">
+          <table>
+            <caption>Controls — the window’s wherever it has an opinion</caption>
+            <thead><tr><th style="width:30%">Input</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td class="num-col">arrows, or <code>hjkl</code></td><td>pan by one cell</td></tr>
+              <tr><td class="num-col">shift-arrows, <code>HJKL</code></td><td>pan by half a screen</td></tr>
+              <tr><td class="num-col"><code>z</code> / <code>Z</code></td><td>zoom in and out, about the centre — there being no cursor to anchor to</td></tr>
+              <tr><td class="num-col"><code>space</code></td><td>pause</td></tr>
+              <tr><td class="num-col"><code>.</code></td><td>advance a single tick. <strong>New</strong>: a terminal is the only place you can watch a tick at a time without a debugger</td></tr>
+              <tr><td class="num-col"><code>+</code> / <code>-</code></td><td>time compression, halving and doubling</td></tr>
+              <tr><td class="num-col"><code>f</code></td><td>frame the whole arena</td></tr>
+              <tr><td class="num-col"><code>t</code></td><td>show the next colony’s trail</td></tr>
+              <tr><td class="num-col"><code>a</code></td><td>switch between ASCII and arrows</td></tr>
+              <tr><td class="num-col"><code>c</code></td><td>colour on or off</td></tr>
+              <tr><td class="num-col"><code>?</code></td><td>show or hide the key legend</td></tr>
+              <tr><td class="num-col"><code>q</code> / <code>escape</code></td><td>quit</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Leaving the terminal wrecked is the one failure here that outlives the
+          process, so the restore is in an <code>unwind-protect</code> and happens on
+          the normal exit, on an error, and on the interrupt —
+          <code>isig</code> is cleared precisely so that <code>^C</code> arrives as a
+          byte and takes that path rather than killing the process with the alternate
+          screen still up. Checked by driving the whole thing in a real pty, which is
+          also how it was found that the restore already worked on an unhandled error.
+        </p>
+        <p>
+          Everything except <code>term.lisp</code> is a pure function from a world to a
+          grid of characters, which is why its tests live in the everywhere-runnable
+          core suite rather than in a system of their own — no tty is needed to assert
+          on a frame.
+        </p>
       </section>
 
       <!-- ============================================================ 6 -->

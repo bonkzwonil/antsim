@@ -166,3 +166,58 @@ test would take FiveAM's own progress output with it."
   (is (search ant:*version* (ant:usage)))
   (is (search "--seed" (ant:usage)))
   (is (search "--list" (ant:usage))))
+
+;;; ------------------------------------------------------- the terminal view
+
+(test the-terminal-view-is-an-action-like-the-others
+  "A flag rather than a subcommand: there are none in this program, and
+inventing the first one for a second view would change how every argument
+is read to say what a flag says just as well."
+  (is (eq :tui (ant::cli-action (%parse "--tui"))))
+  (is (eq :run (ant::cli-action (%parse))))
+  ;; and it composes with everything else, in either order
+  (let ((c (%parse "--tui" "--seed" "9" "goss")))
+    (is (eq :tui (ant::cli-action c)))
+    (is (= 9 (ant::cli-seed c)))
+    (is (equal "goss" (ant::cli-scenario c))))
+  (let ((c (%parse "goss" "--seed" "9" "--tui")))
+    (is (eq :tui (ant::cli-action c)))
+    (is (equal "goss" (ant::cli-scenario c)))))
+
+(test the-terminal-views-own-options
+  "--cols and --rows default to NIL and mean \"ask the terminal\".  A
+default of eighty by twenty-four would be a guess wearing the clothes of
+a measurement."
+  (let ((c (%parse)))
+    (is (null (ant::cli-cols c)))
+    (is (null (ant::cli-rows c)))
+    (is (eq :unicode (ant::cli-charset c)))
+    (is (eq t (ant::cli-colour c))))
+  (let ((c (%parse "--tui" "--cols" "120" "--rows" "40" "--ascii")))
+    (is (= 120 (ant::cli-cols c)))
+    (is (= 40 (ant::cli-rows c)))
+    (is (eq :ascii (ant::cli-charset c)))))
+
+(test colour-is-spelled-both-ways
+  "The program is written in British English and half the world is not.
+An option that rejects the other spelling teaches nothing except that it
+was written by somebody in a hurry."
+  (is (null (ant::cli-colour (%parse "--no-colour"))))
+  (is (null (ant::cli-colour (%parse "--no-color")))))
+
+(test the-terminal-view-is-not-blocked-by-missing-graphics-libraries
+  "The guard belongs to the window and stays there.  A terminal view
+refusing to start because libGL is absent would be exactly backwards —
+that is the case it exists for."
+  (%with-scenario-path
+    (let ((*error-output* (make-broadcast-stream))
+          (ant::*missing-libraries* '(("libGL.so.1" . "not found"))))
+      ;; Exit 2 for the unresolvable scenario, and specifically not 3,
+      ;; which is what the missing-library guard would have returned.
+      (is (= 2 (ant:run-cli (%parse "--tui" "definitely-not-a-scenario")))))))
+
+(test the-usage-text-mentions-the-terminal-view
+  (is (search "--tui" (ant:usage)))
+  (is (search "--ascii" (ant:usage)))
+  (is (search "--no-colour" (ant:usage)))
+  (is (search "--cols" (ant:usage))))

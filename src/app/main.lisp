@@ -185,9 +185,29 @@ options:
                     seed is drawn and printed, so no two sessions match.
   --width N         window width in pixels (default 1100)
   --height N        window height in pixels (default 800)
+  --tui             watch it in this terminal instead of a window, drawn
+                    in characters.  Needs no graphics stack at all.
+  --ascii           plain ASCII glyphs rather than arrows.  Shows the
+                    axis an ant is walking on, but not which way along it
+  --no-colour       no colour, for a terminal or a log that wants none
+  --cols N          force the width in columns (default: ask the terminal)
+  --rows N          force the height in rows (default: ask the terminal)
   --list            list the scenarios shipped with this binary
   --version         print the version and exit
   -h, --help        this text
+
+in the terminal (--tui):
+  arrows or hjkl    pan; hold shift, or use HJKL, to move a page
+  z / Z             zoom in and out
+  space             pause
+  .                 advance a single tick
+  + / -             time compression, halving and doubling
+  f                 frame the whole world
+  t                 show the next colony's trail
+  a                 switch between ASCII and arrows
+  c                 colour on or off
+  ?                 show or hide the key legend
+  q or escape       quit
 
 in the window:
   wheel             zoom, anchored at the cursor
@@ -211,7 +231,15 @@ in the window:
   (seed nil)
   (width 1100)
   (height 800)
-  (action :run))                        ; :run :list :version :help
+  ;; The terminal view's three.  COLS and ROWS are NIL by default and
+  ;; stay that way in normal use — the terminal knows its own size and it
+  ;; changes while the program runs, so asking is right and guessing is
+  ;; not.  They exist for the case where a size has to be forced.
+  (cols nil)
+  (rows nil)
+  (charset :unicode)
+  (colour t)
+  (action :run))                        ; :run :tui :list :version :help
 
 (defun parse-command-line (args)
   "ARGS is argv without the program name.  Returns a CLI, or signals
@@ -230,6 +258,23 @@ USAGE-ERROR."
                 (setf (cli-width cli) (parse-integer-arg "--width" (pop args))))
                ((string= arg "--height")
                 (setf (cli-height cli) (parse-integer-arg "--height" (pop args))))
+               ;; --- the terminal view (§5.6) ---------------------------
+               ;; An action keyword rather than a subcommand.  There are
+               ;; no subcommands in this program and inventing the first
+               ;; one for a second view would change how every argument
+               ;; is read, to say something a flag says just as well.
+               ((string= arg "--tui")   (setf (cli-action cli) :tui))
+               ((string= arg "--ascii") (setf (cli-charset cli) :ascii))
+               ;; Both spellings.  The rest of the program is written in
+               ;; British English and half the world is not, and an
+               ;; option that rejects the other spelling teaches nothing
+               ;; except that it was written by somebody in a hurry.
+               ((or (string= arg "--no-colour") (string= arg "--no-color"))
+                (setf (cli-colour cli) nil))
+               ((string= arg "--cols")
+                (setf (cli-cols cli) (parse-integer-arg "--cols" (pop args))))
+               ((string= arg "--rows")
+                (setf (cli-rows cli) (parse-integer-arg "--rows" (pop args))))
                ;; A lone "--" ends the options.  The only way to run a
                ;; file genuinely named "--list" — cheap, and the absence
                ;; of it is the kind of thing that is noticed once, in
@@ -277,6 +322,19 @@ The AppImage bundles GLFW, so a plain binary showing this is usually a~%~
 binary that was unpacked out of one.~%"
           *program-name*))
 
+(defun resolve-scenario (name)
+  "The path a scenario name resolves to, or NIL having said why.
+
+One copy, because two views now want a scenario and the message names
+the search path and the next step — the sort of text that is quietly
+corrected in one place and left stale in the other."
+  (let ((path (find-scenario name)))
+    (unless path
+      (format *error-output*
+              "~&~a: no scenario ~s.  Looked in:~%~{  ~a~%~}~%Try --list.~%"
+              *program-name* name (scenario-search-path)))
+    path))
+
 (defun run-cli (cli)
   "Do what CLI says.  Returns a process exit code."
   (ecase (cli-action cli)
@@ -287,6 +345,9 @@ binary that was unpacked out of one.~%"
      ;; Checked here and not at startup: a window is the only thing that
      ;; needs these, and a program that complains about graphics while
      ;; being asked for its version number is a program nobody trusts.
+     ;; Note that :TUI below is not guarded — a terminal view refusing to
+     ;; start because libGL is absent would be exactly backwards, that
+     ;; being the case it exists for.
      (when *missing-libraries*
        (report-missing-libraries *error-output*)
        (return-from run-cli 3))
@@ -294,16 +355,23 @@ binary that was unpacked out of one.~%"
        (if (null name)
            (live-demo :width (cli-width cli) :height (cli-height cli)
                       :seed (cli-seed cli))
-           (let ((path (find-scenario name)))
-             (unless path
-               (format *error-output*
-                       "~&~a: no scenario ~s.  Looked in:~%~{  ~a~%~}~
-                        ~%Try --list.~%"
-                       *program-name* name (scenario-search-path))
-               (return-from run-cli 2))
+           (let ((path (resolve-scenario name)))
+             (unless path (return-from run-cli 2))
              (live-scenario path :width (cli-width cli) :height (cli-height cli)
                                  :seed (cli-seed cli)))))
-     0)))
+     0)
+    (:tui
+     (let ((name (cli-scenario cli)))
+       (if (null name)
+           (tui-demo :seed (cli-seed cli)
+                     :charset (cli-charset cli) :colour (cli-colour cli)
+                     :cols (cli-cols cli) :rows (cli-rows cli))
+           (let ((path (resolve-scenario name)))
+             (unless path (return-from run-cli 2))
+             (tui-scenario path :seed (cli-seed cli)
+                                :charset (cli-charset cli)
+                                :colour (cli-colour cli)
+                                :cols (cli-cols cli) :rows (cli-rows cli))))))))
 
 (defun main (&optional (args (uiop:command-line-arguments)))
   "Entry point of the shipped binary.  Returns a process exit code.
