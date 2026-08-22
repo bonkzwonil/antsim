@@ -317,9 +317,15 @@ Three entry points into it:
 
 ## Where it is
 
-**Version 1.0.1 — milestone M4 · 2026-08-19**, and the first line that ships
-as a binary rather than as a checkout ([Getting it](#getting-it)). 1.0.1 is
-1.0.0 with route memory repaired: a full waypoint list now halves its
+**Version 1.1.0 — milestone M4 · 2026-08-22**, and the first line that ships
+as a binary rather than as a checkout ([Getting it](#getting-it)). 1.1.0 adds
+the [terminal view](#the-terminal) — `antsim --tui`, the same colony drawn in
+characters, for a machine that cannot open a window. It is a minor rather
+than a patch release because it is a new way in, and a leaf one: the terminal
+view has no external dependency and nothing else in the tree depends on it, so
+nothing that worked in 1.0.1 works differently in 1.1.0.
+
+1.0.1 was 1.0.0 with route memory repaired: a full waypoint list now halves its
 resolution instead of refusing new points, so it keeps the approach to the
 food rather than the half of the walk a straight bearing could already do —
 which, on a source behind a wall, was the difference between a mechanism that

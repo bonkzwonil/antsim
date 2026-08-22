@@ -12,7 +12,7 @@
   ;; it into the binary, both packaging scripts name their output from it,
   ;; and both release workflows refuse a tag that disagrees with it — see
   ;; docs/shipping.md.
-  :version "1.0.1"        ; M4 — the society; route memory now keeps the whole walk
+  :version "1.1.0"        ; M4, plus the terminal view (§5.6) — a second way to watch
   :depends-on ()                        ; core stays dependency-free (sb-thread only)
   :serial t
   :pathname "src"
