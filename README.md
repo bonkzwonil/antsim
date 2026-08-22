@@ -1,7 +1,7 @@
 # antsim
 
 **A 2D ant colony simulation built on real behavioural science, in Common Lisp,
-rendered with OpenGL.**
+rendered with OpenGL and ASCII-art.**
 
 ![The word ANTSIM spelled in solid terrain, with two ant trails threading through the letters](docs/images/15-antsim.jpg)
 
@@ -13,15 +13,15 @@ packets, each one deposited by an ant that walked there.*</sub>
 
 Ants leave the nest, walk a correlated random walk, find food, fill their crop,
 navigate home by path integration, and lay pheromone on the return trip in
-proportion to the quality of what they are carrying. Other ants read that
-pheromone through a nonlinear choice function, which amplifies a chance
-difference into a committed trail. Food depletes, trails evaporate, the colony
+proportion to the quality of what they are carrying.
+Other ants read that pheromone through a nonlinear choice function, which amplifies
+a chance difference into a committed trail. Food depletes, trails evaporate, the colony
 converts food into workers, and a colony that cannot reach food starves.
 
 None of that is scripted. **There is no way to author a trail** — the scenario
 format cannot express one, and no function exists to paint one.
 
-And close enough, an ant is an ant.
+And close enough, an ant becomes an ant.
 
 ![Ants on a trail at four and a half centimetres, with legs, antennae and carried food visible](docs/images/15-vector-ant.jpg)
 
@@ -30,6 +30,26 @@ mandibles, a swollen gaster on the ants carrying a load — one mesh of ninety-o
 triangles, articulated in the vertex shader from eight floats per ant. The legs
 do not slide, because the stride is driven by distance walked rather than by the
 clock. [More in the diary](docs/DIARY.md#traffic--and-an-ant-close-enough).*</sub>
+
+## Running it (sbcl, ultralisp)
+```lisp
+;; This Project is on ultralisp, so running is easy
+;; (or just link the project folder to your quicklisp/local-projects folder)
+
+;; ONLY If ultralisp is not already installed:
+(ql-dist:install-dist "http://dist.ultralisp.org/" :prompt nil)
+
+
+;; Run the OpenGL Version (libglfw and OpenGL 4.5 required)
+(ql:quickload :antsim/live)
+(ant:live-demo)
+
+;; Run the ASCII Version (no dependencies, runs in every terminal)
+(ql:quickload :antsim/tui)
+(ant:tui)
+```
+
+See Makefile and below for more examples and how to load and write other scenarios
 
 ## Why Common Lisp
 
