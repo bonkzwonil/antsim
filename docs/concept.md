@@ -1254,6 +1254,7 @@ antsim.asd
   antsim/scenario      JSON loading.  deps: com.inuoe.jzon
   antsim/render        GL 2D renderer. deps: cffi, cl-opengl
   antsim/live          windowed view + interaction.  deps: cl-glfw3   [later]
+  antsim/tui           terminal view (§5.6).  deps: none (sb-posix only)
   antsim/test          FiveAM core suite
   antsim/render-test   FiveAM render suite (GL tests skip without a driver)
 
@@ -1378,9 +1379,16 @@ make test-render-ci    alias for test-render-mesa
 make test-render-bare  no wrapper; GL tests skip if the host has no GL
 make smoke             M0 end to end: headless frame → out/m0-smoke.png
 make smoke-mesa        the same frame in software, for comparing stacks
+make tui               the terminal view (§5.6) — no GPU, no graphics
 make repl              a REPL with antsim loaded
 make page              regenerate docs/index.html from docs/concept.html
 ```
+
+`make tui` is the only view target with **no wrapper at all**, and that is
+the point of it rather than an omission: it loads `antsim/tui`, which sits
+on the core and the scenario format and on nothing else, so it runs where
+`make live` cannot. If it ever needs a `guix shell` the layering has been
+broken somewhere.
 
 GPU targets wrap the command in `guix shell nvda@580 --`, which is how the
 driver gets onto the loader path. A host that already carries the driver in
@@ -1633,6 +1641,174 @@ transform and a viewport, and the headless path is the same renderer with
 an FBO instead of a window. The live window is a second consumer of the
 frame, never a fork of it — which is what keeps the tested path and the
 watched path the same path.
+
+### 5.6 The terminal view, and the rule it had to answer to
+
+`antsim --tui`, or `make tui`: the same colony, drawn in characters, with
+a status line across the top and the arrow keys to pan. It exists for the
+machine that cannot open a window — a server over SSH, a container, a box
+with no graphics stack at all — which is a large fraction of the machines
+this is likely to be run on and none of the ones §5.5 was written for.
+
+**The rule this had to answer to is the sentence directly above.** A
+terminal view is a second renderer, so "never a fork of it" would forbid
+the whole feature. The resolution is that the rule is about the *frame*,
+and the terminal view is not a consumer of the frame at all — it is a
+second consumer of the **world**. It shares the thing that actually
+matters (one simulation, one tick, one set of tables) and shares none of
+the pipeline, because there is no pipeline to share: no context, no
+shader, no vertex buffer, no pixel. The invariant that replaces it:
+
+> The terminal view and the window view are two readings of one world,
+> never two worlds. Neither may hold simulation state the other cannot
+> see, and neither may step the world in a way the other does not.
+
+Concretely, `antsim/tui` calls `world-step!` and reads exported
+accessors, exactly as the window does. It adds no slot to any struct and
+no dynamic variable the simulation consults.
+
+**No external dependency, and that is the decision rather than the
+accident.** Everything needed is already in SBCL: `sb-posix` carries a
+complete `termios`, so raw mode needs no foreign library; the size comes
+from the `TIOCGWINSZ` ioctl and resizes arrive as `SIGWINCH`; and
+`vmin`/`vtime` of zero make a read non-blocking, so the loop needs no
+second thread and no `select`. A curses binding — `cl-charms`,
+`croatoan` — would have meant `libncurses`, which nothing bundles and
+which §*shipping* does not cover, to buy things a character grid does not
+need. Every system call is confined to `src/tui/term.lisp`, so if a
+portable terminal library is ever preferred that file is the whole of the
+change.
+
+It is **POSIX only**, and that is stated rather than papered over.
+`termios` and `TIOCGWINSZ` are Linux and BSD; the window ships on Windows
+and the terminal view does not.
+
+**Its own camera**, not `render/view.lisp`'s. `view` is pure arithmetic
+and would work, but it ships as a component of `antsim/render`, so
+reaching it would mean splitting a new system out and rewiring the one
+render path that is known to work — an invasive change to GL code to buy
+forty lines. The needs differ anyway: a window pans by pixels under a
+dragged cursor and zooms anchored at that cursor, a terminal pans by whole
+cells and has no cursor to anchor anything to. Unlike the GL camera it
+*clamps*: in a window you can see you have flown off the arena and drag
+back, but a terminal full of blank cells has no scroll bar and is
+indistinguishable from a program that has stopped working.
+
+**A cell is not square**, and this is the one piece of arithmetic here
+that cannot be got a little bit wrong. A terminal cell is about twice as
+tall as it is wide, so a row spans twice the world distance a column
+does; pretend otherwise and every circle in the world renders as an
+ellipse and every distance read off vertically is wrong by a factor of
+two. There is a test that says so.
+
+What a cell can say, lowest precedence first — several of these land on
+one cell at any useful zoom, and the ants win because the ants are the
+point:
+
+| | drawn as | notes |
+|---|---|---|
+| pheromone | `.,:;+*` | normalised against the field's current maximum, on a **log** scale. A real trail sits two orders of magnitude below `*trail-cap*`, so a linear ramp against the cap shows a blank arena with one bright dot in it and reads as a broken field |
+| terrain | `#` | from `field-blocked-p` — the obstacle mask is already rasterised into the field, so there is no polygon scan per cell |
+| food | `o` | at `food-current-radius`, never `food-r`: the pile shrinks as it is eaten |
+| nest | `@` | |
+| corpse | `x` | only reachable through the body table; the ant's slot was freed when it died |
+| ant | see below | coloured by state, in the sixteen colours every terminal agrees about and with the meanings `ant-state-rgb` gives, because two views of one world should not disagree about what green means |
+
+**The bearing glyph is indexed in screen space**, not world space. World
+y is up and terminal rows go down, so the table is indexed by the negated
+heading. Indexed raw, the picture is wrong in exactly half of itself: the
+ants above the nest point correctly and the ants below it point at their
+own reflection, which reads as two columns of traffic going the same way.
+A rosette of sixteen ants pointing outward is the cheapest way to see it,
+and there is a test that draws one.
+
+Two character sets, and they are **not** equivalent:
+
+| set | glyphs | distinct shapes for eight headings |
+|---|---|---|
+| Unicode (default) | `→ ↘ ↓ ↙ ← ↖ ↑ ↗` | **eight** |
+| ASCII (`--ascii`) | `-` `\` `|` `/` | **four** |
+
+A stroke has no arrowhead, so `\` is both north-west and south-east: what
+the ASCII set preserves is the *axis* of travel, not the direction along
+it. That is a real loss, and it is why Unicode is the default. It remains
+most of what the eye reads when it looks at a trail, and it is what a
+terminal that cannot do better can honestly show.
+
+**The terminal's size is asked for, never assumed.** `$COLUMNS` is set by
+a shell for itself and not exported, so a program that reads the
+environment gets nothing and falls back to whatever it guessed — which is
+how a program comes to believe every terminal is eighty by twenty-four.
+There are three ways to ask, cheapest first: the `TIOCGWINSZ` ioctl,
+then `stty size` down `/dev/tty`, then the terminal itself in its own
+language — park the cursor at `ESC[999;999H`, ask where it actually
+landed with `ESC[6n`, and read `ESC[rows;colsR` back, since it cannot go
+past the last row and column. `SIGWINCH` says when the answer changed.
+
+That third route is worth stating precisely, because it invites a
+reasonable question: if escape sequences can get the size, is the ioctl —
+and with it `sb-posix` — needed at all? **The size, yes; raw mode, no.**
+Canonical mode and echo are settings of the kernel's tty discipline, not
+of the terminal emulator, and there is no escape sequence that turns
+them off; the only sequence-free alternative is spawning `stty`, which is
+a process and not a sequence. `termios` is therefore not avoidable, and
+the ioctl was never the reason for the dependency. The cursor report
+earns its place as a third fallback for a pty whose ioctl is refused, and
+it needs raw mode to already be on — in canonical mode the reply would
+sit in the line buffer until somebody pressed return.
+
+Being a tty is asked separately, with `tcgetattr`, and not by requesting
+the size. They are different questions, and conflating them turns a
+terminal that merely could not say how big it was into one that is
+refused as not a terminal at all. On a
+resize the camera keeps its centre and its scale and simply shows more or
+less of the world; re-fitting would throw away the user's zoom every time
+a window manager twitched. The signal handler only sets a flag —
+reallocating two canvases on whatever stack was interrupted is how a
+program acquires an intermittent crash nobody can reproduce.
+
+**Only the cells that changed are written**, each preceded by a cursor
+placement, with adjacent cells of one colour sharing a placement and a
+colour set. A full repaint of a 200×60 terminal is twelve thousand cells
+a frame and looks like it — a tear rolling down the screen once a second.
+Two canvases are kept and the difference between them is what goes down
+the wire.
+
+Controls. They follow the window wherever the window has an opinion —
+two views that disagree about what the space bar does are two things to
+remember instead of one — and invent only where it has none. The window
+has no arrow-key panning at all (there it is a mouse drag), and no
+single-step:
+
+| key | does |
+|---|---|
+| arrows, or `hjkl` | pan by one cell |
+| shift-arrows, or `HJKL` | pan by half a screen |
+| `z` / `Z` | zoom in and out, about the centre — there being no cursor to anchor to |
+| `space` | pause |
+| `.` | advance a single tick. **New**: a terminal is the only place you can watch a tick at a time without a debugger |
+| `+` / `-` | time compression, halving and doubling |
+| `f` | frame the whole arena |
+| `t` | show the next colony's trail |
+| `a` | switch between ASCII and arrows |
+| `c` | colour on or off |
+| `?` | show or hide the key legend |
+| `q` / `escape` | quit |
+
+Leaving the terminal wrecked is the one failure here that outlives the
+process, so the restore — raw mode off, cursor back, alternate screen
+down — is in an `unwind-protect` and happens on the normal exit, on an
+error, and on the interrupt. `isig` is cleared precisely so that `^C`
+arrives as a byte and takes that path rather than killing the process with
+the alternate screen still up. This was checked by driving the whole thing
+in a real pty, which is also how it was found that the restore already
+worked on an unhandled error.
+
+Everything except `term.lisp` is a pure function from a world to a grid of
+characters, which is why its tests live in the everywhere-runnable core
+suite rather than in a system of their own — no tty is needed to assert on
+a frame. `(princ (tui-canvas-string (tui-frame w)))` prints a colony from
+a bare REPL.
 
 ## 6. The scenario file
 
@@ -2359,6 +2535,18 @@ port would otherwise have to establish first.
    colonies into one shared field; small ε perturbs without steering,
    which is the behaviour worth having.
 8. **Repository** — initialised, pushed to `bonk/antsim`, branch `concept`.
+9. **A terminal view is a second reading of the world, not a fork of the
+   renderer** (§5.6). §5.5's rule — *a second consumer of the frame, never
+   a fork of it* — is about the **frame**, and `antsim/tui` consumes no
+   frame: it reads the world's own accessors and writes characters. What
+   the two views share is the tick, which is the thing that matters; what
+   they do not share is a pipeline, there being none to share. **Raw ANSI
+   over curses**, because `sb-posix` already carries `termios`,
+   `TIOCGWINSZ` and `SIGWINCH`, so the terminal view adds no external
+   dependency and nothing new to bundle — where `cl-charms` or `croatoan`
+   would have meant `libncurses` and a new paragraph in the shipping
+   rationale. Every system call is confined to one file so that decision
+   can be revisited cheaply.
 
 ### Still open
 

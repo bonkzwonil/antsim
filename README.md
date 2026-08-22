@@ -154,6 +154,7 @@ a render comes back black.
 make test              # core suite: RNG, pool, geometry, fields, ants
 make acceptance        # the §3.8 experiments: both bridges, sixteen seeds
 make live              # the interactive window
+make tui               # the same, in this terminal — no GPU, no graphics
 make gallery           # regenerate the documentation's images
 make test-render       # renderer suite, on the GPU
 make test-render-mesa  # the same suite in software — no GPU needed
@@ -163,6 +164,7 @@ make appimage          # dist/antsim-<version>-x86_64.AppImage
 
 SCENARIO=scenarios/foraging.json make live
 SEED=12345 make live   # repeat an exact run
+SCENARIO=scenarios/foraging.json make tui
 ```
 
 Seven scenarios ship:
@@ -210,6 +212,58 @@ alike and any worth keeping can be replayed with `SEED=`. That matters most on
 the binary bridge, where the result is that the winning arm *varies*. The
 headless paths — tests, acceptance, gallery — stay deterministic. A playground
 and a result are different things.
+
+### The terminal
+
+`make tui`, or `antsim --tui`: the same colony drawn in characters, for a machine
+that cannot open a window — a server over SSH, a container, a box with no graphics
+stack at all. It needs **no GPU, no GL and no external library**: `sb-posix`
+already carries everything a terminal needs, so this is the one view target with
+no `guix shell` around it.
+
+```
+t 300.0s · 150 ants · stock 577 · trail 63542 · 4x · 30 fps
+                                     ...
+                                  .:;ooo↓↖.
+                                 ,:↓ooooo↙↖.
+                                 ,:;oooo↓↑↙,
+                                 :↓;  .↗↑*:
+                                 :;:  ,↓↗↓,
+                                .;↓: ,+↑+,
+                     ↗          .↓↓::↑↓+
+               ###################;;→↑+,
+               ###################:+↗↑;
+                                 ,;↓↓;
+                                 :↙↙:
+                                @@↙@
+```
+
+`@` is the nest, `o` a food source at its present size, `#` terrain, and
+`.,:;+*` the trail, shaded on a log scale — a real trail sits two orders of
+magnitude below the cap, so a linear ramp would show a blank arena with one
+bright dot in it. Ants carry their bearing: `→↘↓↙←↖↑↗` by default, or `-\|/`
+with `--ascii`, which shows the *axis* an ant is walking on but not which way
+along it — a stroke has no arrowhead.
+
+| input | action |
+|---|---|
+| arrows, or `hjkl` | pan by one cell |
+| shift-arrows, or `HJKL` | pan by half a screen |
+| `z` / `Z` | zoom in and out |
+| `space` | pause |
+| `.` | advance a single tick — the window has no such key |
+| `+` / `-` | time compression, halving and doubling |
+| `f` | frame the whole arena |
+| `t` | step to the next colony |
+| `a` | switch between ASCII and arrows |
+| `c` | colour on or off |
+| `?` | show or hide the key legend |
+| `q` / `escape` | quit |
+
+The terminal's size is **asked for, not assumed**, and asked again whenever it
+changes — making the window bigger mid-run simply shows more world. Resizing it
+smaller does not disturb the zoom. POSIX only: the window ships on Windows and
+this does not.
 
 ## The documentation
 

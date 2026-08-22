@@ -425,3 +425,37 @@ apart — the same choice *LIVE-KEYS* makes in the window."
              ant:*tui-keys*))
   (is (= (length ant:*tui-keys*) (length (ant:tui-help-lines))))
   (is (find "quit" ant:*tui-keys* :key #'second :test #'string=)))
+
+;;; ------------------------------------------------- asking without an ioctl
+
+(test a-cursor-report-gives-the-size-without-an-ioctl
+  "The terminal will say how big it is in its own language: park the
+cursor somewhere absurd and ask where it actually landed, since it cannot
+go past the last row and column.  Escape sequences only — no ioctl and no
+subprocess.
+
+It does not, however, get us out of sb-posix: raw mode is a kernel tty
+discipline and no escape sequence turns canonical mode or echo off.  This
+is a third fallback for the size, not a way to do without termios."
+  (multiple-value-bind (rows cols)
+      (ant:tui-parse-cursor-report (format nil "~c[34;120R" ant:+tui-esc+))
+    (is (= 34 rows))
+    (is (= 120 cols)))
+  ;; and it tolerates the reply arriving with other input around it
+  (multiple-value-bind (rows cols)
+      (ant:tui-parse-cursor-report (format nil "q~c[8;40Rz" ant:+tui-esc+))
+    (is (= 8 rows))
+    (is (= 40 cols))))
+
+(test a-malformed-cursor-report-is-not-a-size
+  "Better no answer than half of one: a size taken from a truncated or
+garbled reply is a screen laid out for a terminal that does not exist."
+  (dolist (junk (list ""
+                      "hello"
+                      (format nil "~c[R" ant:+tui-esc+)
+                      (format nil "~c[34R" ant:+tui-esc+)      ; no semicolon
+                      (format nil "~c[0;0R" ant:+tui-esc+)     ; not positive
+                      (format nil "~c[a;bR" ant:+tui-esc+)     ; not numbers
+                      (format nil "~c[34;120" ant:+tui-esc+))) ; truncated
+    (is (null (ant:tui-parse-cursor-report junk))
+        "~s was read as a size" junk)))
