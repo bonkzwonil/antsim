@@ -5,6 +5,39 @@
 ;;;; tested on a machine with no GPU and no graphics stack.  Only
 ;;;; antsim/render knows that OpenGL exists.
 
+;;; Make our own directory findable before anything below needs it.
+;;;
+;;; antsim/render and antsim/live pull in antsim-gl-preload with
+;;; :defsystem-depends-on, and that is resolved while *this file is being
+;;; read*, by searching ASDF's registry.  Whether this directory is in that
+;;; registry depends entirely on who is doing the reading, and there is one
+;;; important reader for whom it is not: a Quicklisp distribution's metadata
+;;; collector loads every .asd it finds inside a freshly built Quicklisp,
+;;; whose registry knows nothing about the checkout it is standing in.
+;;; There the lookup misses, falls through to ql:quickload — which only
+;;; searches distributions — and dies with
+;;;
+;;;     System "antsim-gl-preload" not found
+;;;
+;;; on a system that was sitting in the same directory the whole time.  The
+;;; check fails, and the project is disabled for a reason that has nothing
+;;; to do with the code.  Ultralisp rejected antsim for exactly this.
+;;;
+;;; A REPL, the Makefile and both test suites all arrive with this directory
+;;; registered, which is why it held up everywhere it was tried — and why
+;;; testing it with the checkout already on *central-registry* proves
+;;; nothing, that being the one environment the collector never runs in.
+;;;
+;;; *LOAD-TRUENAME* is where this file actually is, so registering it costs
+;;; nothing and makes the pair work however the file is reached.  cl-piston
+;;; hit this first and is fixed the same way.
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (pushnew (uiop:pathname-directory-pathname
+            (or *load-truename* *compile-file-truename*
+                *default-pathname-defaults*))
+           asdf:*central-registry*
+           :test #'equal))
+
 (defsystem "antsim"
   :description "A 2D ant colony simulation on real behavioural science — numeric core."
   :author "Mathias Menzel-Nielsen"
