@@ -18,7 +18,7 @@
 (defparameter *out* #p"docs/index.html")
 
 (defparameter *description*
-  "Design concept for a 2D ant colony simulator on the SBCL/OpenGL stack, where every behaviour traces to a published mechanism.")
+  "A 2D ant colony simulation built on real behavioural science — in Common Lisp, rendered with OpenGL and ASCII-art.")
 
 ;;; The Artifact skeleton ships a minimal reset; a static host does not, so
 ;;; the equivalent is inlined here.  Keep it minimal — the page's own CSS is
