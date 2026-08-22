@@ -459,3 +459,24 @@ garbled reply is a screen laid out for a terminal that does not exist."
                       (format nil "~c[34;120" ant:+tui-esc+))) ; truncated
     (is (null (ant:tui-parse-cursor-report junk))
         "~s was read as a size" junk)))
+
+;;; --------------------------------------------------------- the short way in
+
+(test tui-is-the-name-a-repl-will-guess
+  "A convenience over TUI-DEMO and TUI-SCENARIO, which stay the real entry
+points and the two the command line calls.  It exists because the first
+thing anyone does with a system loaded into a REPL is try its own name.
+
+Only the scenario branch is exercised, and deliberately: calling `(tui)`
+with no argument would build a world and then try to take over the
+terminal, which on a machine where the suite is being watched is a test
+that eats the screen."
+  (is (fboundp 'ant:tui))
+  ;; A first argument means a file, and so reaches LOAD-SCENARIO — which
+  ;; is how we know it dispatched, a bad path failing there rather than
+  ;; in the demo world.
+  (signals ant:scenario-error
+    (ant:tui "definitely-not-a-scenario-file.json"))
+  ;; And the keywords are passed through rather than swallowed.
+  (signals ant:scenario-error
+    (ant:tui "definitely-not-a-scenario-file.json" :seed 1 :charset :ascii)))

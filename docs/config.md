@@ -186,6 +186,20 @@ SEED=397767704 make tui                         # repeat a run
 antsim --tui --ascii --no-colour foraging       # from the shipped binary
 ```
 
+From a REPL, `(ant:tui)` is the short way in — the demo with no argument, a
+file with one, and everything else passed through:
+
+```lisp
+(ql:quickload :antsim/tui)
+(ant:tui)                                        ; the built-in demo
+(ant:tui "scenarios/foraging.json")              ; a scenario file
+(ant:tui "scenarios/two-tribes.json" :seed 42)   ; and a seed
+(ant:tui nil :charset :ascii :colour nil)        ; the demo, plainly drawn
+```
+
+`ant:tui-demo` and `ant:tui-scenario` are the real entry points and the two the
+command line calls; `ant:tui` is a convenience over them.
+
 Two dynamic variables, both rebindable from a REPL: `*tui-speed*` (default
 **4.0**, matching the window's `*live-speed*`) and `*tui-target-fps*` (default
 **30.0**, the refresh rate only — the simulation rate is independent of it).
