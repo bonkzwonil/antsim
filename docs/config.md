@@ -144,6 +144,69 @@ Without `SEED` the window draws a fresh one and prints it, so every session
 differs and any session worth keeping can be replayed. The headless paths —
 tests, acceptance, gallery — are unaffected and stay deterministic.
 
+## Terminal view (§5.6)
+
+`antsim --tui`, or `make tui`. No GPU, no GL, no external library — the one view
+target with no `guix shell` around it.
+
+| switch | default | does |
+|---|---|---|
+| `--tui` | off | draw in this terminal instead of opening a window |
+| `--ascii` | off | `-\|/` instead of `→↘↓↙←↖↑↗`. Shows the *axis* an ant walks on, not which way along it |
+| `--no-colour`, `--no-color` | colour on | no ANSI colour, for a terminal or a log that wants none |
+| `--cols N` | ask the terminal | force the width in columns |
+| `--rows N` | ask the terminal | force the height in rows |
+| `--seed N` | fresh each run | as for the window |
+
+`--cols` and `--rows` default to *nothing* rather than to eighty by twenty-four,
+which would be a guess wearing the clothes of a measurement: the size comes from
+the `TIOCGWINSZ` ioctl and is asked again on every `SIGWINCH`. Given explicitly
+they override the terminal and go on overriding it — a size on the command line
+is a decision, and a window manager twitching is not grounds to overturn it.
+
+| key | does |
+|---|---|
+| arrows, `hjkl` | pan by one cell |
+| shift-arrows, `HJKL` | pan by half a screen |
+| `z` / `Z` | zoom in and out |
+| `SPACE` | pause |
+| `.` | advance a single tick — the window has no such key |
+| `+` / `-` | time compression |
+| `f` | frame the whole arena |
+| `t` | step to the next colony |
+| `a` | switch between ASCII and arrows |
+| `c` | colour on or off |
+| `?` | show or hide the key legend |
+| `q` / `ESC` | quit |
+
+```sh
+make tui                                        # the built-in demo
+SCENARIO=scenarios/antsim.json make tui         # a scenario file
+SEED=397767704 make tui                         # repeat a run
+antsim --tui --ascii --no-colour foraging       # from the shipped binary
+```
+
+From a REPL, `(ant:tui)` is the short way in — the demo with no argument, a
+file with one, and everything else passed through:
+
+```lisp
+(ql:quickload :antsim/tui)
+(ant:tui)                                        ; the built-in demo
+(ant:tui "scenarios/foraging.json")              ; a scenario file
+(ant:tui "scenarios/two-tribes.json" :seed 42)   ; and a seed
+(ant:tui nil :charset :ascii :colour nil)        ; the demo, plainly drawn
+```
+
+`ant:tui-demo` and `ant:tui-scenario` are the real entry points and the two the
+command line calls; `ant:tui` is a convenience over them.
+
+Two dynamic variables, both rebindable from a REPL: `*tui-speed*` (default
+**4.0**, matching the window's `*live-speed*`) and `*tui-target-fps*` (default
+**30.0**, the refresh rate only — the simulation rate is independent of it).
+
+POSIX only. `termios` and `TIOCGWINSZ` are Linux and BSD; the window ships on
+Windows and this does not.
+
 ## Scenario JSON
 
 The ⬥ parameters are settable per run, in three blocks:

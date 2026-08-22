@@ -154,6 +154,7 @@ a render comes back black.
 make test              # core suite: RNG, pool, geometry, fields, ants
 make acceptance        # the §3.8 experiments: both bridges, sixteen seeds
 make live              # the interactive window
+make tui               # the same, in this terminal — no GPU, no graphics
 make gallery           # regenerate the documentation's images
 make test-render       # renderer suite, on the GPU
 make test-render-mesa  # the same suite in software — no GPU needed
@@ -163,6 +164,7 @@ make appimage          # dist/antsim-<version>-x86_64.AppImage
 
 SCENARIO=scenarios/foraging.json make live
 SEED=12345 make live   # repeat an exact run
+SCENARIO=scenarios/foraging.json make tui
 ```
 
 Seven scenarios ship:
@@ -211,6 +213,81 @@ the binary bridge, where the result is that the winning arm *varies*. The
 headless paths — tests, acceptance, gallery — stay deterministic. A playground
 and a result are different things.
 
+### The terminal
+
+`make tui`, or `antsim --tui`: the same colony drawn in characters, for a machine
+that cannot open a window — a server over SSH, a container, a box with no graphics
+stack at all. It needs **no GPU, no GL and no external library**: `sb-posix`
+already carries everything a terminal needs, so this is the one view target with
+no `guix shell` around it.
+
+Seven simulated minutes of the built-in demo — `make tui` with no arguments —
+copied out of a real run rather than drawn by hand:
+
+```
+t 420.0s · 150 ants · stock 689 · trail 68647 · 4x · 30 fps
+
+                                 ↙
+
+                               .,↙o←↘↖←
+                               ,ooooo↖↖:
+                               :,ooo↑↑↖:
+                              .↓.  ;↓↓;
+                              .:.  +↓*:
+                              .,  ,+↓↑,
+                              ,,  :↓↓+
+                              ,,  ;↓↓;
+                              ,, ,↓↓↓.
+               ↑              ,, ;↓↑↙
+                              ,,.+↑↑:
+             ##################::*↗+
+             ##################:+↑↑;                  ↑
+                               ;*↓+.
+                               +↗↓:
+                               *↑+.
+                              :↑↙;
+                              .↙;,
+                             @@@@
+                      ↑       @@
+
+     ↗
+```
+
+`@` is the nest, `o` a food source at its present size, `#` terrain, and
+`.,:;+*` the trail, shaded on a log scale — a real trail sits two orders of
+magnitude below the cap, so a linear ramp would show a blank arena with one
+bright dot in it. Ants carry their bearing: `→↘↓↙←↖↑↗` by default, or `-\|/`
+with `--ascii`, which shows the *axis* an ant is walking on but not which way
+along it — a stroke has no arrowhead.
+
+| input | action |
+|---|---|
+| arrows, or `hjkl` | pan by one cell |
+| shift-arrows, or `HJKL` | pan by half a screen |
+| `z` / `Z` | zoom in and out |
+| `space` | pause |
+| `.` | advance a single tick — the window has no such key |
+| `+` / `-` | time compression, halving and doubling |
+| `f` | frame the whole arena |
+| `t` | step to the next colony |
+| `a` | switch between ASCII and arrows |
+| `c` | colour on or off |
+| `?` | show or hide the key legend |
+| `q` / `escape` | quit |
+
+From a REPL it is `(ant:tui)` — no argument for the demo, a path for a file:
+
+```lisp
+(ql:quickload :antsim/tui)
+(ant:tui)
+(ant:tui "scenarios/two-tribes.json" :seed 42)
+```
+
+The terminal's size is **asked for, not assumed**, and asked again whenever it
+changes — making the window bigger mid-run simply shows more world. Resizing it
+smaller does not disturb the zoom. POSIX only: the window ships on Windows and
+this does not.
+
 ## The documentation
 
 - **[docs/concept.md](docs/concept.md) is the design document**, and the place
@@ -240,9 +317,15 @@ Three entry points into it:
 
 ## Where it is
 
-**Version 1.0.1 — milestone M4 · 2026-08-19**, and the first line that ships
-as a binary rather than as a checkout ([Getting it](#getting-it)). 1.0.1 is
-1.0.0 with route memory repaired: a full waypoint list now halves its
+**Version 1.1.0 — milestone M4 · 2026-08-22**, and the first line that ships
+as a binary rather than as a checkout ([Getting it](#getting-it)). 1.1.0 adds
+the [terminal view](#the-terminal) — `antsim --tui`, the same colony drawn in
+characters, for a machine that cannot open a window. It is a minor rather
+than a patch release because it is a new way in, and a leaf one: the terminal
+view has no external dependency and nothing else in the tree depends on it, so
+nothing that worked in 1.0.1 works differently in 1.1.0.
+
+1.0.1 was 1.0.0 with route memory repaired: a full waypoint list now halves its
 resolution instead of refusing new points, so it keeps the approach to the
 food rather than the half of the walk a straight bearing could already do —
 which, on a source behind a wall, was the difference between a mechanism that
