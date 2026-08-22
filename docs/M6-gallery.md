@@ -109,20 +109,39 @@ fidelity, and the time constant — and the route memory is turned up,
 because those are the two halves of the same animal
 ([config.md](config.md#species-31) has the full table).
 
-### One number in these pictures is not what it looks like
+### Two numbers in these pictures are not what they look like
 
-Formica harvests **1145** units by ten minutes against Lasius's **640**,
-and it would be easy to write that up as *the route beats the trail*.
+**The first is the harvest.** In these frames Formica has taken **1145**
+units by ten minutes against Lasius's **640**, and it would be easy to
+write that up as *the route beats the trail*.
 
-It is not that. Formica also walks at 4 cm/s against 2, and 1145/640 is
-1.79 against a speed ratio of 2.0. **Nearly all of the harvest difference
-is pace**, and a comparison of two animals that differ in eighteen
-parameters cannot attribute an outcome to any one of them.
+It is not that, twice over. Formica also walks at 4 cm/s against 2, so a
+1.79 ratio is *below* a speed ratio of 2.0 — the trail-follower converts
+its slower pace better, not worse. And these are one seed each: over six
+seeds the means are 1168 against 923, a ratio of **1.27**. A pair of
+stills is a picture of one run, and a picture of one run is not a
+measurement.
 
-What these two frames *do* support is the claim about the trail, because
-that one is a fourteen-fold difference in a quantity neither animal's
-walking speed appears in. The measurements that separate the rest are in
-[experiments.md](experiments.md).
+**The second is the contrast itself.** The fourteen-fold difference in
+trail is real and neither animal's walking speed appears in it. But the
+conclusion this pair was published to support — that turning §3.3's
+nonlinearity down costs a colony its collective choice — turned out to be
+wrong about the mechanism. On the binary bridge Formica does fail to
+commit (0.52 against Lasius's 0.92, 0 of 9 replicates against 9 of 9),
+but applying all three trail knobs to a Lasius colony still leaves it
+committing at 0.85, 9 of 9. What breaks it is the **body**: a 4 mm ant at
+4 cm/s congests a branch sized for a 2 mm ant at 2, and size and pace
+alone reproduce the failure with the trail untouched. Thin the Formica
+colony until the traffic matches and commitment returns to 0.78 — still
+below Lasius, so there is a genuine trail effect, worth about a third of
+what the naive comparison shows.
+
+Which is the general warning these two pictures are actually good for. A
+species set moves eighteen parameters at once, so it can change the
+*animal* and the *experiment* in the same gesture, and the mechanism that
+produces the headline need not be the one the caption is about. The
+ablation that separates them is in
+[experiments.md](experiments.md#two-animals-on-one-arena-31-m6).
 
 There is a second trap in this pair, and it decided which moment they
 were taken at. At twenty minutes — where `03-trail.png` is taken — Formica

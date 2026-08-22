@@ -2356,13 +2356,32 @@ that a list has length zero.
 *Formica polyctena* is the contrast the milestone asked for: bigger,
 faster, a poor trail follower and a good route follower. The trail is
 weakened three ways at once and the route memory turned up, because that
-is the same foraging problem solved the other way round — and running the
-two over one arena is the cheapest available test of whether §3.3's
-nonlinearity does the work it is credited with. §10 asks which of the
-three weakenings is the right model and answers *"probably all three, but
-that is a claim, not a citation"*; the set is that claim written where it
-can be measured, and the measurement is in
-[docs/experiments.md](experiments.md).
+is the same foraging problem solved the other way round.
+
+*And the milestone's own reasoning about it was wrong, which is the more
+useful half of the record.* Running the two animals over one arena was
+offered — here, in `params.lisp`, and in the README — as the cheapest
+available test of whether §3.3's nonlinearity does the work it is
+credited with. It is not that test. Formica *does* fail to break
+symmetry on the binary bridge (commitment 0.52 against Lasius's 0.92,
+0 of 9 replicates committed against 9 of 9), and the reading that
+invites is that the trail knobs cost it. They do not: apply all three on
+their own and the colony still commits at 0.85, 9 of 9. **What breaks it
+is the body.** Formica is a 4 mm ant walking at 4 cm/s on a bridge whose
+branch width was set for a 2 mm ant at 2, and size and pace alone —
+trail untouched — reproduce the failure exactly (0.51, 0 of 9). Thin the
+Formica colony until traffic matches and commitment comes back to 0.78:
+still below Lasius, so there *is* a trail effect, and it is worth about
+0.15 of the 0.41 the naive comparison appears to show.
+
+That is the general hazard in a species set stated concretely. Two
+animals differing in eighteen parameters cannot isolate any one of them,
+and a comparison that changes the *animal* also changes the *experiment*
+— the bridge has a density window, and the second animal walked outside
+it. The isolation is in
+[docs/experiments.md](experiments.md#two-animals-on-one-arena-31-m6), and
+§10's question, which this set was meant to answer, turned out to be two
+questions with different answers.
 
 One number in it is not free. `k` is in units of `*trail-deposit*`, so a
 species that lowers deposition without lowering `k` puts the detection
@@ -2720,9 +2739,25 @@ and one the acceptance suite is now making on every run.
   parameters in the model.
 - Walking speeds, crop capacity, and the sucrose threshold for trail laying
   — all quoted approximately above and all needing a source.
-- Whether *Formica polyctena*'s weak trail-following is best modelled as a
+- ~~Whether *Formica polyctena*'s weak trail-following is best modelled as a
   low deposition rate, a low following fidelity, or a shorter τ. Probably
-  all three, but that is a claim, not a citation.
+  all three, but that is a claim, not a citation.~~ **Measured at M6, and
+  it is two questions, not one.** For the *mass* of pheromone on the
+  ground the three act independently and very nearly multiplicatively, and
+  the answer is genuinely all three, and near-perfectly multiplicatively:
+  the product of the three separate reductions predicts the combined one
+  to within 9% across a tenfold total. For the *collective choice* the
+  trail is supposed to produce, they are not interchangeable at all.
+  Deposition is **exactly** inert — `k` is denominated in units of
+  `*trail-deposit*`, so halving both moves the threshold with the signal
+  and the choice function cannot tell. τ is worth 0.02 of commitment.
+  Following fidelity is the whole of the effect — and, unexpectedly, not
+  because of the exponent: cutting `*choice-n*` from 2.0 to 1.5 alone
+  still commits 9 of 9 at 0.90, while the *steering* gains alone cost
+  more. §3.3's nonlinearity decides correctly and the body is what fails
+  to act on it. So "which knob" depends on which observable, and the
+  citation is still owed for the animal itself.
+  See [experiments.md §F](experiments.md#two-animals-on-one-arena-31-m6).
 
 A `docs/calibration.md` should hold these, each with the fit it came from
 and the date, in the waldameisen style.

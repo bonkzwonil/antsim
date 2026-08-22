@@ -689,6 +689,17 @@ the large one is where the *distance* does. They are worth having both.
 
 ### Route memory (§3.4, M4) — shipped, and it closes the pockets
 
+> **Corrected at M6.** The heading overclaims and is left as written so
+> the correction has something to point at. What is measured below is
+> harvest and corpses on the word scenario — 42% up and 15% down — and
+> those are real. **"Closes the pockets" is not measured anywhere.** The
+> only counts of ants stuck against terrain in this repository are in
+> *pockets kill ants*, two days older than this entry, and they were
+> never repeated with route memory on. Ants still get caught in
+> concavities and die there. Establishing how often, and whether this
+> mechanism changed it, is the first thing M7 does — see
+> [§7](concept.md#7-milestones).
+
 The entry above — *pockets kill ants* — ends by naming what is missing:
 not a better bearing, but something other than a bearing.  Route memory
 is that, and it is the first mechanism since M2.1 that both pays and
@@ -987,6 +998,164 @@ it is the *crowd packed around the entrance*, which scales with colony
 size and not with how small the arena is.  So the claim lives in the
 acceptance suite, at 1200 ants, where a run is allowed to be expensive —
 and the fast-suite row was rewritten to say only what it can see.
+
+### Two animals on one arena (§3.1, M6)
+
+M6 added a second parameter set so a scenario could name its animal, and
+the set was published with a claim attached: that running *Lasius niger*
+and *Formica polyctena* over the same arena is the cheapest available
+test of whether §3.3's nonlinearity does the work it is credited with.
+Turn the trail down, the reasoning went, and the colony should lose its
+*symmetry breaking* while keeping its *foraging*.
+
+**It is not that test.** The prediction came out right and the reason it
+came out right is a different mechanism entirely.  What follows is the
+measurement, because the shape of the error is the reusable part: a
+species set changes the *animal*, and changing the animal can silently
+change the *experiment*.
+
+**The arena, six seeds, thirty minutes** (`foraging.json` against
+`formica.json`, which differ in exactly one key):
+
+    species   harvest   pop   corpses  empty@  field@10  tf     rf(.020)
+    lasius     2487.2  383.2    30.8   20.7 min  69 979  0.394    0.771
+    formica    2494.7  369.7    44.3   18.3 min   4 652  0.394    0.817
+
+Both animals strip the whole 2500-unit pile; foraging survives, as
+predicted.  The trail does not: fifteen times less pheromone on the
+ground at ten minutes, and by the end of the run Formica's field is
+literally zero — a 600 s time constant against Lasius's 1800, with
+nothing left to reinforce it.  Route fidelity in the discriminating
+0.020 m corridor is the other half of the animal, and it shows: 0.72
+against 0.40 at ten minutes.  Formica arrives by remembered route.
+
+**The bridge, nine seeds** (acceptance `%RUN-BRIDGE` protocol — fixed
+colony, 7200 ticks to commit, counts reset, 7200 ticks measured;
+commitment is the larger arm's share):
+
+    species   mean   min     max     >=0.80   crossings
+    lasius   0.9238  0.8987  0.9979    9/9      2460
+    formica  0.5158  0.5001  0.5482    0/9      4135
+
+A total failure to break symmetry — nine replicates, none of them within
+0.28 of the threshold.  Exactly the published prediction, and this is the
+point at which it would have been written up.
+
+#### One knob at a time says the trail is not doing it
+
+Applying each part of the Formica set to a Lasius colony, on both rigs:
+
+    from the Lasius default          field@10   bridge   >=0.80
+    baseline                           69 979   0.9238    9/9
+    deposition   (deposit, k)          24 261   0.9236    9/9
+    following    (gain, supp., n)      61 253   0.8408    8/9
+    tau          (1800 -> 600)         25 237   0.9016    9/9
+    all three trail knobs               6 996   0.8528    9/9
+
+**All three trail knobs together still commit at 0.85, nine times out of
+nine.** Whatever destroys Formica's symmetry breaking is not in that
+column.  The rest of the set says where it is:
+
+    5 body only  (radius, sensor, stride, speed)   0.5121   0/9
+    6 route only (waypoints, spacing, pi-noise...) 0.9210   9/9
+    7 body + route                                 0.5081   0/9
+    8 everything except the trail                  0.5081   0/9
+
+Body alone reproduces the collapse exactly, with the trail untouched.
+Route memory does nothing to it either way.
+
+#### It is congestion, and the bridge has a per-species density window
+
+[The double bridge has a working density window](#the-double-bridge-has-a-working-density-window)
+already recorded that this rig only reports what it is supposed to report
+over a range of traffic.  That window is set in *ants*, and Formica is
+not the ant it was set for.  Thinning the colony, five seeds:
+
+    start ants   lasius            formica
+       250       0.9314  (2460)    0.5088  (4135)
+       150         --             0.7789  (2486)
+       100       0.9512  (1051)    0.8660  (1477)
+        60       0.9488   (608)    0.6966   (845)   <- 0.51 to 0.85 across seeds
+
+Formica at 150 makes 2486 crossings, which is Lasius's 2460 at 250.  At
+*matched traffic* it commits at 0.78 against Lasius's 0.93.  So there is
+a real trail effect and it is worth about **0.15** of the 0.41 the naive
+comparison appears to show — a third of it.  The other two thirds are a
+4 mm ant walking at 4 cm/s through a branch whose width was chosen for a
+2 mm ant at 2.
+
+Splitting the body:
+
+    size only (radius, sensor, stride)   0.6120   crossings 2013
+    pace only (walk speeds)              0.8721   crossings 4845
+
+Size is the larger part, and the crossing counts say why it is not
+simply "more traffic": size *reduces* crossings to below the Lasius rate
+and still destroys commitment, so it is not throughput but occupancy —
+wider ants fill the branch and the ones behind cannot follow the arm
+their antennae chose.  Pace doubles the traffic and costs only 0.05.
+
+The 60-ant row is the window's *lower* edge showing itself, and it is the
+reason the thinning was not simply run to zero: with too few ants and a
+600 s time constant, Formica cannot lay a trail faster than it decays,
+and commitment falls back to chance with enormous between-seed spread.
+Lasius, on τ = 1800, has no such floor at these sizes.
+
+#### Inside the following bundle: two questions, not one
+
+§10 asked whether weak trail-following is best modelled as low
+deposition, low following fidelity, or a short τ, and answered *"probably
+all three, but that is a claim, not a citation."*  Measured, it is two
+questions with different answers.
+
+*For the mass of pheromone on the ground* the answer is genuinely all
+three, and they are very nearly independent.  Taking each factor's
+field@10 as a fraction of baseline — 0.347, 0.875, 0.361 — the product is
+0.109, and the measured all-three fraction is 0.100.  Within 9% of
+multiplicative across a tenfold total reduction.
+
+*For the collective choice the trail is supposed to produce* they are not
+interchangeable at all.  Deposition is **exactly inert** (0.9236 against
+a baseline of 0.9238) and that is by construction rather than by luck:
+`k` is denominated in units of `*trail-deposit*`, so halving both moves
+the detection threshold with the signal and the choice function cannot
+tell.  τ is worth 0.02.  Following fidelity is worth 0.08 and is the
+whole of the effect.  Splitting *it*, nine seeds:
+
+    n only        (2.0 -> 1.5)                    0.9007   9/9
+    steering only (turn gain, noise suppression)  0.8620   9/9
+    both (= "following")                          0.8408   8/9
+
+So the exponent is not the seat of it either.  §3.3's nonlinearity
+survives a 25% cut with 9/9 commitment; what costs the colony more is the
+*steering* — how hard an ant turns onto the gradient it chose, and how
+much noise that turn has to overcome.  The choice function decides
+correctly and the body fails to act on it.
+
+#### Two metrics that did not do their job here
+
+- **`colony-trail-fidelity` is scale-free** and therefore blind to the
+  entire result above.  It rated the two species 0.3939 and 0.3936 while
+  one field held fifteen times the pheromone of the other.  It measures
+  whether ants are *on* their trail, not whether there is a trail; both
+  numbers are correct and neither is the question.
+- **`colony-route-fidelity`'s default `half-width` of 0.045 m saturates**
+  on this arena — 0.96 and 0.98 over the run, 0.99 for both at ten
+  minutes.  The 0.020 m corridor is the discriminating one and is what
+  the tables above use.  A default that reads 0.99 for an animal with
+  route memory *off* is not reporting anything.
+
+#### What this changes
+
+The published claim is withdrawn in `params.lisp`, `README.md` and
+§7, with the original sentence left standing so the correction has
+something to point at.  The general lesson is worth more than the
+specific one: **a species set is not an A/B.** Eighteen parameters moved
+at once, and the one that produced the headline result was not in the
+group the write-up was about.  Any future species — and §3.1 invites
+them — needs the same treatment before anything is claimed from it: the
+subset ablation, and a check that the *rig* is still in range for the
+animal being put on it.
 
 ## On the list, not yet measured
 

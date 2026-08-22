@@ -1867,10 +1867,23 @@ routes into a committed trail (§3.8), and it does that through the
 chemistry, collectively, with no individual knowing anything.  Formica
 polyctena is the same problem solved the other way — the trail is weak,
 and what carries a forager to a source is its own remembered route.
-Running both over the same arena is the cheapest available test of
-whether §3.3's nonlinearity is doing the work it is credited with,
-because turning it down should cost the colony the *symmetry breaking*
-and leave the *foraging* standing.
+Running both over the same arena was offered here as the cheapest
+available test of whether §3.3's nonlinearity is doing the work it is
+credited with — turn the trail down and the colony should lose its
+*symmetry breaking* and keep its *foraging*.  **It is not that test, and
+the sentence is left standing so the correction has something to point
+at.**  Formica does lose the symmetry breaking (commitment 0.52 against
+Lasius's 0.92, 0 of 9 replicates committed against 9 of 9), but the
+three trail knobs are not what costs it: applied on their own they still
+leave the colony committing at 0.85, 9 of 9.  What breaks it is the body
+— a 4 mm ant walking at 4 cm/s congests the bridge that was sized for a
+2 mm ant at 2, and size and pace alone reproduce the failure exactly
+(0.51, 0 of 9).  Thin the Formica colony until the traffic matches and
+commitment returns to 0.78, which is still below Lasius's 0.92: there is
+a real trail effect here, and it is worth about 0.15 of the 0.41 the
+naive comparison appears to show.  Two animals differing in eighteen
+parameters cannot isolate one of them; the subset ablation in
+docs/experiments.md does the isolation.
 
 Provenance, honestly: the sizes and the speed are [lit], the ratios
 derived from them are [scale], and every one of the trail and route

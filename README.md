@@ -301,8 +301,14 @@ moment of alarm is sub-critical by construction.
 **M6 is polish, and is where this line is now.** A scenario can name its
 animal: `"species": "formica"` runs *Formica polyctena* — bigger, faster,
 a poor trail follower and a good route follower — against the same arena
-as Lasius, which is the cheapest available test of whether the
-nonlinearity in §3.3 is doing the work it is credited with. A species set
+as Lasius. That was offered as the cheapest available test of whether the
+nonlinearity in §3.3 does the work it is credited with, and it is not
+that test: Formica fails to break symmetry on the binary bridge, but the
+trail knobs are not what costs it. A 4 mm ant walking at 4 cm/s congests
+a bridge sized for a 2 mm ant at 2, and body and pace alone reproduce the
+failure with the trail untouched. Matched for traffic, Formica still
+commits less than Lasius — so there is a real effect, about a third the
+size the naive comparison suggests. A species set
 is the list of values where an animal *differs*, so `lasius-niger` is
 empty by construction and naming it provably changes nothing. Time-lapse
 capture ships as a contact sheet: half an hour of ants on one page, every
