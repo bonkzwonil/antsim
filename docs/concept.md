@@ -2757,7 +2757,7 @@ and one the acceptance suite is now making on every run.
   more. §3.3's nonlinearity decides correctly and the body is what fails
   to act on it. So "which knob" depends on which observable, and the
   citation is still owed for the animal itself.
-  See [experiments.md §F](experiments.md#two-animals-on-one-arena-31-m6).
+  See [experiments.md](experiments.md#two-animals-on-one-arena-31-m6).
 
 A `docs/calibration.md` should hold these, each with the fit it came from
 and the date, in the waldameisen style.
