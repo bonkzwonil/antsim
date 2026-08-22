@@ -1928,6 +1928,20 @@ scenarios/*.json        <span class="c">; the scenes, including the bridge exper
           <code>src/tui/term.lisp</code>, so preferring a portable library later is a
           one-file change. It is POSIX only, and said so rather than papered over.
         </p>
+        <div class="callout rule">
+          <p>The exclusion has to happen in the <strong>build</strong>, not at
+            runtime, and finding out why cost a broken Windows release. On Windows
+            <code>sb-posix</code> does not merely fail when asked for
+            <code>ioctl</code> — it does not have the symbol, so
+            <code>sb-posix:ioctl</code> is an error while the file is being
+            <em>read</em>, before any feature test inside it could run. So
+            <code>antsim/app</code> depends on <code>antsim/tui</code> only
+            <code>(:feature (:not :windows))</code>, and the Windows binary has no
+            terminal view in it. The flag is still <em>parsed</em> there, deliberately:
+            somebody copying a command line out of the README should be told this build
+            has no terminal view, not told <code>--tui</code> is an unknown option,
+            which reads like a typo in their own typing.</p>
+        </div>
         <div class="callout">
           <p>Since escape sequences can report the size, is the ioctl — and with it
             <code>sb-posix</code> — needed at all? <strong>The size, yes; raw mode,

@@ -12,7 +12,7 @@
   ;; it into the binary, both packaging scripts name their output from it,
   ;; and both release workflows refuse a tag that disagrees with it — see
   ;; docs/shipping.md.
-  :version "1.1.0"        ; M4, plus the terminal view (§5.6) — a second way to watch
+  :version "1.1.1"        ; 1.1.0, with the terminal view kept out of the Windows build
   :depends-on ()                        ; core stays dependency-free (sb-thread only)
   :serial t
   :pathname "src"
@@ -136,7 +136,16 @@
   ;; — the terminal view has no external dependency — and it does not
   ;; weaken the split: antsim/tui still knows nothing about a program,
   ;; and still loads on its own on a machine with no graphics stack.
-  :depends-on ("antsim/live" "antsim/tui")
+  ;;
+  ;; Except on Windows, where it is left out entirely.  The terminal view
+  ;; is termios and TIOCGWINSZ, and on Windows sb-posix does not merely
+  ;; return an error for those — it does not *have* the symbols, so
+  ;; `sb-posix:ioctl` fails while the file is being READ.  No runtime
+  ;; check can help with that: the feature test has to happen before the
+  ;; reader sees the form, which means here, in the dependency itself.
+  ;; §5.6 already said the terminal view is POSIX only; this is what
+  ;; saying so has to look like in the build.
+  :depends-on ("antsim/live" (:feature (:not :windows) "antsim/tui"))
   :serial t
   :pathname "src/app"
   :components ((:file "main")))
@@ -152,7 +161,8 @@
   ;; is a pure function from a world to a grid of characters, so it is
   ;; tested here rather than in a system of its own — no tty required,
   ;; and `make test` covers it.
-  :depends-on ("antsim" "antsim/scenario" "antsim/tui" "fiveam")
+  :depends-on ("antsim" "antsim/scenario" "fiveam"
+               (:feature (:not :windows) "antsim/tui"))
   :serial t
   :pathname "tests"
   :components ((:file "suite")
@@ -160,7 +170,9 @@
                (:file "bodies")
                (:file "ant")
                (:file "scenario")
-               (:file "tui")
+               ;; Same rule as the system above: on Windows there is no
+               ;; terminal view to test, and the file would not compile.
+               (:file "tui" :if-feature (:not :windows))
                ;; Its own FiveAM suite, not part of `antsim`: these are
                ;; colony runs over several seeds and they are slow, so
                ;; `make test` stays fast and `make acceptance` is what

@@ -204,8 +204,10 @@ Two dynamic variables, both rebindable from a REPL: `*tui-speed*` (default
 **4.0**, matching the window's `*live-speed*`) and `*tui-target-fps*` (default
 **30.0**, the refresh rate only — the simulation rate is independent of it).
 
-POSIX only. `termios` and `TIOCGWINSZ` are Linux and BSD; the window ships on
-Windows and this does not.
+POSIX only. `termios` and `TIOCGWINSZ` are Linux and BSD, so `antsim/tui` is
+not built into the Windows binary at all — `antsim/app` depends on it only
+`(:feature (:not :windows))`. `--tui` is still accepted there, and answers
+that this build has no terminal view rather than calling the flag unknown.
 
 ## Scenario JSON
 

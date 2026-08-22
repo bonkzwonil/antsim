@@ -1683,6 +1683,22 @@ It is **POSIX only**, and that is stated rather than papered over.
 `termios` and `TIOCGWINSZ` are Linux and BSD; the window ships on Windows
 and the terminal view does not.
 
+That exclusion has to happen in the *build*, not at runtime, and finding
+out why cost a broken Windows release. On Windows `sb-posix` does not
+merely fail when asked for `ioctl` — it does not have the symbol, so
+`sb-posix:ioctl` is an error while the file is being **read**, before any
+feature test inside the file could run. `#-windows` around the body would
+in fact work, the reader binding `*read-suppress*` while it skips, but
+guarding a file that can never do anything useful on the platform is
+worse than not building it: so `antsim/app` depends on `antsim/tui` only
+`(:feature (:not :windows))`, and the Windows binary simply has no
+terminal view in it.
+
+The flag is still *parsed* on Windows, and that is deliberate. Someone who
+copies a command line out of the README should be told that this build has
+no terminal view and to use the window instead — not told `--tui` is an
+unknown option, which reads like a typo in their own typing.
+
 **Its own camera**, not `render/view.lisp`'s. `view` is pure arithmetic
 and would work, but it ships as a component of `antsim/render`, so
 reaching it would mean splitting a new system out and rewiring the one

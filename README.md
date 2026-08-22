@@ -285,8 +285,9 @@ From a REPL it is `(ant:tui)` — no argument for the demo, a path for a file:
 
 The terminal's size is **asked for, not assumed**, and asked again whenever it
 changes — making the window bigger mid-run simply shows more world. Resizing it
-smaller does not disturb the zoom. POSIX only: the window ships on Windows and
-this does not.
+smaller does not disturb the zoom. POSIX only: it is `termios`, which Windows
+does not have, so the Windows build does not contain the terminal view at all
+and `--tui` there says so and points you at the window.
 
 ## The documentation
 
@@ -317,8 +318,10 @@ Three entry points into it:
 
 ## Where it is
 
-**Version 1.1.0 — milestone M4 · 2026-08-22**, and the first line that ships
-as a binary rather than as a checkout ([Getting it](#getting-it)). 1.1.0 adds
+**Version 1.1.1 — milestone M4 · 2026-08-22**, and the first line that ships
+as a binary rather than as a checkout ([Getting it](#getting-it)). 1.1.1 is
+1.1.0 with the terminal view kept out of the Windows build, where it could
+never have worked and stopped the `.exe` being built at all. 1.1.0 adds
 the [terminal view](#the-terminal) — `antsim --tui`, the same colony drawn in
 characters, for a machine that cannot open a window. It is a minor rather
 than a patch release because it is a new way in, and a leaf one: the terminal

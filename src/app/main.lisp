@@ -187,6 +187,8 @@ options:
   --height N        window height in pixels (default 800)
   --tui             watch it in this terminal instead of a window, drawn
                     in characters.  Needs no graphics stack at all.
+                    Linux and BSD only — it is termios, which Windows
+                    does not have.
   --ascii           plain ASCII glyphs rather than arrows.  Shows the
                     axis an ant is walking on, but not which way along it
   --no-colour       no colour, for a terminal or a log that wants none
@@ -361,6 +363,22 @@ corrected in one place and left stale in the other."
                                  :seed (cli-seed cli)))))
      0)
     (:tui
+     ;; Windows has no terminal view: it is termios and TIOCGWINSZ, and
+     ;; sb-posix there does not have those symbols at all, so antsim/tui
+     ;; is not built into this binary (see antsim.asd).  The flag is still
+     ;; *parsed* everywhere, deliberately — a Windows user who copies a
+     ;; command line off the README should be told what is going on, not
+     ;; told `--tui` is an unknown option, which reads like a typo.
+     #+windows
+     (progn
+       (format *error-output*
+               "~&~a: --tui is not available on this build.~%~
+                The terminal view needs POSIX termios, which Windows does ~
+                not provide.~%Run it without --tui to open the window ~
+                instead.~%"
+               *program-name*)
+       2)
+     #-windows
      (let ((name (cli-scenario cli)))
        (if (null name)
            (tui-demo :seed (cli-seed cli)
