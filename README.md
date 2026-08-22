@@ -221,21 +221,36 @@ stack at all. It needs **no GPU, no GL and no external library**: `sb-posix`
 already carries everything a terminal needs, so this is the one view target with
 no `guix shell` around it.
 
+Seven simulated minutes of the built-in demo — `make tui` with no arguments —
+copied out of a real run rather than drawn by hand:
+
 ```
-t 300.0s · 150 ants · stock 577 · trail 63542 · 4x · 30 fps
-                                     ...
-                                  .:;ooo↓↖.
-                                 ,:↓ooooo↙↖.
-                                 ,:;oooo↓↑↙,
-                                 :↓;  .↗↑*:
-                                 :;:  ,↓↗↓,
-                                .;↓: ,+↑+,
-                     ↗          .↓↓::↑↓+
-               ###################;;→↑+,
-               ###################:+↗↑;
-                                 ,;↓↓;
-                                 :↙↙:
-                                @@↙@
+t 420.0s · 150 ants · stock 689 · trail 68647 · 4x · 30 fps
+
+                                 ↙
+
+                               .,↙o←↘↖←
+                               ,ooooo↖↖:
+                               :,ooo↑↑↖:
+                              .↓.  ;↓↓;
+                              .:.  +↓*:
+                              .,  ,+↓↑,
+                              ,,  :↓↓+
+                              ,,  ;↓↓;
+                              ,, ,↓↓↓.
+               ↑              ,, ;↓↑↙
+                              ,,.+↑↑:
+             ##################::*↗+
+             ##################:+↑↑;                  ↑
+                               ;*↓+.
+                               +↗↓:
+                               *↑+.
+                              :↑↙;
+                              .↙;,
+                             @@@@
+                      ↑       @@
+
+     ↗
 ```
 
 `@` is the nest, `o` a food source at its present size, `#` terrain, and
@@ -259,6 +274,14 @@ along it — a stroke has no arrowhead.
 | `c` | colour on or off |
 | `?` | show or hide the key legend |
 | `q` / `escape` | quit |
+
+From a REPL it is `(ant:tui)` — no argument for the demo, a path for a file:
+
+```lisp
+(ql:quickload :antsim/tui)
+(ant:tui)
+(ant:tui "scenarios/two-tribes.json" :seed 42)
+```
 
 The terminal's size is **asked for, not assumed**, and asked again whenever it
 changes — making the window bigger mid-run simply shows more world. Resizing it

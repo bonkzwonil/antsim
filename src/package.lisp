@@ -229,7 +229,7 @@
    #:tui-size-by-report #:tui-parse-cursor-report
    #:with-terminal #:tui-emit-diff #:tui-read-available #:*tui-resized*
    ;; tui/live — the loop
-   #:run-tui #:tui-demo #:tui-scenario #:*tui-speed* #:*tui-paused*
+   #:tui #:run-tui #:tui-demo #:tui-scenario #:*tui-speed* #:*tui-paused*
    #:*tui-target-fps*
    ;; app/main — the shipped binary's command line, system antsim/app
    #:main #:parse-command-line #:run-cli #:usage #:usage-error

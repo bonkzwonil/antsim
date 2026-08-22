@@ -296,3 +296,19 @@ default tau would be a particularly quiet lie."
     (with-scenario-params (s)
       (run-tui w :colony colony :charset charset :colour colour
                :cols cols :rows rows))))
+
+(defun tui (&optional scenario &rest args)
+  "Watch a colony in this terminal.  The short way in, for a REPL.
+
+`(ant:tui)` opens the built-in demo; `(ant:tui \"scenarios/foraging.json\")`
+opens a file.  Everything else is passed straight through, so
+`(ant:tui nil :charset :ascii)` and `(ant:tui \"...\" :seed 12345)` work as
+they read.
+
+A convenience and nothing more — TUI-DEMO and TUI-SCENARIO are the real
+entry points and the two the command line calls.  It exists because the
+first thing anyone does with a system loaded into a REPL is try to guess
+its name, and `tui` is the name they guess."
+  (if scenario
+      (apply #'tui-scenario scenario args)
+      (apply #'tui-demo args)))
