@@ -135,17 +135,19 @@ be wary of doing it only for macOS.
 ## Building one by hand
 
 ```sh
-make binary          # out/antsim — under a guix shell, for GLFW
+make binary          # out/antsim
 make appimage        # dist/antsim-<version>-x86_64.AppImage
 make icon            # regenerate packaging/antsim.png (committed)
 make test-app        # the command line: argv, search path, exit codes
 ```
 
-The `-bare` variants (`binary-bare`, `appimage-bare`, `test-app-bare`) are
-the same commands without the `guix shell` wrapper, for a distribution
-where GLFW is an ordinary system package. They are what CI runs, and they
-share their command text with the wrapped targets so the two cannot drift
-into building different things.
+By default, the Makefile targets run directly against mainstream system packages.
+On GNU Guix System, set `GUIX=1` (e.g. `export GUIX=1` or `make binary GUIX=1`)
+to wrap build and test commands in `guix shell` profiles for GLFW and graphics
+drivers.
+
+The `-bare` targets (`binary-bare`, `appimage-bare`, `test-app-bare`) are kept as
+aliases for backwards compatibility.
 
 An AppImage built this way is built against *this* machine's glibc, and on
 Guix against a `/gnu/store` ELF interpreter that no Ubuntu has. The
