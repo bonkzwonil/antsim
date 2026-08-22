@@ -44,7 +44,7 @@ clock. [More in the diary](docs/DIARY.md#traffic--and-an-ant-close-enough).*</su
 (ql:quickload :antsim/live)
 (ant:live-demo)
 
-;; Run the ASCII Version (no dependencies, runs in every terminal)
+;; Run the ASCII Version (no dependencies; any POSIX terminal, not Windows)
 (ql:quickload :antsim/tui)
 (ant:tui)
 ```
