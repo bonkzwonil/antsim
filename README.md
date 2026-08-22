@@ -1,5 +1,10 @@
 # antsim
 
+[![Ultralisp](https://img.shields.io/badge/Ultralisp-dist.ultralisp.org-blueviolet.svg)](http://dist.ultralisp.org/)
+[![Release](https://img.shields.io/badge/release-v1.1.1-amber.svg)](https://github.com/bonkzwonil/antsim/releases)
+[![Tests](https://img.shields.io/badge/tests-43%20383%20passed-brightgreen.svg)](https://github.com/bonkzwonil/antsim)
+[![Website](https://img.shields.io/badge/docs-bonkzwonil.github.io%2Fantsim-teal.svg)](https://bonkzwonil.github.io/antsim/)
+
 **A 2D ant colony simulation built on real behavioural science, in Common Lisp,
 rendered with OpenGL and ASCII-art.**
 
